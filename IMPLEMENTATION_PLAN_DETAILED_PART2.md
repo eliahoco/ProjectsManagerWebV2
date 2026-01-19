@@ -1356,7 +1356,174 @@ async def add_comment(
 **Priority:** High
 **Description:** Implement automatic issue key generation with project-specific sequences.
 
-*(Covered in T2.3.2 - generate_issue_key function)*
+---
+
+### Task T2.4.1: Create Sequence Service
+
+**ID:** T2.4.1
+**Story:** S2.4
+**Priority:** High
+**Estimated Effort:** 1 hour
+
+**Description:**
+Create a service to manage issue sequences per project, ensuring thread-safe incrementing and unique key generation.
+
+**File: backend/services/sequence_service.py**
+```python
+"""Issue sequence service for generating unique issue keys."""
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+from models.sequence import IssueSequence
+
+class SequenceService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_next_number(self, project_id: str) -> int:
+        """
+        Get the next sequence number for a project.
+        Thread-safe using database-level locking.
+        """
+        # Try to update and return in one atomic operation
+        result = await self.db.execute(
+            update(IssueSequence)
+            .where(IssueSequence.projectId == project_id)
+            .values(lastNumber=IssueSequence.lastNumber + 1)
+            .returning(IssueSequence.lastNumber)
+        )
+        row = result.fetchone()
+
+        if row:
+            return row[0]
+
+        # Sequence doesn't exist, create it
+        await self.db.execute(
+            sqlite_insert(IssueSequence)
+            .values(projectId=project_id, prefix="", lastNumber=1)
+            .on_conflict_do_update(
+                index_elements=["projectId"],
+                set_={"lastNumber": IssueSequence.lastNumber + 1}
+            )
+        )
+        return 1
+
+    async def generate_issue_key(self, project_id: str, prefix: str = None) -> str:
+        """Generate a unique issue key like PM-123."""
+        if not prefix:
+            # Get prefix from sequence or derive from project
+            seq = await self.db.get(IssueSequence, project_id)
+            prefix = seq.prefix if seq else project_id[:3].upper()
+
+        number = await self.get_next_number(project_id)
+        return f"{prefix}-{number}"
+```
+
+**Acceptance Criteria:**
+- [ ] Thread-safe sequence increment
+- [ ] Unique keys generated per project
+- [ ] Handles concurrent requests
+- [ ] Returns formatted key (PREFIX-NUMBER)
+
+**Sub-tasks:**
+1. **Create SequenceService class** - DB session injection
+2. **Implement get_next_number** - Atomic increment
+3. **Implement generate_issue_key** - Format key string
+4. **Add concurrency handling** - DB-level locking
+
+---
+
+### Task T2.4.2: Initialize Sequence for Projects
+
+**ID:** T2.4.2
+**Story:** S2.4
+**Priority:** High
+**Estimated Effort:** 45 minutes
+
+**Description:**
+Initialize issue sequences when projects are created or when the first issue is created for a project.
+
+**File: backend/services/sequence_service.py (addition)**
+```python
+async def initialize_sequence(
+    self,
+    project_id: str,
+    prefix: str = None
+) -> IssueSequence:
+    """
+    Initialize or get the sequence for a project.
+    Creates with default prefix if not exists.
+    """
+    # Check if exists
+    existing = await self.db.get(IssueSequence, project_id)
+    if existing:
+        return existing
+
+    # Derive prefix from project name if not provided
+    if not prefix:
+        # Get project to derive prefix
+        from models.project import Project
+        project = await self.db.get(Project, project_id)
+        if project:
+            # Use first letters of words, max 4 chars
+            words = project.name.upper().split()
+            prefix = "".join(w[0] for w in words[:4])
+        else:
+            prefix = "ISS"  # Default prefix
+
+    # Create sequence
+    sequence = IssueSequence(
+        projectId=project_id,
+        prefix=prefix,
+        lastNumber=0
+    )
+    self.db.add(sequence)
+    await self.db.commit()
+    return sequence
+
+async def update_prefix(self, project_id: str, new_prefix: str) -> bool:
+    """Update the prefix for a project's sequence."""
+    result = await self.db.execute(
+        update(IssueSequence)
+        .where(IssueSequence.projectId == project_id)
+        .values(prefix=new_prefix.upper())
+    )
+    await self.db.commit()
+    return result.rowcount > 0
+```
+
+**Integration with project creation:**
+```python
+# In project creation endpoint
+@router.post("/", response_model=ProjectResponse)
+async def create_project(
+    project_data: ProjectCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    project = Project(**project_data.dict())
+    db.add(project)
+    await db.commit()
+
+    # Initialize sequence
+    seq_service = SequenceService(db)
+    await seq_service.initialize_sequence(project.id, project_data.prefix)
+
+    return project
+```
+
+**Acceptance Criteria:**
+- [ ] Sequence created on first issue
+- [ ] Prefix derived from project name
+- [ ] Can update prefix later
+- [ ] Works with existing projects
+
+**Sub-tasks:**
+1. **Create initialize_sequence** - First-time setup
+2. **Derive prefix from project** - Smart naming
+3. **Add prefix update** - Allow changes
+4. **Integrate with issue creation** - Auto-initialize
 
 ---
 
@@ -1490,6 +1657,124 @@ export async function DELETE(
 4. **Forward query params** - Preserve search params
 5. **Forward request body** - For POST/PATCH/PUT
 6. **Handle errors** - 502 if backend unreachable
+
+---
+
+### Task T2.5.2: Add Authentication Headers if Needed
+
+**ID:** T2.5.2
+**Story:** S2.5
+**Priority:** Medium
+**Estimated Effort:** 30 minutes
+
+**Description:**
+Enhance the proxy route to forward authentication headers and handle CORS properly between frontend and backend.
+
+**File: frontend/app/api/codeboard/[...path]/route.ts (enhancement)**
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8401';
+
+async function proxyRequest(
+  request: NextRequest,
+  path: string[]
+): Promise<NextResponse> {
+  const targetPath = path.join('/');
+  const targetUrl = `${BACKEND_URL}/api/${targetPath}`;
+
+  const searchParams = request.nextUrl.searchParams.toString();
+  const fullUrl = searchParams ? `${targetUrl}?${searchParams}` : targetUrl;
+
+  try {
+    // Get authentication session
+    const session = await getServerSession(authOptions);
+
+    // Build headers
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+
+    // Forward auth if session exists
+    if (session?.user) {
+      headers.set('X-User-Id', session.user.id);
+      headers.set('X-User-Email', session.user.email || '');
+      headers.set('X-User-Name', session.user.name || '');
+    }
+
+    // Forward custom headers from request
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader) {
+      headers.set('Authorization', authHeader);
+    }
+
+    // Forward API key if configured
+    const apiKey = process.env.BACKEND_API_KEY;
+    if (apiKey) {
+      headers.set('X-API-Key', apiKey);
+    }
+
+    let body: string | undefined;
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      body = await request.text();
+    }
+
+    const response = await fetch(fullUrl, {
+      method: request.method,
+      headers,
+      body,
+    });
+
+    const data = await response.text();
+
+    // Build response with CORS headers
+    const responseHeaders = new Headers({
+      'Content-Type': response.headers.get('Content-Type') || 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+
+    return new NextResponse(data, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    console.error('Proxy error:', error);
+    return NextResponse.json(
+      { error: 'Failed to connect to backend' },
+      { status: 502 }
+    );
+  }
+}
+
+// Handle CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+    },
+  });
+}
+```
+
+**Acceptance Criteria:**
+- [ ] User session forwarded to backend
+- [ ] Authorization header forwarded
+- [ ] API key forwarded if configured
+- [ ] CORS headers set correctly
+- [ ] OPTIONS preflight handled
+
+**Sub-tasks:**
+1. **Get session from NextAuth** - Forward user info
+2. **Forward Authorization header** - Pass through
+3. **Add API key support** - Backend authentication
+4. **Handle CORS** - Preflight and response headers
 
 ---
 

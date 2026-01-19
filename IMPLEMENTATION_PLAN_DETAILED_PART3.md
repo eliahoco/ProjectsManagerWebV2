@@ -1041,33 +1041,2083 @@ export async function deleteIssue(issueId: string): Promise<void> {
 
 ---
 
-## Story 3.3-3.6: Additional UI Components
+## Story 3.3: List View
 
-*(Due to document length, Stories 3.3-3.6 follow the same detailed pattern with:)*
+**ID:** S3.3
+**Epic:** E3
+**Priority:** Medium
+**Description:** Implement a table-based list view as an alternative to the Kanban board, with sorting and pagination capabilities.
 
-**Story 3.3: List View**
-- T3.3.1: Create IssueList component - Table with columns
-- T3.3.2: Create IssueRow component - Row with all fields
-- T3.3.3: Add sorting functionality - Click column headers
-- T3.3.4: Add pagination - Page navigation
+---
 
-**Story 3.4: Filter Bar**
-- T3.4.1: Create FilterBar component - Container with filters
-- T3.4.2-5: Add filter dropdowns - Type, Status, Priority, Assignee
-- T3.4.6: Add text search - Debounced input
+### Task T3.3.1: Create IssueList Component
 
-**Story 3.5: Issue Detail View**
-- T3.5.1: Create IssueDetail component - Full issue view
-- T3.5.2: Create DescriptionSection - Markdown with edit
-- T3.5.3: Create ActivityLog component - Timeline
-- T3.5.4: Create LinkedItems component - Related issues
-- T3.5.5: Create CommentsSection - Comment thread
+**ID:** T3.3.1
+**Story:** S3.3
+**Priority:** Medium
+**Estimated Effort:** 2 hours
 
-**Story 3.6: Create Issue Modal**
-- T3.6.1: Create CreateIssueModal component - Modal wrapper
-- T3.6.2: Add form fields - All issue fields
-- T3.6.3: Add parent selector - Hierarchy selection
-- T3.6.4: Form validation and submission - With error handling
+**Description:**
+Create the main table-based list view component that displays issues in a sortable, paginated table format. This provides an alternative view to the Kanban board for users who prefer a traditional list interface.
+
+**Technical Requirements:**
+- Use shadcn/ui Table component
+- Support column visibility toggle
+- Fixed header with scroll body
+- Responsive design with horizontal scroll on mobile
+
+**File: frontend/components/codeboard/issue-list.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { IssueRow } from './issue-row';
+import { Issue, SortConfig } from '@/types/codeboard';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+interface IssueListProps {
+  issues: Issue[];
+  onIssueClick: (issue: Issue) => void;
+  onStatusChange: (issueId: string, status: string) => void;
+}
+
+const columns = [
+  { key: 'key', label: 'Key', sortable: true, width: '100px' },
+  { key: 'type', label: 'Type', sortable: true, width: '80px' },
+  { key: 'title', label: 'Summary', sortable: true },
+  { key: 'status', label: 'Status', sortable: true, width: '120px' },
+  { key: 'priority', label: 'Priority', sortable: true, width: '100px' },
+  { key: 'assignee', label: 'Assignee', sortable: true, width: '120px' },
+  { key: 'createdAt', label: 'Created', sortable: true, width: '100px' },
+];
+
+export function IssueList({ issues, onIssueClick, onStatusChange }: IssueListProps) {
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    key: 'createdAt',
+    direction: 'desc',
+  });
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const sortedIssues = [...issues].sort((a, b) => {
+    const aVal = a[sortConfig.key as keyof Issue];
+    const bVal = b[sortConfig.key as keyof Issue];
+    const direction = sortConfig.direction === 'asc' ? 1 : -1;
+    return aVal < bVal ? -direction : direction;
+  });
+
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {columns.map(col => (
+              <TableHead key={col.key} style={{ width: col.width }}>
+                {col.sortable ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSort(col.key)}
+                    className="h-8 flex items-center gap-1"
+                  >
+                    {col.label}
+                    {sortConfig.key === col.key ? (
+                      sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                    ) : (
+                      <ArrowUpDown className="h-4 w-4 opacity-50" />
+                    )}
+                  </Button>
+                ) : (
+                  col.label
+                )}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sortedIssues.map(issue => (
+            <IssueRow
+              key={issue.id}
+              issue={issue}
+              onClick={() => onIssueClick(issue)}
+              onStatusChange={onStatusChange}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Table displays all issue columns
+- [ ] Columns are sortable by clicking headers
+- [ ] Sort direction indicator shows current sort
+- [ ] Table scrolls horizontally on small screens
+- [ ] Row click opens issue detail
+
+**Sub-tasks:**
+1. **Create table structure** - With proper column widths
+2. **Add sort indicators** - Visual feedback for sort state
+3. **Implement sort logic** - Client-side sorting
+4. **Add responsive styles** - Mobile scroll support
+
+---
+
+### Task T3.3.2: Create IssueRow Component
+
+**ID:** T3.3.2
+**Story:** S3.3
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the individual row component for the issue list table, displaying all issue fields with appropriate formatting and inline status editing.
+
+**File: frontend/components/codeboard/issue-row.tsx**
+```typescript
+'use client';
+
+import { TableCell, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Issue } from '@/types/codeboard';
+import { formatDistanceToNow } from 'date-fns';
+import { IssueTypeIcon } from './issue-type-icon';
+import { PriorityBadge } from './priority-badge';
+import { StatusDropdown } from './status-dropdown';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+interface IssueRowProps {
+  issue: Issue;
+  onClick: () => void;
+  onStatusChange: (issueId: string, status: string) => void;
+}
+
+export function IssueRow({ issue, onClick, onStatusChange }: IssueRowProps) {
+  const handleStatusChange = (status: string) => {
+    onStatusChange(issue.id, status);
+  };
+
+  return (
+    <TableRow
+      className="cursor-pointer hover:bg-muted/50"
+      onClick={onClick}
+    >
+      <TableCell className="font-medium text-primary">
+        {issue.key}
+      </TableCell>
+      <TableCell>
+        <IssueTypeIcon type={issue.type} />
+      </TableCell>
+      <TableCell className="max-w-[300px] truncate">
+        {issue.title}
+      </TableCell>
+      <TableCell onClick={e => e.stopPropagation()}>
+        <StatusDropdown
+          status={issue.status}
+          onChange={handleStatusChange}
+        />
+      </TableCell>
+      <TableCell>
+        <PriorityBadge priority={issue.priority} />
+      </TableCell>
+      <TableCell>
+        {issue.assignee ? (
+          <div className="flex items-center gap-2">
+            <Avatar className="h-6 w-6">
+              <AvatarFallback className="text-xs">
+                {issue.assignee === 'AI' ? '🤖' : issue.assignee[0]}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-sm">{issue.assignee}</span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-sm">Unassigned</span>
+        )}
+      </TableCell>
+      <TableCell className="text-muted-foreground text-sm">
+        {formatDistanceToNow(new Date(issue.createdAt), { addSuffix: true })}
+      </TableCell>
+    </TableRow>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Row displays all issue fields
+- [ ] Issue key is clickable and styled as link
+- [ ] Type shows appropriate icon
+- [ ] Status has inline dropdown for quick change
+- [ ] Priority shows color-coded badge
+- [ ] Assignee shows avatar
+- [ ] Date shows relative time
+
+**Sub-tasks:**
+1. **Create row layout** - With all columns
+2. **Add type icon** - Visual type indicator
+3. **Add inline status dropdown** - Quick status change
+4. **Format dates** - Relative time display
+
+---
+
+### Task T3.3.3: Add Sorting Functionality
+
+**ID:** T3.3.3
+**Story:** S3.3
+**Priority:** Medium
+**Estimated Effort:** 1 hour
+
+**Description:**
+Implement full sorting functionality including multi-column sort, sort persistence, and server-side sort support for large datasets.
+
+**Technical Requirements:**
+- Default sort by created date descending
+- Click column header to toggle sort
+- Shift+click for secondary sort
+- Persist sort preference in localStorage
+- Support server-side sorting via query params
+
+**Implementation:**
+```typescript
+// Sort configuration type
+interface SortConfig {
+  key: string;
+  direction: 'asc' | 'desc';
+}
+
+// Hook for managing sort state
+function useSortState(defaultSort: SortConfig) {
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('issue-list-sort');
+      return saved ? JSON.parse(saved) : defaultSort;
+    }
+    return defaultSort;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('issue-list-sort', JSON.stringify(sortConfig));
+  }, [sortConfig]);
+
+  return [sortConfig, setSortConfig] as const;
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Clicking column toggles sort direction
+- [ ] Sort preference persists across sessions
+- [ ] Multiple columns can be sorted
+- [ ] Server-side sort params passed to API
+
+**Sub-tasks:**
+1. **Create sort hook** - With localStorage persistence
+2. **Implement toggle logic** - Asc/desc switching
+3. **Add to API calls** - Query param support
+
+---
+
+### Task T3.3.4: Add Pagination
+
+**ID:** T3.3.4
+**Story:** S3.3
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Implement pagination for the issue list with page size selection and keyboard navigation.
+
+**File: frontend/components/codeboard/pagination.tsx**
+```typescript
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}
+
+const pageSizeOptions = [10, 25, 50, 100];
+
+export function Pagination({
+  currentPage,
+  totalPages,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+}: PaginationProps) {
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div className="flex items-center justify-between px-2 py-4">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span>Showing {startItem}-{endItem} of {totalItems}</span>
+        <Select
+          value={pageSize.toString()}
+          onValueChange={(v) => onPageSizeChange(Number(v))}
+        >
+          <SelectTrigger className="w-[70px] h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {pageSizeOptions.map(size => (
+              <SelectItem key={size} value={size.toString()}>
+                {size}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span>per page</span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+        >
+          <ChevronsLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="px-4 text-sm">
+          Page {currentPage} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronsRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Page size selector with common options
+- [ ] First/last page buttons
+- [ ] Previous/next page buttons
+- [ ] Current page indicator
+- [ ] Disabled states at boundaries
+- [ ] Keyboard navigation (arrow keys)
+
+**Sub-tasks:**
+1. **Create Pagination component** - Navigation buttons
+2. **Add page size selector** - Dropdown with options
+3. **Show item range** - "Showing 1-25 of 100"
+4. **Add keyboard support** - Arrow key navigation
+
+---
+
+## Story 3.4: Filter Bar
+
+**ID:** S3.4
+**Epic:** E3
+**Priority:** Medium
+**Description:** Implement comprehensive filtering capabilities for issues including type, status, priority, assignee, and text search.
+
+---
+
+### Task T3.4.1: Create FilterBar Component
+
+**ID:** T3.4.1
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the main filter bar container component that holds all filter controls and manages filter state.
+
+**File: frontend/components/codeboard/filter-bar.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { X, SlidersHorizontal } from 'lucide-react';
+import { TypeFilter } from './filters/type-filter';
+import { StatusFilter } from './filters/status-filter';
+import { PriorityFilter } from './filters/priority-filter';
+import { AssigneeFilter } from './filters/assignee-filter';
+import { SearchInput } from './filters/search-input';
+import { IssueFilters } from '@/types/codeboard';
+
+interface FilterBarProps {
+  filters: IssueFilters;
+  onFiltersChange: (filters: IssueFilters) => void;
+}
+
+export function FilterBar({ filters, onFiltersChange }: FilterBarProps) {
+  const activeFilterCount = Object.values(filters).filter(v =>
+    Array.isArray(v) ? v.length > 0 : v !== undefined && v !== ''
+  ).length;
+
+  const clearAllFilters = () => {
+    onFiltersChange({
+      types: [],
+      statuses: [],
+      priorities: [],
+      assignee: undefined,
+      search: '',
+    });
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-4 border-b bg-muted/30">
+      <SearchInput
+        value={filters.search || ''}
+        onChange={(search) => onFiltersChange({ ...filters, search })}
+      />
+
+      <div className="h-6 w-px bg-border" />
+
+      <TypeFilter
+        selected={filters.types || []}
+        onChange={(types) => onFiltersChange({ ...filters, types })}
+      />
+      <StatusFilter
+        selected={filters.statuses || []}
+        onChange={(statuses) => onFiltersChange({ ...filters, statuses })}
+      />
+      <PriorityFilter
+        selected={filters.priorities || []}
+        onChange={(priorities) => onFiltersChange({ ...filters, priorities })}
+      />
+      <AssigneeFilter
+        selected={filters.assignee}
+        onChange={(assignee) => onFiltersChange({ ...filters, assignee })}
+      />
+
+      {activeFilterCount > 0 && (
+        <>
+          <div className="h-6 w-px bg-border" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllFilters}
+            className="text-muted-foreground"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Clear all ({activeFilterCount})
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Filter bar displays all filter controls
+- [ ] Active filter count displayed
+- [ ] Clear all button resets all filters
+- [ ] Responsive layout on mobile
+- [ ] Filters persist in URL query params
+
+**Sub-tasks:**
+1. **Create container layout** - Flex wrap design
+2. **Add filter count badge** - Show active filters
+3. **Implement clear all** - Reset all filters
+4. **Add URL sync** - Query param persistence
+
+---
+
+### Task T3.4.2: Add Type Filter Dropdown
+
+**ID:** T3.4.2
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 45 minutes
+
+**Description:**
+Create a multi-select dropdown for filtering issues by type (Epic, Story, Task, Bug, Subtask).
+
+**File: frontend/components/codeboard/filters/type-filter.tsx**
+```typescript
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { IssueType } from '@/types/codeboard';
+import { IssueTypeIcon } from '../issue-type-icon';
+
+const issueTypes: IssueType[] = ['EPIC', 'STORY', 'TASK', 'BUG', 'SUBTASK'];
+
+interface TypeFilterProps {
+  selected: IssueType[];
+  onChange: (types: IssueType[]) => void;
+}
+
+export function TypeFilter({ selected, onChange }: TypeFilterProps) {
+  const handleToggle = (type: IssueType) => {
+    if (selected.includes(type)) {
+      onChange(selected.filter(t => t !== type));
+    } else {
+      onChange([...selected, type]);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          Type
+          {selected.length > 0 && (
+            <span className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="ml-1 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {issueTypes.map(type => (
+          <DropdownMenuCheckboxItem
+            key={type}
+            checked={selected.includes(type)}
+            onCheckedChange={() => handleToggle(type)}
+          >
+            <IssueTypeIcon type={type} className="mr-2" />
+            {type.charAt(0) + type.slice(1).toLowerCase()}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Dropdown shows all issue types
+- [ ] Each type has its icon
+- [ ] Multi-select with checkboxes
+- [ ] Badge shows selected count
+- [ ] Clicking outside closes dropdown
+
+**Sub-tasks:**
+1. **Create dropdown component** - Multi-select
+2. **Add type icons** - Visual indicators
+3. **Show selection count** - Badge on button
+
+---
+
+### Task T3.4.3: Add Status Filter Dropdown
+
+**ID:** T3.4.3
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 45 minutes
+
+**Description:**
+Create a multi-select dropdown for filtering issues by status with color-coded indicators.
+
+**File: frontend/components/codeboard/filters/status-filter.tsx**
+```typescript
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { IssueStatus } from '@/types/codeboard';
+
+const statusConfig: Record<IssueStatus, { label: string; color: string }> = {
+  BACKLOG: { label: 'Backlog', color: 'bg-gray-400' },
+  TODO: { label: 'To Do', color: 'bg-blue-400' },
+  IN_PROGRESS: { label: 'In Progress', color: 'bg-yellow-400' },
+  IN_REVIEW: { label: 'In Review', color: 'bg-purple-400' },
+  DONE: { label: 'Done', color: 'bg-green-400' },
+};
+
+interface StatusFilterProps {
+  selected: IssueStatus[];
+  onChange: (statuses: IssueStatus[]) => void;
+}
+
+export function StatusFilter({ selected, onChange }: StatusFilterProps) {
+  const handleToggle = (status: IssueStatus) => {
+    if (selected.includes(status)) {
+      onChange(selected.filter(s => s !== status));
+    } else {
+      onChange([...selected, status]);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          Status
+          {selected.length > 0 && (
+            <span className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="ml-1 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {Object.entries(statusConfig).map(([status, config]) => (
+          <DropdownMenuCheckboxItem
+            key={status}
+            checked={selected.includes(status as IssueStatus)}
+            onCheckedChange={() => handleToggle(status as IssueStatus)}
+          >
+            <span className={`mr-2 h-2 w-2 rounded-full ${config.color}`} />
+            {config.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Dropdown shows all statuses
+- [ ] Each status has color dot
+- [ ] Multi-select with checkboxes
+- [ ] Badge shows selected count
+
+**Sub-tasks:**
+1. **Create dropdown component** - Multi-select
+2. **Add status colors** - Color-coded dots
+3. **Show selection count** - Badge on button
+
+---
+
+### Task T3.4.4: Add Priority Filter Dropdown
+
+**ID:** T3.4.4
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 45 minutes
+
+**Description:**
+Create a multi-select dropdown for filtering issues by priority level.
+
+**File: frontend/components/codeboard/filters/priority-filter.tsx**
+```typescript
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { Priority } from '@/types/codeboard';
+import { PriorityBadge } from '../priority-badge';
+
+const priorities: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+
+interface PriorityFilterProps {
+  selected: Priority[];
+  onChange: (priorities: Priority[]) => void;
+}
+
+export function PriorityFilter({ selected, onChange }: PriorityFilterProps) {
+  const handleToggle = (priority: Priority) => {
+    if (selected.includes(priority)) {
+      onChange(selected.filter(p => p !== priority));
+    } else {
+      onChange([...selected, priority]);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          Priority
+          {selected.length > 0 && (
+            <span className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="ml-1 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {priorities.map(priority => (
+          <DropdownMenuCheckboxItem
+            key={priority}
+            checked={selected.includes(priority)}
+            onCheckedChange={() => handleToggle(priority)}
+          >
+            <PriorityBadge priority={priority} className="mr-2" />
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Dropdown shows all priority levels
+- [ ] Each priority has color-coded badge
+- [ ] Multi-select with checkboxes
+- [ ] Badge shows selected count
+
+**Sub-tasks:**
+1. **Create dropdown component** - Multi-select
+2. **Add priority badges** - Color-coded
+3. **Show selection count** - Badge on button
+
+---
+
+### Task T3.4.5: Add Assignee Filter
+
+**ID:** T3.4.5
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 45 minutes
+
+**Description:**
+Create a filter for assignee with special support for AI-assigned vs human-assigned issues.
+
+**File: frontend/components/codeboard/filters/assignee-filter.tsx**
+```typescript
+'use client';
+
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown, Bot, User, Users } from 'lucide-react';
+
+type AssigneeFilter = 'all' | 'ai' | 'human' | 'unassigned';
+
+interface AssigneeFilterProps {
+  selected?: AssigneeFilter;
+  onChange: (assignee: AssigneeFilter | undefined) => void;
+}
+
+export function AssigneeFilter({ selected, onChange }: AssigneeFilterProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          Assignee
+          {selected && selected !== 'all' && (
+            <span className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+              1
+            </span>
+          )}
+          <ChevronDown className="ml-1 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup
+          value={selected || 'all'}
+          onValueChange={(v) => onChange(v === 'all' ? undefined : v as AssigneeFilter)}
+        >
+          <DropdownMenuRadioItem value="all">
+            <Users className="mr-2 h-4 w-4" />
+            All
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="ai">
+            <Bot className="mr-2 h-4 w-4" />
+            AI Assigned
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="human">
+            <User className="mr-2 h-4 w-4" />
+            Human Assigned
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="unassigned">
+            <span className="mr-2 h-4 w-4 opacity-50">—</span>
+            Unassigned
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Radio selection (single choice)
+- [ ] Options: All, AI, Human, Unassigned
+- [ ] Icons for each option
+- [ ] Badge when filtered
+
+**Sub-tasks:**
+1. **Create radio dropdown** - Single select
+2. **Add AI/Human options** - Special filtering
+3. **Add icons** - Visual distinction
+
+---
+
+### Task T3.4.6: Add Text Search
+
+**ID:** T3.4.6
+**Story:** S3.4
+**Priority:** Medium
+**Estimated Effort:** 1 hour
+
+**Description:**
+Implement debounced text search input for filtering issues by title and description.
+
+**File: frontend/components/codeboard/filters/search-input.tsx**
+```typescript
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Input } from '@/components/ui/input';
+import { Search, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+interface SearchInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
+
+export function SearchInput({ value, onChange, placeholder = 'Search issues...' }: SearchInputProps) {
+  const [localValue, setLocalValue] = useState(value);
+
+  // Debounce the search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localValue !== value) {
+        onChange(localValue);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [localValue, value, onChange]);
+
+  // Sync external value changes
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleClear = () => {
+    setLocalValue('');
+    onChange('');
+  };
+
+  return (
+    <div className="relative flex-1 max-w-xs">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <Input
+        type="text"
+        placeholder={placeholder}
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        className="pl-8 pr-8 h-8"
+      />
+      {localValue && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+          onClick={handleClear}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Search icon in input
+- [ ] 300ms debounce on typing
+- [ ] Clear button when has value
+- [ ] Placeholder text
+- [ ] Keyboard shortcut (/) to focus
+
+**Sub-tasks:**
+1. **Create input component** - With search icon
+2. **Implement debounce** - 300ms delay
+3. **Add clear button** - Reset search
+4. **Add keyboard shortcut** - "/" to focus
+
+---
+
+## Story 3.5: Issue Detail View
+
+**ID:** S3.5
+**Epic:** E3
+**Priority:** High
+**Description:** Create the full issue detail view with description editing, activity log, linked items, and comments.
+
+---
+
+### Task T3.5.1: Create IssueDetail Component
+
+**ID:** T3.5.1
+**Story:** S3.5
+**Priority:** High
+**Estimated Effort:** 2 hours
+
+**Description:**
+Create the main issue detail component that displays full issue information in a modal or slide-over panel.
+
+**File: frontend/components/codeboard/issue-detail.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Issue } from '@/types/codeboard';
+import { IssueTypeIcon } from './issue-type-icon';
+import { StatusDropdown } from './status-dropdown';
+import { PriorityDropdown } from './priority-dropdown';
+import { DescriptionSection } from './description-section';
+import { ActivityLog } from './activity-log';
+import { LinkedItems } from './linked-items';
+import { CommentsSection } from './comments-section';
+import { X, Link2, MessageSquare, History } from 'lucide-react';
+
+interface IssueDetailProps {
+  issue: Issue | null;
+  open: boolean;
+  onClose: () => void;
+  onUpdate: (issueId: string, updates: Partial<Issue>) => void;
+}
+
+export function IssueDetail({ issue, open, onClose, onUpdate }: IssueDetailProps) {
+  if (!issue) return null;
+
+  const handleStatusChange = (status: string) => {
+    onUpdate(issue.id, { status: status as Issue['status'] });
+  };
+
+  const handlePriorityChange = (priority: string) => {
+    onUpdate(issue.id, { priority: priority as Issue['priority'] });
+  };
+
+  const handleDescriptionSave = (description: string) => {
+    onUpdate(issue.id, { description });
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-[600px] sm:max-w-[600px] overflow-y-auto">
+        <SheetHeader className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <IssueTypeIcon type={issue.type} size="lg" />
+              <Badge variant="outline">{issue.key}</Badge>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <SheetTitle className="text-xl font-semibold">
+            {issue.title}
+          </SheetTitle>
+          <div className="flex items-center gap-4">
+            <StatusDropdown status={issue.status} onChange={handleStatusChange} />
+            <PriorityDropdown priority={issue.priority} onChange={handlePriorityChange} />
+          </div>
+        </SheetHeader>
+
+        <div className="mt-6">
+          <Tabs defaultValue="details">
+            <TabsList>
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="activity">
+                <History className="h-4 w-4 mr-1" />
+                Activity
+              </TabsTrigger>
+              <TabsTrigger value="links">
+                <Link2 className="h-4 w-4 mr-1" />
+                Links
+              </TabsTrigger>
+              <TabsTrigger value="comments">
+                <MessageSquare className="h-4 w-4 mr-1" />
+                Comments
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="details" className="mt-4">
+              <DescriptionSection
+                description={issue.description}
+                onSave={handleDescriptionSave}
+              />
+            </TabsContent>
+
+            <TabsContent value="activity" className="mt-4">
+              <ActivityLog issueId={issue.id} />
+            </TabsContent>
+
+            <TabsContent value="links" className="mt-4">
+              <LinkedItems issue={issue} />
+            </TabsContent>
+
+            <TabsContent value="comments" className="mt-4">
+              <CommentsSection issueId={issue.id} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Slide-over panel with issue details
+- [ ] Issue key and type displayed
+- [ ] Inline status and priority editing
+- [ ] Tab navigation for sections
+- [ ] Close button and escape key close
+
+**Sub-tasks:**
+1. **Create Sheet component** - Slide-over panel
+2. **Add header section** - Key, type, title
+3. **Add status/priority dropdowns** - Inline editing
+4. **Implement tabs** - Details, Activity, Links, Comments
+
+---
+
+### Task T3.5.2: Create DescriptionSection
+
+**ID:** T3.5.2
+**Story:** S3.5
+**Priority:** High
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the description section with Markdown rendering and inline editing capabilities.
+
+**File: frontend/components/codeboard/description-section.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Edit2, Check, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+
+interface DescriptionSectionProps {
+  description?: string;
+  onSave: (description: string) => void;
+}
+
+export function DescriptionSection({ description, onSave }: DescriptionSectionProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(description || '');
+
+  const handleSave = () => {
+    onSave(editValue);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditValue(description || '');
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <div className="space-y-2">
+        <Textarea
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          placeholder="Add a description..."
+          className="min-h-[200px] font-mono text-sm"
+        />
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleSave}>
+            <Check className="h-4 w-4 mr-1" />
+            Save
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleCancel}>
+            <X className="h-4 w-4 mr-1" />
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => setIsEditing(true)}
+      >
+        <Edit2 className="h-4 w-4" />
+      </Button>
+      {description ? (
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          <ReactMarkdown>{description}</ReactMarkdown>
+        </div>
+      ) : (
+        <p
+          className="text-muted-foreground cursor-pointer hover:text-foreground"
+          onClick={() => setIsEditing(true)}
+        >
+          Click to add a description...
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Markdown rendering for description
+- [ ] Edit button on hover
+- [ ] Full textarea editor
+- [ ] Save and cancel buttons
+- [ ] Empty state placeholder
+
+**Sub-tasks:**
+1. **Add Markdown rendering** - react-markdown
+2. **Create edit mode** - Textarea with controls
+3. **Add save/cancel** - With keyboard shortcuts
+
+---
+
+### Task T3.5.3: Create ActivityLog Component
+
+**ID:** T3.5.3
+**Story:** S3.5
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create an activity timeline showing all changes and events for an issue.
+
+**File: frontend/components/codeboard/activity-log.tsx**
+```typescript
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { Activity } from '@/types/codeboard';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowRight, MessageSquare, GitCommit, Edit2, Plus } from 'lucide-react';
+
+const activityIcons: Record<Activity['type'], React.ReactNode> = {
+  STATUS_CHANGE: <ArrowRight className="h-4 w-4" />,
+  COMMENT: <MessageSquare className="h-4 w-4" />,
+  COMMIT: <GitCommit className="h-4 w-4" />,
+  DESCRIPTION_CHANGE: <Edit2 className="h-4 w-4" />,
+  CREATED: <Plus className="h-4 w-4" />,
+};
+
+interface ActivityLogProps {
+  issueId: string;
+}
+
+export function ActivityLog({ issueId }: ActivityLogProps) {
+  const { data: activities, isLoading } = useQuery({
+    queryKey: ['activities', issueId],
+    queryFn: () => fetchActivities(issueId),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="flex gap-3">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {activities?.map((activity) => (
+        <div key={activity.id} className="flex gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+            {activityIcons[activity.type]}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm">
+              <span className="font-medium">{activity.actor}</span>
+              {' '}
+              {activity.description}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function fetchActivities(issueId: string): Promise<Activity[]> {
+  const res = await fetch(`/api/codeboard/issues/${issueId}/activities`);
+  return res.json();
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Timeline layout with icons
+- [ ] Different icons per activity type
+- [ ] Relative timestamps
+- [ ] Loading skeleton
+- [ ] Actor name displayed
+
+**Sub-tasks:**
+1. **Create timeline layout** - Vertical list
+2. **Add activity icons** - Per type
+3. **Fetch activities** - React Query
+4. **Add loading state** - Skeleton UI
+
+---
+
+### Task T3.5.4: Create LinkedItems Component
+
+**ID:** T3.5.4
+**Story:** S3.5
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create a component showing parent/children hierarchy, related issues, and linked commits.
+
+**File: frontend/components/codeboard/linked-items.tsx**
+```typescript
+'use client';
+
+import { Issue } from '@/types/codeboard';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { IssueTypeIcon } from './issue-type-icon';
+import { Plus, ArrowUp, ArrowDown, Link2 } from 'lucide-react';
+
+interface LinkedItemsProps {
+  issue: Issue;
+}
+
+export function LinkedItems({ issue }: LinkedItemsProps) {
+  return (
+    <div className="space-y-6">
+      {/* Parent */}
+      {issue.parentId && (
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+            <ArrowUp className="h-4 w-4" />
+            Parent
+          </h4>
+          <LinkedIssueCard issueId={issue.parentId} />
+        </div>
+      )}
+
+      {/* Children */}
+      {issue.children && issue.children.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+            <ArrowDown className="h-4 w-4" />
+            Child Issues ({issue.children.length})
+          </h4>
+          <div className="space-y-2">
+            {issue.children.map(child => (
+              <LinkedIssueCard key={child.id} issue={child} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Related */}
+      {issue.relatedIssues && issue.relatedIssues.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+            <Link2 className="h-4 w-4" />
+            Related Issues
+          </h4>
+          <div className="space-y-2">
+            {issue.relatedIssues.map(related => (
+              <LinkedIssueCard key={related.id} issue={related} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" className="w-full">
+        <Plus className="h-4 w-4 mr-2" />
+        Link Issue
+      </Button>
+    </div>
+  );
+}
+
+function LinkedIssueCard({ issue, issueId }: { issue?: Issue; issueId?: string }) {
+  // If only issueId provided, fetch the issue
+  // For simplicity, assuming issue is passed
+
+  if (!issue) return null;
+
+  return (
+    <div className="flex items-center gap-2 p-2 rounded border hover:bg-muted cursor-pointer">
+      <IssueTypeIcon type={issue.type} />
+      <Badge variant="outline" className="text-xs">{issue.key}</Badge>
+      <span className="text-sm truncate flex-1">{issue.title}</span>
+      <Badge variant="secondary" className="text-xs">{issue.status}</Badge>
+    </div>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Shows parent issue if exists
+- [ ] Lists child issues
+- [ ] Lists related/linked issues
+- [ ] Link issue button
+- [ ] Click navigates to issue
+
+**Sub-tasks:**
+1. **Create section layout** - Parent, children, related
+2. **Create LinkedIssueCard** - Compact issue display
+3. **Add link issue button** - Opens linking modal
+
+---
+
+### Task T3.5.5: Create CommentsSection
+
+**ID:** T3.5.5
+**Story:** S3.5
+**Priority:** Medium
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the comments section with a list of comments and a new comment form.
+
+**File: frontend/components/codeboard/comments-section.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Send } from 'lucide-react';
+
+interface Comment {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
+}
+
+interface CommentsSectionProps {
+  issueId: string;
+}
+
+export function CommentsSection({ issueId }: CommentsSectionProps) {
+  const [newComment, setNewComment] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data: comments, isLoading } = useQuery({
+    queryKey: ['comments', issueId],
+    queryFn: () => fetchComments(issueId),
+  });
+
+  const addComment = useMutation({
+    mutationFn: (content: string) => postComment(issueId, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', issueId] });
+      setNewComment('');
+    },
+  });
+
+  const handleSubmit = () => {
+    if (newComment.trim()) {
+      addComment.mutate(newComment);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Comment list */}
+      <div className="space-y-4 max-h-[400px] overflow-y-auto">
+        {isLoading ? (
+          [1, 2].map(i => (
+            <div key={i} className="flex gap-3">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </div>
+          ))
+        ) : comments?.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">
+            No comments yet. Be the first to comment!
+          </p>
+        ) : (
+          comments?.map(comment => (
+            <div key={comment.id} className="flex gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback>{comment.author[0]}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{comment.author}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                  </span>
+                </div>
+                <p className="text-sm mt-1">{comment.content}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* New comment form */}
+      <div className="flex gap-2">
+        <Textarea
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Add a comment..."
+          className="min-h-[80px]"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.metaKey) {
+              handleSubmit();
+            }
+          }}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSubmit}
+          disabled={!newComment.trim() || addComment.isPending}
+        >
+          <Send className="h-4 w-4 mr-2" />
+          {addComment.isPending ? 'Posting...' : 'Comment'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+async function fetchComments(issueId: string): Promise<Comment[]> {
+  const res = await fetch(`/api/codeboard/issues/${issueId}/comments`);
+  return res.json();
+}
+
+async function postComment(issueId: string, content: string): Promise<Comment> {
+  const res = await fetch(`/api/codeboard/issues/${issueId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return res.json();
+}
+```
+
+**Acceptance Criteria:**
+- [ ] List existing comments
+- [ ] Author avatar and name
+- [ ] Relative timestamps
+- [ ] New comment textarea
+- [ ] Submit button with loading state
+- [ ] Cmd+Enter to submit
+
+**Sub-tasks:**
+1. **Create comment list** - With avatars
+2. **Add new comment form** - Textarea and button
+3. **Implement submit** - With optimistic update
+4. **Add keyboard shortcut** - Cmd+Enter
+
+---
+
+## Story 3.6: Create Issue Modal
+
+**ID:** S3.6
+**Epic:** E3
+**Priority:** High
+**Description:** Implement the issue creation modal with all required fields and validation.
+
+---
+
+### Task T3.6.1: Create CreateIssueModal Component
+
+**ID:** T3.6.1
+**Story:** S3.6
+**Priority:** High
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the modal wrapper for issue creation with proper form handling.
+
+**File: frontend/components/codeboard/create-issue-modal.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { IssueForm } from './issue-form';
+import { CreateIssueInput } from '@/types/codeboard';
+
+interface CreateIssueModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (data: CreateIssueInput) => Promise<void>;
+  projectId: string;
+  defaultType?: string;
+  defaultParentId?: string;
+}
+
+export function CreateIssueModal({
+  open,
+  onClose,
+  onSubmit,
+  projectId,
+  defaultType,
+  defaultParentId,
+}: CreateIssueModalProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (data: CreateIssueInput) => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit({ ...data, projectId });
+      onClose();
+    } catch (error) {
+      console.error('Failed to create issue:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Issue</DialogTitle>
+        </DialogHeader>
+        <IssueForm
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          defaultType={defaultType}
+          defaultParentId={defaultParentId}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Modal opens with form
+- [ ] Close button and escape key close
+- [ ] Submit shows loading state
+- [ ] Closes on successful submit
+- [ ] Error state on failure
+
+**Sub-tasks:**
+1. **Create Dialog wrapper** - With header
+2. **Add form component** - Separate for reuse
+3. **Handle submit state** - Loading indicator
+
+---
+
+### Task T3.6.2: Add Form Fields
+
+**ID:** T3.6.2
+**Story:** S3.6
+**Priority:** High
+**Estimated Effort:** 1.5 hours
+
+**Description:**
+Create the form fields for issue creation including title, type, priority, and description.
+
+**File: frontend/components/codeboard/issue-form.tsx**
+```typescript
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { IssueTypeIcon } from './issue-type-icon';
+import { PriorityBadge } from './priority-badge';
+import { CreateIssueInput } from '@/types/codeboard';
+
+const issueSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  type: z.enum(['EPIC', 'STORY', 'TASK', 'BUG', 'SUBTASK']),
+  priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  description: z.string().optional(),
+  parentId: z.string().optional(),
+});
+
+interface IssueFormProps {
+  onSubmit: (data: CreateIssueInput) => void;
+  isSubmitting: boolean;
+  defaultType?: string;
+  defaultParentId?: string;
+}
+
+export function IssueForm({
+  onSubmit,
+  isSubmitting,
+  defaultType = 'TASK',
+  defaultParentId,
+}: IssueFormProps) {
+  const form = useForm<z.infer<typeof issueSchema>>({
+    resolver: zodResolver(issueSchema),
+    defaultValues: {
+      title: '',
+      type: defaultType as any,
+      priority: 'MEDIUM',
+      description: '',
+      parentId: defaultParentId,
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="type"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Type</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {['EPIC', 'STORY', 'TASK', 'BUG', 'SUBTASK'].map(type => (
+                    <SelectItem key={type} value={type}>
+                      <div className="flex items-center gap-2">
+                        <IssueTypeIcon type={type as any} />
+                        {type.charAt(0) + type.slice(1).toLowerCase()}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="title"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter issue title..." {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="priority"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Priority</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(priority => (
+                    <SelectItem key={priority} value={priority}>
+                      <PriorityBadge priority={priority as any} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Describe the issue..."
+                  className="min-h-[100px]"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Creating...' : 'Create Issue'}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Type selector with icons
+- [ ] Title input with validation
+- [ ] Priority selector with badges
+- [ ] Description textarea
+- [ ] Form validation with error messages
+
+**Sub-tasks:**
+1. **Create form schema** - Zod validation
+2. **Add type selector** - With icons
+3. **Add priority selector** - With badges
+4. **Add title and description** - With validation
+
+---
+
+### Task T3.6.3: Add Parent Selector
+
+**ID:** T3.6.3
+**Story:** S3.6
+**Priority:** Medium
+**Estimated Effort:** 1 hour
+
+**Description:**
+Add a parent issue selector for creating subtasks and child issues.
+
+**Implementation:**
+```typescript
+// Add to issue-form.tsx
+import { ParentSelector } from './parent-selector';
+
+// In form:
+{form.watch('type') !== 'EPIC' && (
+  <FormField
+    control={form.control}
+    name="parentId"
+    render={({ field }) => (
+      <FormItem>
+        <FormLabel>Parent Issue (Optional)</FormLabel>
+        <FormControl>
+          <ParentSelector
+            value={field.value}
+            onChange={field.onChange}
+            excludeTypes={['SUBTASK']}
+          />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    )}
+  />
+)}
+```
+
+**File: frontend/components/codeboard/parent-selector.tsx**
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { IssueTypeIcon } from './issue-type-icon';
+
+interface ParentSelectorProps {
+  value?: string;
+  onChange: (value: string | undefined) => void;
+  excludeTypes?: string[];
+}
+
+export function ParentSelector({ value, onChange, excludeTypes = [] }: ParentSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const { data: issues } = useQuery({
+    queryKey: ['issues', 'parent-selector', search],
+    queryFn: () => searchIssues(search, excludeTypes),
+  });
+
+  const selectedIssue = issues?.find(i => i.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          className="w-full justify-between"
+        >
+          {selectedIssue ? (
+            <div className="flex items-center gap-2">
+              <IssueTypeIcon type={selectedIssue.type} />
+              <span>{selectedIssue.key}</span>
+              <span className="truncate text-muted-foreground">{selectedIssue.title}</span>
+            </div>
+          ) : (
+            'Select parent issue...'
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[400px] p-0">
+        <Command>
+          <CommandInput
+            placeholder="Search issues..."
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandEmpty>No issues found.</CommandEmpty>
+          <CommandGroup className="max-h-[300px] overflow-auto">
+            {issues?.map(issue => (
+              <CommandItem
+                key={issue.id}
+                onSelect={() => {
+                  onChange(issue.id === value ? undefined : issue.id);
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    value === issue.id ? 'opacity-100' : 'opacity-0'
+                  )}
+                />
+                <IssueTypeIcon type={issue.type} className="mr-2" />
+                <span className="font-medium">{issue.key}</span>
+                <span className="ml-2 truncate text-muted-foreground">{issue.title}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+async function searchIssues(query: string, excludeTypes: string[]) {
+  const params = new URLSearchParams({ q: query });
+  excludeTypes.forEach(t => params.append('excludeType', t));
+  const res = await fetch(`/api/codeboard/issues/search?${params}`);
+  return res.json();
+}
+```
+
+**Acceptance Criteria:**
+- [ ] Combobox with search
+- [ ] Shows issue type, key, and title
+- [ ] Filters by search text
+- [ ] Excludes subtasks from options
+- [ ] Can clear selection
+
+**Sub-tasks:**
+1. **Create combobox** - With search
+2. **Fetch issues** - Debounced search
+3. **Display issue details** - Type, key, title
+
+---
+
+### Task T3.6.4: Form Validation and Submission
+
+**ID:** T3.6.4
+**Story:** S3.6
+**Priority:** High
+**Estimated Effort:** 1 hour
+
+**Description:**
+Implement comprehensive form validation and error handling for issue submission.
+
+**Technical Requirements:**
+- Title required, max 200 chars
+- Type required
+- Priority required
+- Parent validation (can't parent to subtask, Epic can't have parent)
+- API error handling with toast notifications
+
+**Implementation:**
+```typescript
+// Enhanced validation
+const issueSchema = z.object({
+  title: z.string()
+    .min(1, 'Title is required')
+    .max(200, 'Title must be less than 200 characters'),
+  type: z.enum(['EPIC', 'STORY', 'TASK', 'BUG', 'SUBTASK']),
+  priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  description: z.string().max(10000, 'Description too long').optional(),
+  parentId: z.string().optional(),
+}).refine(data => {
+  // Epic can't have parent
+  if (data.type === 'EPIC' && data.parentId) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Epics cannot have a parent issue",
+  path: ['parentId'],
+});
+
+// Error handling in form
+const handleSubmit = async (data: CreateIssueInput) => {
+  try {
+    await onSubmit(data);
+    toast({ title: 'Issue created successfully' });
+  } catch (error) {
+    if (error instanceof Error) {
+      toast({
+        title: 'Failed to create issue',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  }
+};
+```
+
+**Acceptance Criteria:**
+- [ ] All required fields validated
+- [ ] Character limits enforced
+- [ ] Parent validation rules applied
+- [ ] API errors shown in toast
+- [ ] Form resets on successful submit
+
+**Sub-tasks:**
+1. **Add Zod validation** - All field rules
+2. **Add custom refinements** - Business rules
+3. **Add error toasts** - API error display
+4. **Add success handling** - Reset and close
 
 ---
 
