@@ -1,0 +1,106 @@
+"""
+Database Models for ProjectsManagerWebV2
+"""
+
+from models.database import Base, get_db, init_db, AsyncSessionLocal, engine
+from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
+from models.git import CommitLink, GitSyncState
+from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
+from models.schemas import (
+    IssueType,
+    IssueStatus,
+    Priority,
+    LinkType,
+    IssueBase,
+    IssueCreate,
+    IssueUpdate,
+    IssueResponse,
+    IssueWithChildren,
+    CommentBase,
+    CommentCreate,
+    CommentResponse,
+    ActivityResponse,
+    IssueLinkCreate,
+    IssueLinkResponse,
+    ProjectResponse,
+    PaginatedResponse,
+    BatchStatusUpdate,
+    IssueSequenceResponse,
+    # QA Board schemas
+    QATaskStatus,
+    QATaskType,
+    QAPriority,
+    QATaskBase,
+    QATaskCreate,
+    QATaskUpdate,
+    QATaskResponse,
+    QATaskWithIssues,
+    QAExecutionRequest,
+    QAExecutionResult,
+    QAPlanGenerateRequest,
+    QAPlanGenerateResponse,
+    QASettingsUpdate,
+    QASettingsResponse,
+    QASummary,
+)
+
+__all__ = [
+    # Database
+    "Base",
+    "get_db",
+    "init_db",
+    "AsyncSessionLocal",
+    "engine",
+    # SQLAlchemy Models - Issues
+    "Issue",
+    "Comment",
+    "Activity",
+    "IssueLink",
+    "IssueSequence",
+    "Project",
+    "CommitLink",
+    "GitSyncState",
+    # SQLAlchemy Models - QA Board
+    "QATask",
+    "QATaskIssueLink",
+    "QASequence",
+    "QASettings",
+    # Enums - Issues
+    "IssueType",
+    "IssueStatus",
+    "Priority",
+    "LinkType",
+    # Enums - QA Board
+    "QATaskStatus",
+    "QATaskType",
+    "QAPriority",
+    # Pydantic Schemas - Issues
+    "IssueBase",
+    "IssueCreate",
+    "IssueUpdate",
+    "IssueResponse",
+    "IssueWithChildren",
+    "CommentBase",
+    "CommentCreate",
+    "CommentResponse",
+    "ActivityResponse",
+    "IssueLinkCreate",
+    "IssueLinkResponse",
+    "ProjectResponse",
+    "PaginatedResponse",
+    "BatchStatusUpdate",
+    "IssueSequenceResponse",
+    # Pydantic Schemas - QA Board
+    "QATaskBase",
+    "QATaskCreate",
+    "QATaskUpdate",
+    "QATaskResponse",
+    "QATaskWithIssues",
+    "QAExecutionRequest",
+    "QAExecutionResult",
+    "QAPlanGenerateRequest",
+    "QAPlanGenerateResponse",
+    "QASettingsUpdate",
+    "QASettingsResponse",
+    "QASummary",
+]

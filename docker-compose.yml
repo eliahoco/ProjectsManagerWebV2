@@ -1,0 +1,69 @@
+# ProjectsManagerWebV2 Docker Compose
+# Full stack: Frontend (Next.js), Backend (FastAPI), ChromaDB
+
+version: '3.8'
+
+services:
+  # Frontend - Next.js Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3601:3601"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8401
+    depends_on:
+      - backend
+    volumes:
+      - frontend_data:/app/prisma
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Backend - FastAPI Application
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8401:8401"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8401
+      - DATABASE_URL=sqlite+aiosqlite:///./data/codeboard.db
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - FRONTEND_URL=http://localhost:3601
+      - DEBUG=false
+    depends_on:
+      - chromadb
+    volumes:
+      - backend_data:/app/data
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ChromaDB - Vector Database for RAG
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8402:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  frontend_data:
+  backend_data:
+  chroma_data:
+
+networks:
+  app-network:
+    driver: bridge

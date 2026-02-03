@@ -2,66 +2,103 @@
 
 ## Project Overview
 
-**Project Name:** ProjectsManagerWebV2
-**Location:** `/Users/elic/Documents/Claude/ProjectsManagerWebV2`
+**Project Name:** ProjectsManagerWebV2Production
+**Location:** `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production`
 **Description:** A next-generation project manager with AI-automated task management (CodeBoard)
 
 ## Allocated Ports
 
 | Service | Port | URL |
 |---------|------|-----|
-| Frontend (Next.js) | 3601 | http://localhost:3601 |
-| Backend (FastAPI) | 8401 | http://localhost:8401 |
-| ChromaDB | 8501 | http://localhost:8501 |
+| Frontend (Next.js) | 3000 | http://localhost:3000 |
+| Backend (FastAPI) | 5001 | http://localhost:5001 |
+| Ollama (AI) | 11434 | http://localhost:11434 |
+
+---
+
+## Issue Type Hierarchy
+
+CodeBoard uses a 5-level hierarchy for organizing work:
+
+```
+FEATURE (Top Level - Groups everything)
+└── EPIC (Major initiative under a feature)
+    └── STORY (User-facing capability)
+        └── TASK (Implementation work)
+            └── SUBTASK (Granular work item)
+```
+
+### Hierarchy Rules
+- **FEATURE**: No parent (top level) - represents a complete feature set
+- **EPIC**: Parent must be a FEATURE
+- **STORY**: Parent must be an EPIC
+- **TASK**: Parent must be a STORY
+- **SUBTASK**: Parent must be a TASK
+- **BUG**: Can have SUBTASK children
+
+---
+
+## Current Features (Active FEATUREs in CodeBoard)
+
+### CB-504: CodeBoard Core Platform ✅
+**Status:** IN_PROGRESS | **Priority:** CRITICAL
+
+Master feature for the CodeBoard project management platform. Includes:
+- EPICs: CB-1 to CB-7 (Project Setup, Database, UI, RAG, AI Engine, Git, Polish)
+
+### CB-502: Import Feature: GitHub Integration
+**Status:** TODO | **Priority:** HIGH
+
+Master feature for importing GitHub issues, commits, and project data into CodeBoard.
+- EPICs: CB-474 to CB-478 (Import Feature, Database Integration, AI Integration, Testing, Security)
+
+### CB-503: Panel Collapse Feature: Collapsible Panels
+**Status:** TODO | **Priority:** HIGH
+
+Feature for adding collapsible panel functionality to CodeBoard views.
+- EPIC: CB-494 (Panel collapse/expand functionality)
+
+---
+
+## Recently Implemented Features
+
+### Feature Execution Panel (Option B Implementation)
+- Sequential execution of issues with context passing
+- Auto-status updates during execution (BACKLOG → TODO → IN_PROGRESS → DONE)
+- Pause/Resume/Skip/Stop controls
+- Hierarchical view of all issues under a FEATURE
+- Checkboxes to select items for execution
+
+### Floating Execution Status
+- Floating window showing execution progress
+- Polls for status updates every 2 seconds
+- Expand button to restore full modal
+- Minimized view with progress percentage
+
+### Drag-to-Trigger
+- Dragging a FEATURE from BACKLOG to TODO opens Feature Execution Panel
+- Automatic status update on drop
+
+### AI Breakdown with FEATURE Hierarchy
+- Generates complete FEATURE → EPIC → STORY → TASK → SUBTASK hierarchy
+- Uses Ollama llama3.2:3b model for JSON generation
+- Labels/tags filter for generated issues
 
 ---
 
 ## Implementation Tracking System
 
-We will use an SQLite database (`implementation_tracker.db`) to track our own progress using the same methodology we're building.
+We use the CodeBoard itself to track implementation progress.
 
-### Tracker Database Schema
+### Database Schema (Prisma)
 
 ```sql
-CREATE TABLE epics (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT DEFAULT 'BACKLOG',
-    progress INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME
-);
+-- Issue types and hierarchy
+FEATURE → EPIC → STORY → TASK → SUBTASK → BUG
 
-CREATE TABLE stories (
-    id TEXT PRIMARY KEY,
-    epic_id TEXT REFERENCES epics(id),
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT DEFAULT 'BACKLOG',
-    priority TEXT DEFAULT 'MEDIUM',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME
-);
-
-CREATE TABLE tasks (
-    id TEXT PRIMARY KEY,
-    story_id TEXT REFERENCES stories(id),
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT DEFAULT 'BACKLOG',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME
-);
-
-CREATE TABLE subtasks (
-    id TEXT PRIMARY KEY,
-    task_id TEXT REFERENCES tasks(id),
-    title TEXT NOT NULL,
-    status TEXT DEFAULT 'BACKLOG',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME
-);
+-- Key tables
+Issue, Comment, Activity, IssueLink, IssueSequence,
+Project, CommitLink, GitSyncState
 ```
 
 ### launch.sh Progress Dashboard
@@ -400,36 +437,97 @@ CREATE TABLE subtasks (
 
 ---
 
-## First Steps (What I'll Do Now)
+## Feature Execution Implementation (Option B)
 
-1. **Create ProjectsManagerWebV2 directory**
-2. **Create implementation_tracker.db** with all tasks seeded
-3. **Create launch.sh** with progress dashboard
-4. **Begin Epic 1: Project Setup**
+### FeatureExecutionPanel Component
+**Location:** `/frontend/components/codeboard/FeatureExecutionPanel.tsx`
+
+Features:
+- Shows hierarchical view of all issues under a FEATURE
+- Checkboxes to select items for execution
+- Sequential execution with context passing between tasks
+- Pause/Resume/Skip/Stop controls
+- Auto-updates parent statuses when children complete
+- Progress tracking with visual indicators
+
+### FloatingExecutionStatus Component
+**Location:** `/frontend/components/codeboard/FloatingExecutionStatus.tsx`
+
+Features:
+- Floating window for minimized execution monitoring
+- Shows issue key, progress percentage, current action
+- Polls for status updates every 2 seconds
+- Expand button to restore full modal
+- Color-coded status indicators
+
+### ExecutionModal Enhancements
+**Location:** `/frontend/components/codeboard/ExecutionModal.tsx`
+
+Added:
+- Minimize button to show FloatingExecutionStatus instead
+- onMinimize callback prop for state management
+
+### KanbanBoard Drag-to-Trigger
+**Location:** `/frontend/components/codeboard/KanbanBoard.tsx`
+
+Features:
+- Special handling for FEATURE type drag-and-drop
+- When FEATURE is dropped from BACKLOG to TODO, triggers Feature Execution Panel
+- onFeatureDropToTodo callback prop
+
+---
+
+## Key Component Files
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| FeatureExecutionPanel | /frontend/components/codeboard/ | Feature execution orchestration |
+| FloatingExecutionStatus | /frontend/components/codeboard/ | Minimized execution monitoring |
+| ExecutionModal | /frontend/components/codeboard/ | Full CLI execution interface |
+| KanbanBoard | /frontend/components/codeboard/ | Main board with drag-and-drop |
+| AIBreakdownButton | /frontend/components/codeboard/ | AI hierarchy generation |
+| IssueDetailTemplate | /frontend/components/codeboard/ | Issue detail page template |
+
+---
+
+## Backend Services
+
+| Service | Location | Purpose |
+|---------|----------|---------|
+| ai_service.py | /backend/services/ | AI breakdown with FEATURE hierarchy |
+| execution_service.py | /backend/services/ | Task execution management |
+| git_service.py | /backend/services/ | Git commit linking |
 
 ---
 
 ## Verification Plan
 
 1. **After Each Task:**
-   - Update tracker.db status to DONE
-   - Run launch.sh to see updated progress
+   - Update issue status in CodeBoard
+   - Verify feature works in UI
 
 2. **After Each Story:**
    - Verify feature works end-to-end
-   - Document any bugs found
+   - Run any associated tests
 
 3. **After Each Epic:**
    - Full integration test
-   - Update PROJECT_DESCRIPTOR.md
+   - Update documentation
 
 ---
 
-## Files to Create First
+## Running the Application
 
-1. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/` (directory)
-2. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/implementation_tracker.db`
-3. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/launch.sh`
-4. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/stop.sh`
-5. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/PORT_CONFIG.md`
-6. `/Users/elic/Documents/Claude/ProjectsManagerWebV2/PROJECT_DESCRIPTOR.md`
+```bash
+# Start both frontend and backend
+./launch.sh
+
+# Or manually:
+# Terminal 1 - Backend
+cd backend && source venv/bin/activate && python -m app.main
+
+# Terminal 2 - Frontend
+cd frontend && npm run dev
+```
+
+Access at: http://localhost:3000/codeboard

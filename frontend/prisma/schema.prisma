@@ -1,0 +1,260 @@
+// Projects Manager Web - Database Schema
+// Migrated from ports.db SQLite
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  path        String
+  status      String      @default("ACTIVE") // ACTIVE, DEPRECATED, ARCHIVED
+  description String?
+  type        String?     // nodejs, python, go, rust, etc.
+  version     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  ports       Port[]
+  sessions    Session[]
+  issues      Issue[]     // CodeBoard issues
+  qaSettings  QASettings? // QA Board settings
+}
+
+model Port {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  port         Int
+  serviceName  String
+  serviceType  String   // FRONTEND, BACKEND, DATABASE, CACHE, QUEUE, MONITORING, OTHER
+  protocol     String   @default("TCP") // TCP, UDP
+  internalPort Int?
+  url          String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([port, protocol])
+  @@index([projectId])
+}
+
+model PortRange {
+  id          String  @id @default(cuid())
+  serviceType String  @unique
+  rangeStart  Int
+  rangeEnd    Int
+  description String?
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  lastDone  String?   // Summary of what was done
+  nextSteps String?   // Planned next steps
+
+  @@index([projectId])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+// ============================================
+// CodeBoard - Issue Tracking Models
+// ============================================
+
+model Issue {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Issue identification
+  key         String   @unique  // e.g., "PROJ-123"
+  sequence    Int               // Sequential number within project
+
+  // Issue details
+  title       String
+  description String?
+  type        String   @default("TASK")    // EPIC, STORY, TASK, SUBTASK, BUG
+  status      String   @default("BACKLOG") // BACKLOG, TODO, IN_PROGRESS, IN_REVIEW, COMPLETED_WAITING_QA, DONE, CANCELLED
+  priority    String   @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL
+
+  // Hierarchy
+  parentId    String?
+  parent      Issue?   @relation("IssueHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Issue[]  @relation("IssueHierarchy")
+
+  // Assignments
+  assignee    String?  // User name or ID
+  reporter    String?  // User name or ID
+
+  // Estimation & tracking
+  storyPoints Int?
+  estimate    Float?   // Hours estimated
+  timeSpent   Float?   // Hours spent
+
+  // Dates
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  comments     Comment[]
+  activities   Activity[]
+  linkedFrom   IssueLink[] @relation("LinkedFrom")
+  linkedTo     IssueLink[] @relation("LinkedTo")
+  qaTaskLinks  QATaskIssueLink[]  // QA tasks testing this issue
+
+  // Metadata
+  labels           String?  // JSON array of labels
+  breakdownBatchId String?  // UUID to group issues created in same AI breakdown
+
+  @@index([projectId])
+  @@index([breakdownBatchId])
+  @@index([parentId])
+  @@index([status])
+  @@index([type])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  author    String   // User name or ID
+  content   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([issueId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  actor     String   // User or system that performed the action
+  action    String   // CREATED, UPDATED, STATUS_CHANGED, ASSIGNED, COMMENTED, etc.
+  field     String?  // Field that was changed (for UPDATED actions)
+  oldValue  String?  // Previous value
+  newValue  String?  // New value
+
+  createdAt DateTime @default(now())
+
+  @@index([issueId])
+}
+
+model IssueLink {
+  id           String @id @default(cuid())
+  fromIssueId  String
+  fromIssue    Issue  @relation("LinkedFrom", fields: [fromIssueId], references: [id], onDelete: Cascade)
+  toIssueId    String
+  toIssue      Issue  @relation("LinkedTo", fields: [toIssueId], references: [id], onDelete: Cascade)
+
+  linkType     String // BLOCKS, IS_BLOCKED_BY, RELATES_TO, DUPLICATES, IS_DUPLICATED_BY
+
+  createdAt    DateTime @default(now())
+
+  @@unique([fromIssueId, toIssueId, linkType])
+  @@index([fromIssueId])
+  @@index([toIssueId])
+}
+
+model IssueSequence {
+  id         String @id @default(cuid())
+  projectId  String @unique
+  prefix     String // e.g., "PROJ", "CB"
+  lastNumber Int    @default(0)
+
+  @@index([projectId])
+}
+
+// ============================================
+// QA Board - Quality Assurance Testing Models
+// ============================================
+
+model QATask {
+  id              String    @id @default(cuid())
+  projectId       String
+
+  // Task identification
+  key             String    @unique  // e.g., "QA-001", "QA-002"
+  sequence        Int                // Sequential number
+
+  // Task details
+  title           String
+  scenario        String             // Test steps (markdown)
+  expectedResult  String
+  actualResult    String?            // Filled after execution
+
+  // Status and type
+  // status: NOT_DONE, IN_PROGRESS, PASS, FAILED
+  status          String    @default("NOT_DONE")
+  // type: AUTOMATED, MANUAL
+  type            String    @default("AUTOMATED")
+  // priority: LOW, MEDIUM, HIGH, CRITICAL
+  priority        String    @default("MEDIUM")
+
+  // Execution history (JSON - last 10 full runs, summaries for older)
+  executionHistory String?
+
+  // Timestamps
+  lastExecutedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  linkedIssues    QATaskIssueLink[]
+
+  // Optional link to bug created from failure
+  bugIssueId      String?
+
+  @@index([projectId])
+  @@index([status])
+  @@index([priority])
+}
+
+model QATaskIssueLink {
+  id        String   @id @default(cuid())
+  qaTaskId  String
+  qaTask    QATask   @relation(fields: [qaTaskId], references: [id], onDelete: Cascade)
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([qaTaskId, issueId])
+  @@index([qaTaskId])
+  @@index([issueId])
+}
+
+model QASequence {
+  id         String @id @default(cuid())
+  projectId  String @unique
+  prefix     String @default("QA")
+  lastNumber Int    @default(0)
+
+  @@index([projectId])
+}
+
+model QASettings {
+  id                String  @id @default(cuid())
+  projectId         String  @unique
+  project           Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  passThreshold     Float   @default(0.9)  // 90% pass threshold
+  autoCreateBugs    Boolean @default(true)
+}

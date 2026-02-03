@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.ports.env
+
+# Data files
+*.db
+*.sqlite3
+data/
+logs/
+.next/
+
+# OS files
+.DS_Store
+*.log
+
+# Build
+dist/
+build/
+
+# GitHub workflows (requires workflow OAuth scope)
+.github/workflows/
+
+# macOS resource forks
+._*

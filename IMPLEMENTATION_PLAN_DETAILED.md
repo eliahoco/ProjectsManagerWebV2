@@ -3,7 +3,7 @@
 ## Project Overview
 
 **Project Name:** ProjectsManagerWebV2
-**Location:** `/Users/elic/Documents/Claude/ProjectsManagerWebV2`
+**Location:** `/Volumes/Seagate/Claude/ProjectsManagerWebV2`
 **Description:** A next-generation project manager with AI-automated task management (CodeBoard)
 
 ## Allocated Ports
@@ -129,7 +129,7 @@ CREATE TABLE subtasks (
 Create the root project directory and establish the folder hierarchy for the entire application. The structure must support a monorepo-style organization with separate frontend and backend directories, shared configuration files at the root, and proper separation of concerns.
 
 **Technical Requirements:**
-- Create root directory at `/Users/elic/Documents/Claude/ProjectsManagerWebV2`
+- Create root directory at `/Volumes/Seagate/Claude/ProjectsManagerWebV2`
 - Create `frontend/` directory for Next.js application
 - Create `backend/` directory for FastAPI service
 - Create `docs/` directory for additional documentation
@@ -166,7 +166,7 @@ ProjectsManagerWebV2/
 - [ ] README.md contains basic project description
 
 **Sub-tasks:**
-1. **Create root folder** - `mkdir -p /Users/elic/Documents/Claude/ProjectsManagerWebV2`
+1. **Create root folder** - `mkdir -p /Volumes/Seagate/Claude/ProjectsManagerWebV2`
 2. **Create frontend folder structure** - Create app/, components/, lib/, prisma/, public/ inside frontend/
 3. **Create backend folder structure** - Create app/, api/, models/, services/, tests/ inside backend/
 4. **Initialize git repository** - Run `git init` and create initial .gitignore
@@ -358,7 +358,7 @@ export CHROMA_PORT=8502
 Copy the existing Next.js application structure from ProjectsManagerWebProduction as a starting point. This includes the app directory structure, components, utilities, configuration files, and styling. We will then modify this base to add CodeBoard functionality.
 
 **Technical Requirements:**
-- Copy from `/Users/elic/Documents/Claude/ProjectsManagerWebProduction`
+- Copy from `/Volumes/Seagate/Claude/ProjectsManagerWebProduction`
 - Preserve directory structure and file organization
 - Update package.json with new project name
 - Retain all shadcn/ui components and Tailwind configuration
