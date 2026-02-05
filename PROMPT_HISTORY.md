@@ -711,3 +711,72 @@ and use the Cladue to test it
 
 ---
 
+## 2026-02-03 20:38:37
+
+why the culine share doesn't have the sync to git option? don't sync it manualy, in case a project was never synced there need to bee a button for commiting in github
+
+---
+
+## 2026-02-03 20:41:13
+
+please do also 2 addtinal things, add an alert never synced to github (for projects who never syned) sync this project using the chrome MCP tool and monitor it
+
+---
+
+## 2026-02-03 21:17:31
+
+מם
+
+---
+
+## 2026-02-03 21:17:36
+
+no
+
+---
+
+## 2026-02-03 21:18:42
+
+before doing anything can you check if there is any proccess stuck? not related to this project specificly, my fan on my macbook is wokring quite hard
+
+---
+
+## 2026-02-03 21:21:02
+
+don't kill any claude sessions i'm wokring on them in parallel
+
+---
+
+## 2026-02-05 13:48:45
+
+check that all services are up and running and do a senety check in chrome
+
+---
+
+## 2026-02-05 13:51:16
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+READ THESE FILES IN ORDER to understand the full context:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading PROJECT_DESCRIPTOR.md now.
+
+---
+
+## 2026-02-05 13:53:09
+
+start the services
+
+---
+

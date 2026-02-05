@@ -209,6 +209,50 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleConnectGitHub = async () => {
+    setActionLoading('connect');
+    setGitProgress({ phase: 'staging', percent: 10, output: 'Creating GitHub repository...\n' });
+
+    try {
+      const res = await fetch('/api/github/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setGitProgress(prev => ({
+          ...prev,
+          phase: 'done',
+          percent: 100,
+          output: prev.output + (data.data?.output || 'Connected to GitHub!\n')
+        }));
+        toast.success('Connected', 'Project connected to GitHub');
+        await fetchProject();
+        setTimeout(() => setGitProgress({ phase: 'idle', percent: 0, output: '' }), 3000);
+      } else {
+        setGitProgress(prev => ({
+          ...prev,
+          phase: 'error',
+          percent: 100,
+          output: prev.output + `Error: ${data.error || 'Connection failed'}\n`
+        }));
+        toast.error('Connection Failed', data.error || 'Failed to connect to GitHub');
+      }
+    } catch (error) {
+      setGitProgress(prev => ({
+        ...prev,
+        phase: 'error',
+        percent: 100,
+        output: prev.output + `Network error: ${error}\n`
+      }));
+      toast.error('Connection Failed', 'Network error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleRefreshService = async (serviceId: string) => {
     setRefreshingService(serviceId);
     try {
@@ -792,6 +836,75 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       )}
 
                       {/* Clear button when done/error */}
+                      {['done', 'error'].includes(gitProgress.phase) && (
+                        <button
+                          onClick={() => setGitProgress({ phase: 'idle', percent: 0, output: '' })}
+                          className="text-xs text-zinc-500 hover:text-zinc-300"
+                        >
+                          Dismiss
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Connect to GitHub button for repos without remote */}
+              {project.gitStatus.hasGit && !project.gitStatus.hasRemote && (
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleConnectGitHub}
+                    loading={actionLoading === 'connect'}
+                    disabled={gitProgress.phase !== 'idle'}
+                  >
+                    <GitBranch className="h-4 w-4" />
+                    Connect to GitHub
+                  </Button>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Creates a new GitHub repository and pushes your code
+                  </p>
+
+                  {/* Git Progress Bar for connect */}
+                  {gitProgress.phase !== 'idle' && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={cn(
+                          "capitalize",
+                          gitProgress.phase === 'done' && "text-green-500",
+                          gitProgress.phase === 'error' && "text-red-500",
+                          !['done', 'error'].includes(gitProgress.phase) && "text-blue-400"
+                        )}>
+                          {gitProgress.phase === 'done' ? 'Complete' :
+                           gitProgress.phase === 'error' ? 'Failed' :
+                           'Connecting...'}
+                        </span>
+                        <button
+                          onClick={() => setShowGitTerminal(!showGitTerminal)}
+                          className="text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
+                        >
+                          <Terminal className="h-3 w-3" />
+                          {showGitTerminal ? 'Hide' : 'Show'} Output
+                        </button>
+                      </div>
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all duration-300 rounded-full",
+                            gitProgress.phase === 'done' && "bg-green-500",
+                            gitProgress.phase === 'error' && "bg-red-500",
+                            !['done', 'error'].includes(gitProgress.phase) && "bg-blue-500"
+                          )}
+                          style={{ width: `${gitProgress.percent}%` }}
+                        />
+                      </div>
+                      {showGitTerminal && (
+                        <div className="bg-black/50 border border-zinc-700 rounded-md p-2 font-mono text-xs text-zinc-400 max-h-32 overflow-y-auto">
+                          <pre className="whitespace-pre-wrap">{gitProgress.output || 'Waiting...'}</pre>
+                        </div>
+                      )}
                       {['done', 'error'].includes(gitProgress.phase) && (
                         <button
                           onClick={() => setGitProgress({ phase: 'idle', percent: 0, output: '' })}

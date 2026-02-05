@@ -181,7 +181,12 @@ export default function ProjectsPage() {
                     <div className="flex items-center gap-2 text-sm">
                       <GitBranch className="h-4 w-4 text-zinc-500" />
                       <span className="text-zinc-400">{project.gitStatus.branch}</span>
-                      {project.gitStatus.isDirty && (
+                      {!project.gitStatus.hasRemote && (
+                        <span className="text-orange-500 text-xs bg-orange-500/10 px-1.5 py-0.5 rounded" title="Never synced to GitHub">
+                          Not synced
+                        </span>
+                      )}
+                      {project.gitStatus.isDirty && project.gitStatus.hasRemote && (
                         <span className="text-yellow-500 text-xs">
                           {project.gitStatus.uncommittedFiles} changes
                         </span>
