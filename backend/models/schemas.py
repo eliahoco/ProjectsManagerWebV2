@@ -62,6 +62,13 @@ class CommitLinkType(str, Enum):
 
 
 # Base schemas
+class Complexity(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
 class IssueBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
@@ -99,6 +106,14 @@ class IssueUpdate(BaseModel):
     dueDate: Optional[datetime] = None
     labels: Optional[str] = None
     breakdownBatchId: Optional[str] = None
+    # Implementation Documentation
+    implementationSummary: Optional[str] = None
+    technicalApproach: Optional[str] = None
+    documentationPath: Optional[str] = None
+    # Enhanced Metadata
+    estimatedHours: Optional[float] = Field(None, ge=0)
+    actualHours: Optional[float] = Field(None, ge=0)
+    complexity: Optional[Complexity] = None
 
 
 class IssueResponse(IssueBase):
@@ -112,6 +127,14 @@ class IssueResponse(IssueBase):
     completedAt: Optional[datetime] = None
     createdAt: datetime
     updatedAt: datetime
+    # Implementation Documentation
+    implementationSummary: Optional[str] = None
+    technicalApproach: Optional[str] = None
+    documentationPath: Optional[str] = None
+    # Enhanced Metadata
+    estimatedHours: Optional[float] = None
+    actualHours: Optional[float] = None
+    complexity: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -267,6 +290,15 @@ class QATaskUpdate(BaseModel):
     status: Optional[QATaskStatus] = None
     type: Optional[QATaskType] = None
     priority: Optional[QAPriority] = None
+    # Enhanced Linking
+    linkedFeatureId: Optional[str] = None
+    linkedEpicId: Optional[str] = None
+    linkedStoryId: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    # Context
+    testContext: Optional[str] = None
+    failureContext: Optional[str] = None
+    environmentDetails: Optional[str] = None
 
 
 class QATaskResponse(QATaskBase):
@@ -280,6 +312,15 @@ class QATaskResponse(QATaskBase):
     executionHistory: Optional[str] = None  # JSON
     lastExecutedAt: Optional[datetime] = None
     bugIssueId: Optional[str] = None
+    # Enhanced Linking
+    linkedFeatureId: Optional[str] = None
+    linkedEpicId: Optional[str] = None
+    linkedStoryId: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    # Context
+    testContext: Optional[str] = None
+    failureContext: Optional[str] = None
+    environmentDetails: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
 
@@ -420,3 +461,93 @@ class QAEvaluation(BaseModel):
     recommendations: List[Recommendation]
     trend: ExecutionTrend
     flakyTestIds: List[str]
+
+
+# ============================================
+# Execution Summary Schemas
+# ============================================
+
+class ExecutionSummaryCreate(BaseModel):
+    """Schema for creating an execution summary"""
+    summary: str = Field(..., min_length=1)
+    executedAt: datetime
+    executionTime: float = Field(..., ge=0)
+    provider: str = Field(..., min_length=1)
+    model: Optional[str] = None
+    exitCode: Optional[int] = None
+    componentsModified: str = Field(default="[]")  # JSON array
+    filesTouched: str = Field(default="[]")  # JSON array
+    linesAdded: Optional[int] = Field(None, ge=0)
+    linesRemoved: Optional[int] = Field(None, ge=0)
+    architectureNotes: Optional[str] = None
+    technicalNotes: Optional[str] = None
+    challengesFaced: Optional[str] = None
+    lessonsLearned: Optional[str] = None
+    commitHashes: Optional[str] = None  # JSON array
+    docFilePath: Optional[str] = None
+
+
+class ExecutionSummaryResponse(ExecutionSummaryCreate):
+    """Schema for execution summary response"""
+    id: str
+    issueId: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================
+# Feature Documentation Schemas
+# ============================================
+
+class FeatureDocumentationCreate(BaseModel):
+    """Schema for creating feature documentation"""
+    featureIssueId: str
+    featureKey: str
+    title: str = Field(..., min_length=1)
+    overview: str
+    requirements: str
+    implementation: str
+    architecture: str
+    techStack: str  # JSON
+    testingStrategy: str
+    totalTasks: int = Field(default=0, ge=0)
+    completedTasks: int = Field(default=0, ge=0)
+    totalQATasks: int = Field(default=0, ge=0)
+    passedQATasks: int = Field(default=0, ge=0)
+    failedQATasks: int = Field(default=0, ge=0)
+    mdFilePath: str
+    embeddingId: Optional[str] = None
+
+
+class FeatureDocumentationUpdate(BaseModel):
+    """Schema for updating feature documentation"""
+    title: Optional[str] = None
+    overview: Optional[str] = None
+    requirements: Optional[str] = None
+    implementation: Optional[str] = None
+    architecture: Optional[str] = None
+    techStack: Optional[str] = None
+    testingStrategy: Optional[str] = None
+    totalTasks: Optional[int] = Field(None, ge=0)
+    completedTasks: Optional[int] = Field(None, ge=0)
+    totalQATasks: Optional[int] = Field(None, ge=0)
+    passedQATasks: Optional[int] = Field(None, ge=0)
+    failedQATasks: Optional[int] = Field(None, ge=0)
+    mdFilePath: Optional[str] = None
+    embeddingId: Optional[str] = None
+    lastIndexedAt: Optional[datetime] = None
+
+
+class FeatureDocumentationResponse(FeatureDocumentationCreate):
+    """Schema for feature documentation response"""
+    id: str
+    projectId: str
+    lastIndexedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True

@@ -5,6 +5,7 @@
 export type IssueType = 'FEATURE' | 'EPIC' | 'STORY' | 'TASK' | 'SUBTASK' | 'BUG';
 export type IssueStatus = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'COMPLETED_WAITING_QA' | 'DONE' | 'CANCELLED';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type Complexity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Issue {
   id: string;
@@ -29,6 +30,14 @@ export interface Issue {
   updatedAt: string;
   labels?: string;
   breakdownBatchId?: string;
+  // Implementation Documentation
+  implementationSummary?: string;
+  technicalApproach?: string;
+  documentationPath?: string;
+  // Enhanced Metadata
+  estimatedHours?: number;
+  actualHours?: number;
+  complexity?: Complexity;
   children?: Issue[];
 }
 
@@ -100,6 +109,14 @@ export interface UpdateIssueData {
   timeSpent?: number;
   dueDate?: string;
   labels?: string;
+  // Implementation Documentation
+  implementationSummary?: string;
+  technicalApproach?: string;
+  documentationPath?: string;
+  // Enhanced Metadata
+  estimatedHours?: number;
+  actualHours?: number;
+  complexity?: Complexity;
 }
 
 // Status column configuration
@@ -160,6 +177,22 @@ export const SORT_OPTIONS: SortOption[] = [
   { field: 'status', label: 'Status' },
 ];
 
+// Date range filter options
+export type DateFilterField = 'createdAt' | 'updatedAt' | 'dueDate' | 'startedAt' | 'completedAt';
+
+export interface DateFilterOption {
+  field: DateFilterField;
+  label: string;
+}
+
+export const DATE_FILTER_OPTIONS: DateFilterOption[] = [
+  { field: 'createdAt', label: 'Created Date' },
+  { field: 'updatedAt', label: 'Updated Date' },
+  { field: 'dueDate', label: 'Due Date' },
+  { field: 'startedAt', label: 'Started Date' },
+  { field: 'completedAt', label: 'Completed Date' },
+];
+
 // Auto Pilot Execution Types
 export type AutoPilotFailAction =
   | 'CONTINUE_MARK_FAILED'  // Mark as failed and continue to next
@@ -200,3 +233,54 @@ export const AUTO_PILOT_SUCCESS_OPTIONS: { value: AutoPilotSuccessAction; label:
   { value: 'MARK_DONE', label: 'Mark as Done', description: 'Mark as DONE and continue' },
   { value: 'RUN_QA_TASK', label: 'Run QA Task', description: 'Mark as COMPLETED_WAITING_QA and trigger QA execution' },
 ];
+
+// ============================================
+// Execution Summary & Documentation Types
+// ============================================
+
+export interface ExecutionSummary {
+  id: string;
+  issueId: string;
+  summary: string;
+  executedAt: string;
+  executionTime: number;
+  provider: string;
+  model?: string;
+  exitCode?: number;
+  componentsModified: string;  // JSON array
+  filesTouched: string;        // JSON array
+  linesAdded?: number;
+  linesRemoved?: number;
+  architectureNotes?: string;
+  technicalNotes?: string;
+  challengesFaced?: string;
+  lessonsLearned?: string;
+  commitHashes?: string;       // JSON array
+  docFilePath?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeatureDocumentation {
+  id: string;
+  projectId: string;
+  featureIssueId: string;
+  featureKey: string;
+  title: string;
+  overview: string;
+  requirements: string;
+  implementation: string;
+  architecture: string;
+  techStack: string;           // JSON
+  testingStrategy: string;
+  totalTasks: number;
+  completedTasks: number;
+  totalQATasks: number;
+  passedQATasks: number;
+  failedQATasks: number;
+  mdFilePath: string;
+  embeddingId?: string;
+  lastIndexedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

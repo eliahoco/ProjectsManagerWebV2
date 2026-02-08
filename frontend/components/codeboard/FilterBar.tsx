@@ -5,8 +5,9 @@
  */
 
 import { useState, forwardRef } from 'react';
-import { Search, Filter, X, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Tag } from 'lucide-react';
-import { ISSUE_TYPES, PRIORITIES, SORT_OPTIONS, SortField, SortOrder } from '@/types/codeboard';
+import { Search, Filter, X, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Tag, Calendar } from 'lucide-react';
+import { ISSUE_TYPES, PRIORITIES, SORT_OPTIONS, DATE_FILTER_OPTIONS, SortField, SortOrder, DateFilterField } from '@/types/codeboard';
+import { DateRangePicker, type DateRange } from '@/components/ui/date-range-picker';
 import { cn } from '@/lib/utils';
 import { formatShortcut, SHORTCUTS } from '@/hooks/use-keyboard-shortcuts';
 
@@ -17,6 +18,7 @@ interface FilterBarProps {
   onLabelChange?: (label: string | null) => void;
   onSortChange: (field: SortField, order: SortOrder) => void;
   onSemanticSearchClick?: () => void;
+  onDateRangeChange?: (field: DateFilterField | null, range: DateRange) => void;
   search: string;
   selectedType: string | null;
   selectedPriority: string | null;
@@ -24,6 +26,8 @@ interface FilterBarProps {
   availableLabels?: string[];
   sortField: SortField;
   sortOrder: SortOrder;
+  dateFilterField?: DateFilterField | null;
+  dateRange?: DateRange;
 }
 
 export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function FilterBar({
@@ -33,6 +37,7 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
   onLabelChange,
   onSortChange,
   onSemanticSearchClick,
+  onDateRangeChange,
   search,
   selectedType,
   selectedPriority,
@@ -40,10 +45,13 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
   availableLabels = [],
   sortField,
   sortOrder,
+  dateFilterField,
+  dateRange,
 }, ref) {
   const [showFilters, setShowFilters] = useState(false);
 
-  const hasFilters = selectedType || selectedPriority || selectedLabel || search;
+  const hasDateFilter = dateFilterField && (dateRange?.start || dateRange?.end);
+  const hasFilters = selectedType || selectedPriority || selectedLabel || search || hasDateFilter;
 
   const toggleSortOrder = () => {
     onSortChange(sortField, sortOrder === 'asc' ? 'desc' : 'asc');
@@ -58,6 +66,7 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
     onTypeChange(null);
     onPriorityChange(null);
     onLabelChange?.(null);
+    onDateRangeChange?.(null, { start: null, end: null });
   };
 
   return (
@@ -198,6 +207,36 @@ export const FilterBar = forwardRef<HTMLInputElement, FilterBarProps>(function F
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Date Range Filter */}
+          {onDateRangeChange && (
+            <div className="flex items-center gap-1">
+              <select
+                value={dateFilterField || ''}
+                onChange={(e) => {
+                  const field = e.target.value as DateFilterField | '';
+                  onDateRangeChange(field || null, dateRange || { start: null, end: null });
+                }}
+                className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm
+                           focus:outline-none focus:border-cyan-500"
+              >
+                <option value="">Date Field</option>
+                {DATE_FILTER_OPTIONS.map(opt => (
+                  <option key={opt.field} value={opt.field}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {dateFilterField && (
+                <DateRangePicker
+                  value={dateRange || { start: null, end: null }}
+                  onChange={(range) => onDateRangeChange(dateFilterField, range)}
+                  placeholder="Select range..."
+                  showPresets={true}
+                />
+              )}
             </div>
           )}
         </div>

@@ -110,6 +110,11 @@ export function useIssues(projectId: string | null, filters?: {
   search?: string;
   label?: string;
   breakdownBatchId?: string;
+  dateField?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: string;
   page?: number;
   pageSize?: number;
 }) {
@@ -125,6 +130,11 @@ export function useIssues(projectId: string | null, filters?: {
       if (filters?.search) params.set('search', filters.search);
       if (filters?.label) params.set('label', filters.label);
       if (filters?.breakdownBatchId) params.set('breakdownBatchId', filters.breakdownBatchId);
+      if (filters?.dateField) params.set('dateField', filters.dateField);
+      if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters?.dateTo) params.set('dateTo', filters.dateTo);
+      if (filters?.sortBy) params.set('sortBy', filters.sortBy);
+      if (filters?.sortOrder) params.set('sortOrder', filters.sortOrder);
       if (filters?.page) params.set('page', filters.page.toString());
       if (filters?.pageSize) params.set('pageSize', filters.pageSize.toString());
 
@@ -166,6 +176,50 @@ export function useIssueDescendants(issueId: string | null) {
       return apiFetch<Issue[]>(`${API_BASE}/issues/${issueId}/descendants`);
     },
     enabled: !!issueId,
+  });
+}
+
+// Search within an issue's descendants with filtering and relevance ranking (CB-1122)
+export interface EpicSearchParams {
+  search?: string;
+  types?: string[];
+  statuses?: string[];
+  priorities?: string[];
+  dateField?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}
+
+export interface EpicSearchResult {
+  items: Array<Issue & { relevanceScore: number; isDirectMatch: boolean }>;
+  total: number;
+  matchCount: number;
+}
+
+export function useEpicDescendantSearch(issueId: string | null, params?: EpicSearchParams) {
+  return useQuery<EpicSearchResult>({
+    queryKey: ['epic-descendant-search', issueId, params],
+    queryFn: async () => {
+      if (!issueId) return { items: [], total: 0, matchCount: 0 };
+
+      const searchParams = new URLSearchParams();
+      if (params?.search) searchParams.set('search', params.search);
+      if (params?.types?.length) searchParams.set('type', params.types.join(','));
+      if (params?.statuses?.length) searchParams.set('status', params.statuses.join(','));
+      if (params?.priorities?.length) searchParams.set('priority', params.priorities.join(','));
+      if (params?.dateField) searchParams.set('dateField', params.dateField);
+      if (params?.dateFrom) searchParams.set('dateFrom', params.dateFrom);
+      if (params?.dateTo) searchParams.set('dateTo', params.dateTo);
+      if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+      if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+
+      const url = `${API_BASE}/issues/${issueId}/descendants/search${searchParams.toString() ? `?${searchParams}` : ''}`;
+      return apiFetch<EpicSearchResult>(url);
+    },
+    enabled: !!issueId,
+    staleTime: 10000,
   });
 }
 

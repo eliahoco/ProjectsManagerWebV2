@@ -6,11 +6,13 @@ from models.database import Base, get_db, init_db, AsyncSessionLocal, engine
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
+from models.documentation import ExecutionSummary, FeatureDocumentation
 from models.schemas import (
     IssueType,
     IssueStatus,
     Priority,
     LinkType,
+    Complexity,
     IssueBase,
     IssueCreate,
     IssueUpdate,
@@ -42,6 +44,12 @@ from models.schemas import (
     QASettingsUpdate,
     QASettingsResponse,
     QASummary,
+    # Documentation schemas
+    ExecutionSummaryCreate,
+    ExecutionSummaryResponse,
+    FeatureDocumentationCreate,
+    FeatureDocumentationUpdate,
+    FeatureDocumentationResponse,
 )
 
 __all__ = [
@@ -65,11 +73,15 @@ __all__ = [
     "QATaskIssueLink",
     "QASequence",
     "QASettings",
+    # SQLAlchemy Models - Documentation
+    "ExecutionSummary",
+    "FeatureDocumentation",
     # Enums - Issues
     "IssueType",
     "IssueStatus",
     "Priority",
     "LinkType",
+    "Complexity",
     # Enums - QA Board
     "QATaskStatus",
     "QATaskType",
@@ -103,4 +115,10 @@ __all__ = [
     "QASettingsUpdate",
     "QASettingsResponse",
     "QASummary",
+    # Pydantic Schemas - Documentation
+    "ExecutionSummaryCreate",
+    "ExecutionSummaryResponse",
+    "FeatureDocumentationCreate",
+    "FeatureDocumentationUpdate",
+    "FeatureDocumentationResponse",
 ]

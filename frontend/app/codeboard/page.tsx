@@ -13,7 +13,8 @@ import { FloatingExecutionStatus } from '@/components/codeboard/FloatingExecutio
 import { AIBreakdownModal } from '@/components/codeboard/AIBreakdownModal';
 import { GitSyncPanel } from '@/components/codeboard/GitSyncPanel';
 import { KeyboardShortcutsHelp } from '@/components/codeboard/KeyboardShortcutsHelp';
-import { Issue, IssueStatus, CreateIssueData, Project, SortField, SortOrder } from '@/types/codeboard';
+import { Issue, IssueStatus, CreateIssueData, Project, SortField, SortOrder, DateFilterField } from '@/types/codeboard';
+import type { DateRange } from '@/components/ui/date-range-picker';
 import { SkeletonKanbanBoard, SkeletonListView } from '@/components/ui/skeleton';
 import { InlineError } from '@/components/ui/error-boundary';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,8 @@ export default function CodeBoardPage() {
   const [isSemanticSearchOpen, setIsSemanticSearchOpen] = useState(false);
   const [featureExecutionIssue, setFeatureExecutionIssue] = useState<Issue | null>(null);
   const [isFeatureSelectorOpen, setIsFeatureSelectorOpen] = useState(false);
+  const [dateFilterField, setDateFilterField] = useState<DateFilterField | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +65,16 @@ export default function CodeBoardPage() {
   const { data: labelsData, refetch: refetchLabels } = useProjectLabels(selectedProjectId);
   const { data: issuesData, isLoading: issuesLoading, error: issuesError, refetch: refetchIssues } = useIssues(
     selectedProjectId,
-    { search, type: selectedType || undefined, priority: selectedPriority || undefined, label: selectedLabel || undefined, pageSize: 500 }
+    {
+      search,
+      type: selectedType || undefined,
+      priority: selectedPriority || undefined,
+      label: selectedLabel || undefined,
+      dateField: dateFilterField || undefined,
+      dateFrom: dateRange.start ? dateRange.start.toISOString() : undefined,
+      dateTo: dateRange.end ? dateRange.end.toISOString() : undefined,
+      pageSize: 500,
+    }
   );
   const { data: executionSessions } = useExecutionSessions();
 
@@ -78,6 +90,12 @@ export default function CodeBoardPage() {
   const handleSortChange = useCallback((field: SortField, order: SortOrder) => {
     setSortField(field);
     setSortOrder(order);
+  }, []);
+
+  // Date range handler
+  const handleDateRangeChange = useCallback((field: DateFilterField | null, range: DateRange) => {
+    setDateFilterField(field);
+    setDateRange(range);
   }, []);
 
   // Sorting logic
@@ -643,6 +661,9 @@ export default function CodeBoardPage() {
             sortOrder={sortOrder}
             onSortChange={handleSortChange}
             onSemanticSearchClick={selectedProjectId ? () => setIsSemanticSearchOpen(true) : undefined}
+            dateFilterField={dateFilterField}
+            dateRange={dateRange}
+            onDateRangeChange={handleDateRangeChange}
           />
         </div>
       </div>

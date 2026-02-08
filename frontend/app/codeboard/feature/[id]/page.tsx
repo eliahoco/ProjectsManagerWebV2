@@ -4,13 +4,17 @@
  * Feature Detail Page - Shows all issues under a FEATURE with hierarchy
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search } from 'lucide-react';
 import { useIssues, useIssue, useUpdateIssue, useDeleteIssue, useStartExecution, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { Issue, IssueStatus, IssueType } from '@/types/codeboard';
-import { ExecutionModal, FeatureTestingPanel, FeatureExecutionPanel } from '@/components/codeboard';
+import { ExecutionModal, FeatureTestingPanel, FeatureExecutionPanel, FeatureSearchBar, applyFeatureSearchFilters, DEFAULT_FEATURE_SEARCH_FILTERS } from '@/components/codeboard';
+import type { FeatureSearchFilters } from '@/components/codeboard';
+import { EpicSearchBar, applyEpicSearchFilters, DEFAULT_EPIC_SEARCH_FILTERS, RelevanceBadge, highlightEpicMatch } from '@/components/codeboard/EpicSearchBar';
+import type { EpicSearchFilters } from '@/components/codeboard/EpicSearchBar';
 import { cn } from '@/lib/utils';
+import { highlightMatch } from '@/components/codeboard/IssueSearchBar';
 
 // Status icons and colors with dark mode support
 const STATUS_CONFIG: Record<IssueStatus, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; darkBg: string }> = {
@@ -131,9 +135,15 @@ interface TreeItemProps {
   onSelect: (id: string, node: TreeNode) => void;
   onStatusChange: (id: string, status: IssueStatus) => void;
   onNavigate: (issue: Issue) => void;
+  searchQuery?: string;
+  epicSearchFilters?: Map<string, EpicSearchFilters>;
+  epicSearchVisibleIds?: Map<string, { visibleIds: Set<string>; matchIds: Set<string>; scores: Map<string, number> }>;
+  onEpicSearchToggle?: (epicId: string) => void;
+  onEpicSearchChange?: (epicId: string, filters: EpicSearchFilters) => void;
+  allDescendantIssues?: Array<{ id: string; parentId?: string; title: string; key: string; description?: string; type: string; status: string; priority: string; labels?: string; createdAt: string; updatedAt: string; dueDate?: string; startedAt?: string; completedAt?: string }>;
 }
 
-function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate }: TreeItemProps) {
+function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate, searchQuery, epicSearchFilters, epicSearchVisibleIds, onEpicSearchToggle, onEpicSearchChange, allDescendantIssues }: TreeItemProps) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const isExpanded = expanded.has(node.id);
   const isSelected = selected.has(node.id);
@@ -146,12 +156,62 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
   const allWaitingQA = progress.waitingQA > 0 && progress.done === 0 && completedCount === progress.total;
   const allDone = progress.done === progress.total;
 
+  // Epic search state - CB-1122
+  const isEpic = node.type === 'EPIC';
+  const epicFilters = isEpic ? epicSearchFilters?.get(node.id) : undefined;
+  const epicSearchResult = isEpic ? epicSearchVisibleIds?.get(node.id) : undefined;
+  const hasEpicSearch = !!epicFilters;
+
+  // Count descendants of this epic for search result display
+  const epicDescendantCount = useMemo(() => {
+    if (!isEpic || !allDescendantIssues) return 0;
+    function countDescendants(parentId: string): number {
+      let count = 0;
+      for (const issue of allDescendantIssues!) {
+        if (issue.parentId === parentId) {
+          count += 1 + countDescendants(issue.id);
+        }
+      }
+      return count;
+    }
+    return countDescendants(node.id);
+  }, [isEpic, allDescendantIssues, node.id]);
+
+  // Filter children based on epic search - CB-1122
+  const filteredChildren = useMemo(() => {
+    if (!epicSearchResult || !hasEpicSearch) return node.children;
+    const hasAnyFilter = epicFilters!.query ||
+      epicFilters!.types.length > 0 ||
+      epicFilters!.statuses.length > 0 ||
+      epicFilters!.priorities.length > 0 ||
+      (epicFilters!.dateField && (epicFilters!.dateRange.start || epicFilters!.dateRange.end));
+    if (!hasAnyFilter) return node.children;
+
+    function filterNodes(nodes: TreeNode[]): TreeNode[] {
+      return nodes
+        .filter(n => epicSearchResult!.visibleIds.has(n.id))
+        .map(n => ({
+          ...n,
+          children: filterNodes(n.children),
+        }));
+    }
+    return filterNodes(node.children);
+  }, [node.children, epicSearchResult, hasEpicSearch, epicFilters]);
+
   // Determine checkbox state: checked, unchecked, or indeterminate
   const someDescendantsSelected = hasChildren && hasSelectedDescendants(node, selected);
   const allDescendants = hasChildren && allDescendantsSelected(node, selected);
   const isIndeterminate = someDescendantsSelected && !allDescendants && !isSelected;
 
   const allStatuses: IssueStatus[] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED_WAITING_QA', 'DONE', 'CANCELLED'];
+
+  // Get the active search query for highlighting - use epic search query if active, otherwise parent search
+  const activeSearchQuery = (hasEpicSearch && epicFilters?.query) ? epicFilters.query : searchQuery;
+  const isEpicSearchQuery = !!(hasEpicSearch && epicFilters?.query);
+
+  // Relevance score for this item (from epic search)
+  const relevanceScore = epicSearchResult?.scores.get(node.id) ?? 0;
+  const isDirectMatch = epicSearchResult?.matchIds.has(node.id) ?? false;
 
   return (
     <div className="select-none">
@@ -215,8 +275,33 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
           className="flex-1 text-sm font-medium text-zinc-100 truncate hover:text-blue-400"
           onClick={() => onNavigate(node)}
         >
-          {node.title}
+          {activeSearchQuery
+            ? (isEpicSearchQuery ? highlightEpicMatch(node.title, activeSearchQuery) : highlightMatch(node.title, activeSearchQuery))
+            : node.title
+          }
         </span>
+
+        {/* Relevance badge for epic search results - CB-1123 */}
+        {hasEpicSearch && epicFilters?.query && (
+          <RelevanceBadge score={relevanceScore} isDirectMatch={isDirectMatch} />
+        )}
+
+        {/* Epic Search Toggle - CB-1122/CB-1123 */}
+        {isEpic && hasChildren && onEpicSearchToggle && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEpicSearchToggle(node.id); }}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all",
+              hasEpicSearch
+                ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30"
+                : "text-zinc-500 hover:text-purple-400 hover:bg-zinc-700 border border-transparent hover:border-purple-500/30"
+            )}
+            title={hasEpicSearch ? 'Close epic search' : 'Search within this epic'}
+          >
+            <Search className="w-3.5 h-3.5" />
+            {!hasEpicSearch && <span className="hidden group-hover:inline">Search</span>}
+          </button>
+        )}
 
         {/* Status Dropdown */}
         <div className="relative">
@@ -294,10 +379,30 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
         </div>
       </div>
 
+      {/* Epic Search Bar - CB-1122 / CB-1123 */}
+      {isEpic && hasEpicSearch && epicFilters && onEpicSearchChange && (
+        <div
+          className="border-l-4 border-l-purple-500/30 bg-purple-900/10 animate-in slide-in-from-top-1 duration-200"
+          style={{ paddingLeft: `${(node.level * 24) + 12}px` }}
+        >
+          <div className="px-3 py-2">
+            <EpicSearchBar
+              filters={epicFilters}
+              onChange={(f) => onEpicSearchChange(node.id, f)}
+              resultCount={epicSearchResult?.visibleIds.size ?? epicDescendantCount}
+              totalCount={epicDescendantCount}
+              matchCount={epicSearchResult?.matchIds.size}
+              epicKey={node.key}
+              autoFocus={true}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Children */}
       {isExpanded && hasChildren && (
         <div>
-          {node.children.map(child => (
+          {filteredChildren.map(child => (
             <TreeItem
               key={child.id}
               node={child}
@@ -307,6 +412,12 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
               onSelect={onSelect}
               onStatusChange={onStatusChange}
               onNavigate={onNavigate}
+              searchQuery={activeSearchQuery}
+              epicSearchFilters={epicSearchFilters}
+              epicSearchVisibleIds={epicSearchVisibleIds}
+              onEpicSearchToggle={onEpicSearchToggle}
+              onEpicSearchChange={onEpicSearchChange}
+              allDescendantIssues={allDescendantIssues}
             />
           ))}
         </div>
@@ -333,6 +444,9 @@ export default function FeatureDetailPage() {
   const deleteIssue = useDeleteIssue();
   const startExecution = useStartExecution();
 
+  // Search/filter state - CB-1119
+  const [searchFilters, setSearchFilters] = useState<FeatureSearchFilters>(DEFAULT_FEATURE_SEARCH_FILTERS);
+
   // State for active tab
   const [activeTab, setActiveTab] = useState<'overview' | 'testing'>('overview');
 
@@ -351,6 +465,29 @@ export default function FeatureDetailPage() {
 
   // Auto Pilot Panel state
   const [showAutoPilotPanel, setShowAutoPilotPanel] = useState(false);
+
+  // Epic search state - CB-1122
+  const [epicSearchFilters, setEpicSearchFilters] = useState<Map<string, EpicSearchFilters>>(new Map());
+
+  const handleEpicSearchToggle = useCallback((epicId: string) => {
+    setEpicSearchFilters(prev => {
+      const next = new Map(prev);
+      if (next.has(epicId)) {
+        next.delete(epicId);
+      } else {
+        next.set(epicId, { ...DEFAULT_EPIC_SEARCH_FILTERS });
+      }
+      return next;
+    });
+  }, []);
+
+  const handleEpicSearchChange = useCallback((epicId: string, filters: EpicSearchFilters) => {
+    setEpicSearchFilters(prev => {
+      const next = new Map(prev);
+      next.set(epicId, filters);
+      return next;
+    });
+  }, []);
 
   // Build the tree
   const tree = useMemo(() => {
@@ -374,6 +511,107 @@ export default function FeatureDetailPage() {
     const relevantIssues = allIssues.filter(i => descendants.has(i.id));
     return buildTree(relevantIssues, featureId);
   }, [feature, issuesData, featureId]);
+
+  // Apply search filters to get visible issue IDs - CB-1119
+  const allDescendantIssues = useMemo(() => {
+    if (!issuesData?.items) return [];
+    const descendants = new Set<string>();
+    function collectDescendants(parentId: string) {
+      issuesData!.items.forEach(issue => {
+        if (issue.parentId === parentId && !descendants.has(issue.id)) {
+          descendants.add(issue.id);
+          collectDescendants(issue.id);
+        }
+      });
+    }
+    collectDescendants(featureId);
+    return issuesData.items.filter(i => descendants.has(i.id));
+  }, [issuesData, featureId]);
+
+  const visibleIssueIds = useMemo(() => {
+    return applyFeatureSearchFilters(allDescendantIssues, searchFilters);
+  }, [allDescendantIssues, searchFilters]);
+
+  // Compute epic search results for each active epic search - CB-1122
+  const epicSearchVisibleIds = useMemo(() => {
+    const results = new Map<string, { visibleIds: Set<string>; matchIds: Set<string>; scores: Map<string, number> }>();
+
+    for (const [epicId, filters] of epicSearchFilters.entries()) {
+      // Get descendants of this specific epic
+      const epicDescendants = allDescendantIssues.filter(issue => {
+        // Check if this issue is a descendant of the epic
+        let current = issue;
+        while (current) {
+          if (current.parentId === epicId) return true;
+          current = allDescendantIssues.find(i => i.id === current.parentId) as typeof current;
+          if (!current) break;
+        }
+        return false;
+      });
+
+      const result = applyEpicSearchFilters(epicDescendants, filters);
+      results.set(epicId, result);
+    }
+
+    return results;
+  }, [epicSearchFilters, allDescendantIssues]);
+
+  // Auto-expand epic children when epic search is active - CB-1122
+  useEffect(() => {
+    for (const [epicId, filters] of epicSearchFilters.entries()) {
+      const hasAnyFilter = filters.query ||
+        filters.types.length > 0 ||
+        filters.statuses.length > 0 ||
+        filters.priorities.length > 0 ||
+        (filters.dateField && (filters.dateRange.start || filters.dateRange.end));
+
+      if (hasAnyFilter) {
+        const searchResult = epicSearchVisibleIds.get(epicId);
+        if (searchResult) {
+          setExpanded(prev => {
+            const next = new Set(prev);
+            next.add(epicId); // Expand the epic itself
+            // Expand all visible parent nodes within the epic
+            for (const id of searchResult.visibleIds) {
+              const issue = allDescendantIssues.find(i => i.id === id);
+              if (issue) {
+                // Check if this issue has children in the visible set
+                const hasVisibleChildren = allDescendantIssues.some(
+                  child => child.parentId === id && searchResult.visibleIds.has(child.id)
+                );
+                if (hasVisibleChildren) {
+                  next.add(id);
+                }
+              }
+            }
+            return next;
+          });
+        }
+      }
+    }
+  }, [epicSearchFilters, epicSearchVisibleIds, allDescendantIssues]);
+
+  // Filter tree nodes based on search - CB-1119
+  const filteredTree = useMemo(() => {
+    const hasAnyFilter = searchFilters.query ||
+      searchFilters.types.length > 0 ||
+      searchFilters.statuses.length > 0 ||
+      searchFilters.priorities.length > 0 ||
+      (searchFilters.dateField && (searchFilters.dateRange.start || searchFilters.dateRange.end));
+
+    if (!hasAnyFilter) return tree;
+
+    function filterNodes(nodes: TreeNode[]): TreeNode[] {
+      return nodes
+        .filter(node => visibleIssueIds.has(node.id))
+        .map(node => ({
+          ...node,
+          children: filterNodes(node.children),
+        }));
+    }
+
+    return filterNodes(tree);
+  }, [tree, visibleIssueIds, searchFilters]);
 
   // Calculate overall progress - only counts TASKs and SUBTASKs (actual work items)
   // EPICs and STORYs are containers, not executable work
@@ -451,6 +689,29 @@ export default function FeatureDetailPage() {
     count(tree);
     return counts;
   }, [tree]);
+
+  // Auto-expand all visible nodes when search is active - CB-1119
+  useEffect(() => {
+    const hasAnyFilter = searchFilters.query ||
+      searchFilters.types.length > 0 ||
+      searchFilters.statuses.length > 0 ||
+      searchFilters.priorities.length > 0 ||
+      (searchFilters.dateField && (searchFilters.dateRange.start || searchFilters.dateRange.end));
+
+    if (hasAnyFilter) {
+      const expandIds = new Set<string>();
+      function collectExpandable(nodes: TreeNode[]) {
+        for (const node of nodes) {
+          if (node.children.length > 0 && visibleIssueIds.has(node.id)) {
+            expandIds.add(node.id);
+            collectExpandable(node.children);
+          }
+        }
+      }
+      collectExpandable(tree);
+      setExpanded(expandIds);
+    }
+  }, [searchFilters, visibleIssueIds, tree]);
 
   // Handlers
   const handleToggle = (id: string) => {
@@ -1004,6 +1265,18 @@ export default function FeatureDetailPage() {
       {/* Tab Content */}
       {activeTab === 'overview' ? (
         <>
+          {/* Feature Search - CB-1119 */}
+          <div className="bg-zinc-800/50 border-b border-zinc-700">
+            <div className="max-w-6xl mx-auto px-6 py-3">
+              <FeatureSearchBar
+                filters={searchFilters}
+                onChange={setSearchFilters}
+                resultCount={visibleIssueIds.size}
+                totalCount={allDescendantIssues.length}
+              />
+            </div>
+          </div>
+
           {/* Toolbar */}
           <div className="bg-zinc-800 border-b border-zinc-700">
             <div className="max-w-6xl mx-auto px-6 py-2 flex items-center gap-4 flex-wrap">
@@ -1108,13 +1381,15 @@ export default function FeatureDetailPage() {
           {/* Tree View */}
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden">
-              {tree.length === 0 ? (
+              {filteredTree.length === 0 ? (
                 <div className="p-8 text-center text-zinc-500">
-                  No issues found under this feature
+                  {allDescendantIssues.length === 0
+                    ? 'No issues found under this feature'
+                    : 'No issues match your search criteria'}
                 </div>
               ) : (
                 <div className="divide-y divide-zinc-700">
-                  {tree.map(node => (
+                  {filteredTree.map(node => (
                     <TreeItem
                       key={node.id}
                       node={node}
@@ -1124,6 +1399,12 @@ export default function FeatureDetailPage() {
                       onSelect={handleSelect}
                       onStatusChange={handleStatusChange}
                       onNavigate={handleNavigate}
+                      searchQuery={searchFilters.query}
+                      epicSearchFilters={epicSearchFilters}
+                      epicSearchVisibleIds={epicSearchVisibleIds}
+                      onEpicSearchToggle={handleEpicSearchToggle}
+                      onEpicSearchChange={handleEpicSearchChange}
+                      allDescendantIssues={allDescendantIssues}
                     />
                   ))}
                 </div>

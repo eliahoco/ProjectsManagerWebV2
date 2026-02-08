@@ -47,6 +47,19 @@ class QATask(Base):
     # Bug link (when QA fails and bug is created)
     bugIssueId = Column(String, nullable=True)
 
+    # Enhanced Linking for Documentation
+    linkedFeatureId = Column(String, nullable=True)  # Direct link to feature being tested
+    linkedEpicId = Column(String, nullable=True)
+    linkedStoryId = Column(String, nullable=True)
+    linkedTaskId = Column(String, nullable=True)
+
+    # Context for RAG
+    testContext = Column(Text, nullable=True)  # JSON: relevant docs, architecture notes
+
+    # Results Context
+    failureContext = Column(Text, nullable=True)  # JSON: what was happening when it failed
+    environmentDetails = Column(Text, nullable=True)  # JSON: environment config during test
+
     # Relationships
     linkedIssues = relationship("QATaskIssueLink", back_populates="qaTask", cascade="all, delete-orphan")
 

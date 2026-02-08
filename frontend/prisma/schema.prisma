@@ -121,6 +121,19 @@ model Issue {
   labels           String?  // JSON array of labels
   breakdownBatchId String?  // UUID to group issues created in same AI breakdown
 
+  // Implementation Documentation
+  implementationSummary String?   // Markdown: what was actually built
+  technicalApproach     String?   // JSON: tech stack, patterns used
+  documentationPath     String?   // Path to MD file: /docs/features/CB-851.md
+
+  // Enhanced Metadata
+  estimatedHours        Float?    // Estimated hours
+  actualHours           Float?    // Actual hours spent
+  complexity            String?   // LOW, MEDIUM, HIGH, CRITICAL
+
+  // Relations - Implementation Documentation
+  executionSummaries    ExecutionSummary[]
+
   @@index([projectId])
   @@index([breakdownBatchId])
   @@index([parentId])
@@ -223,6 +236,19 @@ model QATask {
   // Optional link to bug created from failure
   bugIssueId      String?
 
+  // Enhanced Linking for Documentation
+  linkedFeatureId     String?   // Direct link to feature being tested
+  linkedEpicId        String?
+  linkedStoryId       String?
+  linkedTaskId        String?
+
+  // Context for RAG
+  testContext         String?   // JSON: relevant docs, architecture notes
+
+  // Results Context
+  failureContext      String?   // JSON: what was happening when it failed
+  environmentDetails  String?   // JSON: environment config during test
+
   @@index([projectId])
   @@index([status])
   @@index([priority])
@@ -257,4 +283,81 @@ model QASettings {
   project           Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   passThreshold     Float   @default(0.9)  // 90% pass threshold
   autoCreateBugs    Boolean @default(true)
+}
+
+// ============================================
+// Documentation & Implementation Notes Models
+// ============================================
+
+model ExecutionSummary {
+  id                  String    @id @default(cuid())
+  issueId             String
+  issue               Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  // Execution Metadata
+  summary             String    // Markdown summary
+  executedAt          DateTime
+  executionTime       Float     // Seconds
+  provider            String    // claude_code, ollama
+  model               String?   // claude-3-opus, etc.
+  exitCode            Int?
+
+  // Implementation Details
+  componentsModified  String    // JSON: ["frontend", "backend", "database"]
+  filesTouched        String    // JSON: ["src/app.tsx", "api/route.ts"]
+  linesAdded          Int?
+  linesRemoved        Int?
+
+  // Documentation
+  architectureNotes   String?   // Architectural decisions made
+  technicalNotes      String?   // Technical implementation notes
+  challengesFaced     String?   // Challenges and how resolved
+  lessonsLearned      String?   // Learnings for future reference
+
+  // Linked Artifacts
+  commitHashes        String?   // JSON array of commit hashes
+  docFilePath         String?   // Path to generated MD file
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([issueId])
+  @@index([executedAt])
+}
+
+model FeatureDocumentation {
+  id                  String    @id @default(cuid())
+  projectId           String
+  featureIssueId      String
+  featureKey          String    // CB-851
+
+  // Documentation Content
+  title               String
+  overview            String    // High-level summary
+  requirements        String    // Original requirements
+  implementation      String    // What was built
+  architecture        String    // Architecture decisions
+  techStack           String    // JSON: technologies used
+  testingStrategy     String    // QA approach
+
+  // Metrics
+  totalTasks          Int
+  completedTasks      Int
+  totalQATasks        Int
+  passedQATasks       Int
+  failedQATasks       Int
+
+  // File Reference
+  mdFilePath          String    // /docs/features/CB-851.md
+
+  // Indexing for RAG
+  embeddingId         String?   // ChromaDB document ID
+  lastIndexedAt       DateTime?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([featureIssueId])
+  @@index([featureKey])
 }

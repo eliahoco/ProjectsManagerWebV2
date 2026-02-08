@@ -60,12 +60,23 @@ class Issue(Base):
     labels = Column(Text, nullable=True)  # JSON array of labels
     breakdownBatchId = Column(String, nullable=True)  # UUID to group issues from same AI breakdown
 
+    # Implementation Documentation
+    implementationSummary = Column(Text, nullable=True)  # Markdown: what was actually built
+    technicalApproach = Column(Text, nullable=True)  # JSON: tech stack, patterns used
+    documentationPath = Column(String, nullable=True)  # Path to MD file: /docs/features/CB-851.md
+
+    # Enhanced Metadata
+    estimatedHours = Column(Float, nullable=True)  # Estimated hours
+    actualHours = Column(Float, nullable=True)  # Actual hours spent
+    complexity = Column(String, nullable=True)  # LOW, MEDIUM, HIGH, CRITICAL
+
     # Relationships
     parent = relationship("Issue", remote_side=[id], back_populates="children")
     children = relationship("Issue", back_populates="parent")
     comments = relationship("Comment", back_populates="issue", cascade="all, delete-orphan")
     activities = relationship("Activity", back_populates="issue", cascade="all, delete-orphan")
     qaTaskLinks = relationship("QATaskIssueLink", back_populates="issue", cascade="all, delete-orphan")
+    executionSummaries = relationship("ExecutionSummary", back_populates="issue", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("Issue_projectId_idx", "projectId"),

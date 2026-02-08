@@ -237,9 +237,14 @@ async def list_project_issues(
     search: Optional[str] = None,
     label: Optional[str] = None,
     breakdown_batch_id: Optional[str] = Query(None, alias="breakdownBatchId"),
+    date_field: Optional[str] = Query(None, alias="dateField"),
+    date_from: Optional[str] = Query(None, alias="dateFrom"),
+    date_to: Optional[str] = Query(None, alias="dateTo"),
+    sort_by: Optional[str] = Query(None, alias="sortBy"),
+    sort_order: Optional[str] = Query("desc", alias="sortOrder"),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all issues for a project with filtering and pagination"""
+    """List all issues for a project with filtering, date range, and pagination"""
     # Build query
     query = select(Issue).where(Issue.projectId == project_id)
 
@@ -267,26 +272,131 @@ async def list_project_issues(
         )
         query = query.where(search_filter)
 
+    # Apply date range filter
+    if date_field and (date_from or date_to):
+        date_column_map = {
+            "createdAt": Issue.createdAt,
+            "updatedAt": Issue.updatedAt,
+            "dueDate": Issue.dueDate,
+            "startedAt": Issue.startedAt,
+            "completedAt": Issue.completedAt,
+        }
+        date_column = date_column_map.get(date_field)
+        if date_column is not None:
+            if date_from:
+                try:
+                    from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+                    query = query.where(date_column >= from_dt)
+                except ValueError:
+                    pass
+            if date_to:
+                try:
+                    to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+                    query = query.where(date_column <= to_dt)
+                except ValueError:
+                    pass
+
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
 
-    # Apply pagination
+    # Apply sorting
+    sort_column_map = {
+        "sequence": Issue.sequence,
+        "priority": Issue.priority,
+        "createdAt": Issue.createdAt,
+        "updatedAt": Issue.updatedAt,
+        "dueDate": Issue.dueDate,
+        "title": Issue.title,
+        "type": Issue.type,
+        "status": Issue.status,
+    }
+    order_column = sort_column_map.get(sort_by) if sort_by else None
+
+    # Apply pagination and ordering
     offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size).order_by(Issue.sequence.desc())
+    if order_column is not None:
+        if sort_order == "asc":
+            query = query.order_by(order_column.asc())
+        else:
+            query = query.order_by(order_column.desc())
+    else:
+        query = query.order_by(Issue.sequence.desc())
+    query = query.offset(offset).limit(page_size)
 
     # Execute query
     result = await db.execute(query)
     issues = result.scalars().all()
 
+    # If search is active, compute relevance scores
+    items = []
+    for issue in issues:
+        response = IssueResponse.model_validate(issue)
+        if search:
+            score = _compute_relevance_score(issue, search)
+            response_dict = response.model_dump()
+            response_dict["relevanceScore"] = score
+            items.append(response_dict)
+        else:
+            items.append(response)
+
+    # Sort by relevance if searching (within the page)
+    if search and items and isinstance(items[0], dict):
+        items.sort(key=lambda x: x.get("relevanceScore", 0), reverse=True)
+
     return PaginatedResponse(
-        items=[IssueResponse.model_validate(issue) for issue in issues],
+        items=items,
         total=total,
         page=page,
         pageSize=page_size,
         totalPages=(total + page_size - 1) // page_size,
     )
+
+
+def _compute_relevance_score(issue: Issue, search: str) -> float:
+    """
+    Compute a relevance score for an issue against a search query.
+    Higher scores indicate better matches.
+    Scoring:
+      - Exact key match: 100
+      - Title starts with search: 80
+      - Title contains search: 60
+      - Description contains search: 30
+      - Bonus for type (FEATURE/EPIC ranked higher): up to 10
+    """
+    search_lower = search.lower()
+    score = 0.0
+
+    # Exact key match
+    if issue.key and issue.key.lower() == search_lower:
+        score += 100
+
+    title_lower = (issue.title or "").lower()
+    desc_lower = (issue.description or "").lower()
+
+    # Title matching
+    if title_lower.startswith(search_lower):
+        score += 80
+    elif search_lower in title_lower:
+        score += 60
+
+    # Description matching
+    if search_lower in desc_lower:
+        score += 30
+
+    # Type boost - features and epics rank higher
+    type_boost = {
+        "FEATURE": 10,
+        "EPIC": 8,
+        "STORY": 5,
+        "BUG": 4,
+        "TASK": 2,
+        "SUBTASK": 1,
+    }
+    score += type_boost.get(issue.type, 0)
+
+    return score
 
 
 # POST /api/projects/{project_id}/issues - Create a new issue
@@ -694,6 +804,263 @@ async def batch_add_labels(
     await db.commit()
 
     return {"success": True, "updated_count": updated_count}
+
+
+# GET /api/issues/{issue_id}/descendants/search - Search within an issue's descendants (CB-1122)
+@router.get("/issues/{issue_id}/descendants/search")
+async def search_issue_descendants(
+    issue_id: str,
+    search: Optional[str] = Query(None, description="Text search query"),
+    type: Optional[str] = Query(None, description="Filter by issue type (comma-separated for multiple)"),
+    status: Optional[str] = Query(None, description="Filter by status (comma-separated for multiple)"),
+    priority: Optional[str] = Query(None, description="Filter by priority (comma-separated for multiple)"),
+    date_field: Optional[str] = Query(None, alias="dateField"),
+    date_from: Optional[str] = Query(None, alias="dateFrom"),
+    date_to: Optional[str] = Query(None, alias="dateTo"),
+    sort_by: Optional[str] = Query(None, alias="sortBy", description="Sort field: relevance, priority, createdAt, updatedAt, status, type, sequence"),
+    sort_order: Optional[str] = Query("desc", alias="sortOrder"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Search and filter within an issue's descendants with relevance ranking.
+    Designed for epic-level search within feature hierarchies (CB-1122).
+
+    Returns matching descendants with relevance scores, preserving ancestor
+    chain for tree rendering.
+    """
+    # Verify the parent issue exists
+    result = await db.execute(select(Issue).where(Issue.id == issue_id))
+    parent_issue = result.scalar_one_or_none()
+    if not parent_issue:
+        raise NotFoundError("Issue", issue_id)
+
+    # Get all descendants
+    descendants_data = await get_all_descendants_with_details(
+        db, issue_id,
+        columns=["id", "key", "title", "type", "status", "priority", "sequence",
+                 "description", "completedAt", "parentId", "projectId", "labels",
+                 "dueDate", "startedAt", "createdAt", "updatedAt"]
+    )
+
+    if not descendants_data:
+        return {"items": [], "total": 0, "matchCount": 0}
+
+    # Fetch full Issue objects
+    descendant_ids = [d["id"] for d in descendants_data]
+    result = await db.execute(select(Issue).where(Issue.id.in_(descendant_ids)))
+    all_issues = result.scalars().all()
+    issue_map = {i.id: i for i in all_issues}
+
+    # Parse multi-value filters
+    type_filters = [t.strip() for t in type.split(",")] if type else []
+    status_filters = [s.strip() for s in status.split(",")] if status else []
+    priority_filters = [p.strip() for p in priority.split(",")] if priority else []
+
+    has_any_filter = search or type_filters or status_filters or priority_filters or (date_field and (date_from or date_to))
+
+    if not has_any_filter:
+        # No filters, return all descendants
+        items = []
+        for issue in all_issues:
+            resp = IssueResponse.model_validate(issue)
+            resp_dict = resp.model_dump()
+            resp_dict["relevanceScore"] = 0
+            resp_dict["isDirectMatch"] = True
+            items.append(resp_dict)
+        return {"items": items, "total": len(items), "matchCount": len(items)}
+
+    # Apply filters and compute relevance scores
+    direct_matches = {}  # id -> (issue, score)
+
+    for issue in all_issues:
+        matches = True
+        score = 0.0
+
+        # Text search with relevance scoring
+        if search:
+            text_score = _compute_epic_search_relevance(issue, search)
+            if text_score == 0:
+                matches = False
+            else:
+                score += text_score
+
+        # Type filter
+        if matches and type_filters:
+            if issue.type not in type_filters:
+                matches = False
+
+        # Status filter
+        if matches and status_filters:
+            if issue.status not in status_filters:
+                matches = False
+
+        # Priority filter
+        if matches and priority_filters:
+            if issue.priority not in priority_filters:
+                matches = False
+
+        # Date range filter
+        if matches and date_field and (date_from or date_to):
+            date_column_map = {
+                "createdAt": issue.createdAt,
+                "updatedAt": issue.updatedAt,
+                "dueDate": issue.dueDate,
+                "startedAt": issue.startedAt,
+                "completedAt": issue.completedAt,
+            }
+            date_value = date_column_map.get(date_field)
+            if date_value:
+                if date_from:
+                    try:
+                        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+                        if date_value < from_dt:
+                            matches = False
+                    except ValueError:
+                        pass
+                if date_to:
+                    try:
+                        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+                        if date_value > to_dt:
+                            matches = False
+                    except ValueError:
+                        pass
+            else:
+                matches = False
+
+        if matches:
+            direct_matches[issue.id] = (issue, score)
+
+    # Build ancestor chains - include all ancestors of matches for tree rendering
+    parent_map = {d["id"]: d.get("parentId") for d in descendants_data}
+    ancestor_ids = set()
+    for match_id in direct_matches:
+        current_parent = parent_map.get(match_id)
+        while current_parent and current_parent != issue_id:
+            ancestor_ids.add(current_parent)
+            current_parent = parent_map.get(current_parent)
+
+    # Build response items
+    items = []
+    for mid, (issue, score) in direct_matches.items():
+        resp = IssueResponse.model_validate(issue)
+        resp_dict = resp.model_dump()
+        resp_dict["relevanceScore"] = score
+        resp_dict["isDirectMatch"] = True
+        items.append(resp_dict)
+
+    # Add ancestors that aren't direct matches (for tree structure)
+    for anc_id in ancestor_ids:
+        if anc_id not in direct_matches and anc_id in issue_map:
+            resp = IssueResponse.model_validate(issue_map[anc_id])
+            resp_dict = resp.model_dump()
+            resp_dict["relevanceScore"] = 0
+            resp_dict["isDirectMatch"] = False
+            items.append(resp_dict)
+
+    # Sort results
+    if sort_by == "relevance" or (not sort_by and search):
+        items.sort(key=lambda x: x.get("relevanceScore", 0), reverse=True)
+    elif sort_by:
+        sort_key_map = {
+            "priority": lambda x: {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}.get(x.get("priority", ""), 99),
+            "createdAt": lambda x: x.get("createdAt", ""),
+            "updatedAt": lambda x: x.get("updatedAt", ""),
+            "status": lambda x: {"IN_PROGRESS": 0, "IN_REVIEW": 1, "TODO": 2, "BACKLOG": 3, "COMPLETED_WAITING_QA": 4, "DONE": 5, "CANCELLED": 6}.get(x.get("status", ""), 99),
+            "type": lambda x: {"EPIC": 0, "STORY": 1, "TASK": 2, "BUG": 2, "SUBTASK": 3}.get(x.get("type", ""), 99),
+            "sequence": lambda x: x.get("sequence", 0),
+        }
+        key_fn = sort_key_map.get(sort_by)
+        if key_fn:
+            reverse = sort_order != "asc"
+            items.sort(key=key_fn, reverse=reverse)
+
+    return {
+        "items": items,
+        "total": len(items),
+        "matchCount": len(direct_matches),
+    }
+
+
+def _compute_epic_search_relevance(issue: Issue, search: str) -> float:
+    """
+    Compute relevance score for epic-level search (CB-1122).
+    Enhanced scoring that considers position in hierarchy and field matches.
+
+    Scoring:
+      - Exact key match: 100
+      - Title starts with search: 80
+      - Title contains search (word boundary): 70
+      - Title contains search: 60
+      - Description contains search: 30
+      - Type hierarchy boost (STORY > TASK > SUBTASK): up to 10
+      - Priority boost (CRITICAL > HIGH > MEDIUM > LOW): up to 5
+      - Status boost (active items rank higher): up to 5
+    """
+    search_lower = search.lower()
+    score = 0.0
+
+    # Exact key match
+    if issue.key and issue.key.lower() == search_lower:
+        score += 100
+
+    title_lower = (issue.title or "").lower()
+    desc_lower = (issue.description or "").lower()
+
+    # Title matching with word boundary awareness
+    if title_lower.startswith(search_lower):
+        score += 80
+    elif f" {search_lower}" in f" {title_lower}":
+        # Word boundary match (search appears at start of a word)
+        score += 70
+    elif search_lower in title_lower:
+        score += 60
+
+    # Description matching
+    if search_lower in desc_lower:
+        score += 30
+
+    # Label matching
+    labels_lower = (issue.labels or "").lower()
+    if search_lower in labels_lower:
+        score += 20
+
+    # Only return score > 0 if there was at least one text match
+    if score == 0:
+        return 0
+
+    # Type hierarchy boost - stories and tasks rank higher in epic context
+    type_boost = {
+        "STORY": 10,
+        "TASK": 8,
+        "BUG": 7,
+        "SUBTASK": 5,
+        "EPIC": 3,
+        "FEATURE": 1,
+    }
+    score += type_boost.get(issue.type, 0)
+
+    # Priority boost
+    priority_boost = {
+        "CRITICAL": 5,
+        "HIGH": 4,
+        "MEDIUM": 2,
+        "LOW": 1,
+    }
+    score += priority_boost.get(issue.priority, 0)
+
+    # Active status boost
+    status_boost = {
+        "IN_PROGRESS": 5,
+        "IN_REVIEW": 4,
+        "TODO": 3,
+        "BACKLOG": 2,
+        "COMPLETED_WAITING_QA": 1,
+        "DONE": 0,
+        "CANCELLED": 0,
+    }
+    score += status_boost.get(issue.status, 0)
+
+    return score
 
 
 # GET /api/issues/{issue_id}/descendants - Get all descendants of an issue
