@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { launchProject, isDockerRunning, startDocker, isPortInUse } from '@/lib/shell';
+import { launchProject, isDockerRunning } from '@/lib/shell';
 
 export async function POST(
   request: NextRequest,
@@ -27,34 +27,18 @@ export async function POST(
       );
     }
 
-    // Check if Docker is running
+    // Check if Docker is running (provided by Colima)
     const dockerRunning = await isDockerRunning();
     if (!dockerRunning) {
-      // Try to start Docker
-      const started = await startDocker();
-      if (!started) {
-        return NextResponse.json(
-          { success: false, error: 'Docker is not running and could not be started' },
-          { status: 503 }
-        );
-      }
+      return NextResponse.json(
+        { success: false, error: 'Docker is not running. Please start Colima first: colima start' },
+        { status: 503 }
+      );
     }
 
-    // Check for port conflicts
-    const portConflicts: number[] = [];
-    for (const port of project.ports) {
-      if (await isPortInUse(port.port)) {
-        portConflicts.push(port.port);
-      }
-    }
-
-    if (portConflicts.length > 0) {
-      return NextResponse.json({
-        success: false,
-        error: `Port conflict detected: ${portConflicts.join(', ')} already in use`,
-        conflicts: portConflicts,
-      }, { status: 409 });
-    }
+    // Port conflicts are prevented by the central port database — each project
+    // has unique allocated ports, so no pre-launch port checking is needed.
+    // The project's own startup scripts handle restarting their own services.
 
     // Launch the project
     const result = await launchProject(project.path);

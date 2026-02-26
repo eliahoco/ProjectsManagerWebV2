@@ -77,6 +77,7 @@ class Issue(Base):
     activities = relationship("Activity", back_populates="issue", cascade="all, delete-orphan")
     qaTaskLinks = relationship("QATaskIssueLink", back_populates="issue", cascade="all, delete-orphan")
     executionSummaries = relationship("ExecutionSummary", back_populates="issue", cascade="all, delete-orphan")
+    implementationNotes = relationship("ImplementationNote", back_populates="issue", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("Issue_projectId_idx", "projectId"),

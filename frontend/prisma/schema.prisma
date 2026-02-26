@@ -133,6 +133,7 @@ model Issue {
 
   // Relations - Implementation Documentation
   executionSummaries    ExecutionSummary[]
+  implementationNotes   ImplementationNote[]
 
   @@index([projectId])
   @@index([breakdownBatchId])
@@ -288,6 +289,30 @@ model QASettings {
 // ============================================
 // Documentation & Implementation Notes Models
 // ============================================
+
+model ImplementationNote {
+  id          String   @id @default(cuid())
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  // Note content
+  title       String            // Short title for the note
+  content     String            // Markdown content
+  category    String   @default("GENERAL") // DECISION, APPROACH, TRADEOFF, DEPENDENCY, RISK, LESSON, GENERAL
+  author      String   @default("System")  // Who wrote the note
+
+  // Optional metadata
+  tags        String?           // JSON array of tags for filtering
+  references  String?           // JSON array of related file paths or URLs
+  importance  String   @default("MEDIUM")  // LOW, MEDIUM, HIGH
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([issueId])
+  @@index([category])
+  @@index([issueId, category])
+}
 
 model ExecutionSummary {
   id                  String    @id @default(cuid())

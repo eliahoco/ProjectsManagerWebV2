@@ -1020,3 +1020,288 @@ continue sorry accedently pressed no
 
 ---
 
+## 2026-02-09 11:46:21
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+READ THESE FILES IN ORDER to understand the full context:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading PROJECT_DESCRIPTOR.md now.
+
+---
+
+## 2026-02-09 11:49:27
+
+the frontend is not accessble, check that all services are up
+
+---
+
+## 2026-02-10 10:50:11
+
+hi, i have a home assignment from company insait to buidl a chatbot that does the following General details - 
+Customer Requirements:
+Handle 40% of tier-1 inquiries
+Integrate with Salesforce and Zendesk
+Hebrew and English support
+Financial data compliance required
+Go-live: 12 weeks from kickoff
+Deliverables :
+Project delivery plan (phases, milestones, risks, resources)
+Working flow - using https://platform.insait.io/ 
+Stakeholder management strategy (3 stakeholders, change management)
+First customer meeting agenda (kickoff plan, questions, outcomes)
+Success metrics & ROI framework what  in eed you to do is first of all to go to the site and learn the website and the workflows, different options and posibilities of the system and build yourself a set of instractions on how to conigure the system , than go and create a full plan including a simulator for Jira nad salseforce (which i already build in here - val.run, go and check the configurations over there as well) after you understand the workflopw the website configurations options and you are writing yourself an instractions on how to configure that you will plan athe implementation and present that to me and I'll give you my bleesing to go and configure that, i want you to build an agent that understand onsait and will be able to plan and configure it yourseld with no touching
+
+---
+
+## 2026-02-10 11:00:45
+
+<task-notification>
+<task-id>bd8b38b</task-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/tasks/bd8b38b.output</output-file>
+<status>completed</status>
+<summary>Background command "Search for specific integration references across all files" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/tasks/bd8b38b.output
+
+---
+
+## 2026-02-10 11:12:29
+
+you don't have the google chrome integration?
+
+---
+
+## 2026-02-10 11:13:50
+
+what the fuck? why cladue chrom is not working?
+
+---
+
+## 2026-02-10 11:15:02
+
+it's connected, restart this session with --chrome
+
+---
+
+## 2026-02-10 11:16:27
+
+cd /Volumes/Seagate/Claude/InsaitAgentProject && claude --chrome
+
+---
+
+## 2026-02-11 19:13:56
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+READ THESE FILES IN ORDER to understand the full context:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading PROJECT_DESCRIPTOR.md now.
+
+---
+
+## 2026-02-11 23:35:28
+
+did you tested the frontend to make suew all services are app?
+
+---
+
+## 2026-02-24 18:35:24
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+READ THESE FILES IN ORDER to understand the full context:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading PROJECT_DESCRIPTOR.md now.
+
+---
+
+## 2026-02-24 19:11:29
+
+I tried to launch project AIDevPlatformProduction but it fail to launch please check whey and offer a fix, and let's test it
+
+---
+
+## 2026-02-25 15:53:36
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+READ THESE FILES IN ORDER to understand the full context:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading PROJECT_DESCRIPTOR.md now.
+
+---
+
+## 2026-02-25 15:55:59
+
+last time we moved all the docker conteners from docker desktop to colina was that working ?
+
+---
+
+## 2026-02-25 15:57:32
+
+start colima
+
+---
+
+## 2026-02-25 15:59:46
+
+I need you to implement the following TASK:
+
+**CB-1115: Implement database schema changes**
+
+Context: Part of STORY 'CB-1113: User can View Detailed Implementation Notes'
+
+Description:
+Apply the updated database schema, including data model changes and relationships.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-02-25 16:02:15
+
+yes do option 1 and than 2 and than explain me why i started the project managerwebV2 sna it started the docker desktop, i don't understand who is running what now? if i launch one of the projects is suppose not to use the docker desktop? can i shut it down?
+
+---
+
+## 2026-02-25 16:11:56
+
+docker was never started automaticly, 
+
+---
+
+## 2026-02-25 18:00:50
+
+yes fix all of them
+
+---
+
+## 2026-02-25 18:41:30
+
+should i do anything now ? restart or something or just start one of the projects?
+
+---
+
+## 2026-02-25 18:47:57
+
+staritng AIDevPlatformProduction from the UI please monitor the services and the conteiners to see if all is starting
+
+---
+
+## 2026-02-25 18:48:34
+
+staritng AIDevPlatformProduction from the UI please monitor the services and the conteiners to see if all is starting
+
+---
+
+## 2026-02-25 18:49:10
+
+started now, what are you crashing
+
+---
+
+## 2026-02-26 18:03:50
+
+thank you for that, i want to go back to work on the Project maanger V2 platform so let's go back to the current status let's pull the planning and the current status on what is the original plan, what was implemented, what wasn't what bugs do we have and rethink about the next steps
+
+---
+
+## 2026-02-26 18:38:32
+
+I would like to fix what's broken but also brainstorm about the rest, since claude improved dramaticly since we first worked on that i would like to add the ability to work with dedicated agents for every step and make sure an agent is assined to a task but understand and see the whole picture, also make sure to build new agents or download new agents if neeeded to the project, i also want to understnad how the codeboard is working with claude, is it working with API or directly with claude code, also if there is no feature like that i want to make sure that when rinning the claude code on a specific task it runs in the backround and we can see the progress on part of the screen (maybe on top there will be a bar that show the status and the progress like you created for me in the ticket investigator project)
+
+---
+
+## 2026-02-26 18:45:11
+
+<task-notification>
+<task-id>babf9df</task-id>
+<tool-use-id>toolu_01XV9HK2nAmG3YNo2M3rpxCn</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/tasks/babf9df.output</output-file>
+<status>completed</status>
+<summary>Background command "grep -r "mcp\|MCP\|agent.*sdk\|tool.*use\|anthropic.*sdk" /Volumes/Seagate/Claude/ProjectsManagerWebV2Production --include="*.py" --include="*.ts" --include="*.tsx" --include="*.json" 2>/dev/null | grep -v node_modules | grep -v ".next" | head -40" completed (exit code 0)</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/tasks/babf9df.output
+
+---
+
+## 2026-02-26 18:53:43
+
+few questions in the  The execution flow today how the Claude session get the context of the task? it needs to read something to understand what it needs to develop what is the backround and how it should communiucate or be connected to anything, and it doesn't use any agents so from my understanding it doesn't have any context - please check that and let' brainsotrm on a solution for that, maybe every feature should hold this information and when exectuing the taks it should always go and read that before, and keep the same cladue session for all the rest of the tasks whithin the same feature so it won't open a claude session evey time (that will help to keep the context and make sure the feautre is fully implemented. that is just a suggestion but i preffer to here from you what is your suggestion for this solution, jsut notice you rais all thos things as well so we need to resolve those " Key limitations of the current system:
+  1. One execution at a time — global concurrency lock
+  2. No whole-picture context — each task gets only its own title + description as prompt
+  3. No agent specialization — same generic Claude Code instance for every task type
+  4. No agent memory between tasks — cache is cleared before each execution
+  5. Dumb sequential chaining — AutoPilot doesn't learn from previous task results
+  6. No progress bar at top level — progress is only visible inside the Feature detail panel"
+
+---
+
+## 2026-02-26 18:54:38
+
+Phase 1: Fix + Status Bar (this session)
+  1. Fix the broken error handling in AI service
+  2. Add the global agent status bar at the top of CodeBoard
+  3. Wire it to the existing execution system
+
+  Phase 2: Context Manager (next session)
+  4. Build the rich context builder (parent chain + sibling summaries + RAG)
+  5. Pass full context to Claude Code instead of just title+description
+
+  Phase 3: Agent Profiles (follow-up)
+  6. Create the agent registry data model
+  7. Build UI for managing agent profiles
+  8. Implement task-to-agent routing
+
+  Phase 4: Parallel Execution
+  9. Replace global lock with dependency graph
+  10. Enable concurrent agent execution
+  11. SSE streaming (replace polling)
+
+---
+

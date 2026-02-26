@@ -11,6 +11,37 @@ from sqlalchemy.sql import func
 from models.database import Base
 
 
+class ImplementationNote(Base):
+    """ImplementationNote model - structured, editable notes for issues"""
+    __tablename__ = "ImplementationNote"
+
+    id = Column(String, primary_key=True)
+    issueId = Column(String, ForeignKey("Issue.id", ondelete="CASCADE"), nullable=False)
+
+    # Note content
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)  # Markdown
+    category = Column(String, default="GENERAL", nullable=False)  # DECISION, APPROACH, TRADEOFF, DEPENDENCY, RISK, LESSON, GENERAL
+    author = Column(String, default="System", nullable=False)
+
+    # Optional metadata
+    tags = Column(Text, nullable=True)  # JSON array of tags
+    references = Column(Text, nullable=True)  # JSON array of file paths or URLs
+    importance = Column(String, default="MEDIUM", nullable=False)  # LOW, MEDIUM, HIGH
+
+    createdAt = Column(DateTime, server_default=func.now(), nullable=False)
+    updatedAt = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    issue = relationship("Issue", back_populates="implementationNotes")
+
+    __table_args__ = (
+        Index("ImplementationNote_issueId_idx", "issueId"),
+        Index("ImplementationNote_category_idx", "category"),
+        Index("ImplementationNote_issueId_category_idx", "issueId", "category"),
+    )
+
+
 class ExecutionSummary(Base):
     """ExecutionSummary model - captures implementation execution details for issues"""
     __tablename__ = "ExecutionSummary"

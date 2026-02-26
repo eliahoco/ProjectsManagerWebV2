@@ -107,71 +107,96 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * Launch a project using its launch.sh script
+ * Launch a project using its startup script
+ * Prefers start.sh (non-interactive, starts everything) over launch.sh
+ * Falls back to launch.sh -a if start.sh doesn't exist
  */
 export async function launchProject(projectPath: string): Promise<CommandResult> {
+  const startScript = path.join(projectPath, 'start.sh');
   const launchScript = path.join(projectPath, 'launch.sh');
 
-  return execCommand(`./launch.sh`, {
-    cwd: projectPath,
-    timeout: 120000, // 2 minutes for project startup
-    env: { ...process.env, LAUNCHED_FROM_WEB: '1' },
-  });
+  const hasStartScript = await fileExists(startScript);
+  const hasLaunchScript = await fileExists(launchScript);
+
+  // Build a clean environment for the child project.
+  // Remove vars from the V2 platform that could pollute child processes:
+  // - DATABASE_URL (V2 uses SQLite "file:./dev.db", would break PostgreSQL services)
+  // - PORT (Next.js sets this to 3601, would make child frontends bind to wrong port)
+  // - Other Next.js-internal vars that shouldn't leak
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.DATABASE_URL;
+  delete cleanEnv.PORT;
+  delete cleanEnv.__NEXT_PRIVATE_ORIGIN;
+  delete cleanEnv.__NEXT_PRIVATE_STANDALONE_CONFIG;
+  const webEnv = { ...cleanEnv, LAUNCHED_FROM_WEB: '1', NONINTERACTIVE: '1' };
+
+  if (hasStartScript) {
+    // Prefer start.sh — it's typically non-interactive and starts all services
+    return execCommand(`bash start.sh`, {
+      cwd: projectPath,
+      timeout: 180000, // 3 minutes for full startup with services
+      env: webEnv,
+    });
+  }
+
+  if (hasLaunchScript) {
+    // Fall back to launch.sh with -a flag to start everything
+    return execCommand(`bash launch.sh -a`, {
+      cwd: projectPath,
+      timeout: 120000, // 2 minutes for project startup
+      env: webEnv,
+    });
+  }
+
+  return {
+    stdout: '',
+    stderr: 'No start.sh or launch.sh found in project directory',
+    exitCode: 1,
+  };
 }
 
 /**
  * Stop a project using its stop.sh script
+ * Passes LAUNCHED_FROM_WEB=1 so stop scripts know to stop everything
+ * including Docker infrastructure without prompting
  */
 export async function stopProject(projectPath: string): Promise<CommandResult> {
   const stopScript = path.join(projectPath, 'stop.sh');
-  const dockerCompose = path.join(projectPath, 'docker-compose.yml');
 
   const hasStopScript = await fileExists(stopScript);
-  const hasDockerCompose = await fileExists(dockerCompose);
 
-  let stopScriptResult: CommandResult | null = null;
-  let dockerResult: CommandResult | null = null;
-
-  // Run stop.sh if it exists (stops native processes like Python services)
   if (hasStopScript) {
-    stopScriptResult = await execCommand(`./stop.sh`, {
+    // Run stop.sh with env flags so it stops everything (including Docker)
+    // The stop script is responsible for stopping all services and infra
+    const result = await execCommand(`bash stop.sh`, {
       cwd: projectPath,
       timeout: 60000,
+      env: { ...process.env, LAUNCHED_FROM_WEB: '1', NONINTERACTIVE: '1' },
     });
+    return result;
   }
 
-  // ALSO run docker-compose down if it exists (stops Docker containers)
-  if (hasDockerCompose) {
-    dockerResult = await execCommand(`docker-compose down`, {
-      cwd: projectPath,
-      timeout: 60000,
-    });
+  // Fallback: try docker-compose down in common locations
+  const composePaths = [
+    path.join(projectPath, 'docker-compose.yml'),
+    path.join(projectPath, 'infrastructure', 'docker', 'docker-compose.yml'),
+  ];
+
+  for (const composePath of composePaths) {
+    if (await fileExists(composePath)) {
+      const composeDir = path.dirname(composePath);
+      return execCommand(`docker compose down`, {
+        cwd: composeDir,
+        timeout: 60000,
+      });
+    }
   }
 
-  // If neither exists, return error
-  if (!hasStopScript && !hasDockerCompose) {
-    return {
-      stdout: '',
-      stderr: 'No stop.sh or docker-compose.yml found',
-      exitCode: 1,
-    };
-  }
-
-  // Combine results
-  const stdout = [
-    stopScriptResult?.stdout,
-    dockerResult?.stdout
-  ].filter(Boolean).join('\n');
-
-  const stderr = [
-    stopScriptResult?.stderr,
-    dockerResult?.stderr
-  ].filter(Boolean).join('\n');
-
-  // Success if at least one succeeded
-  const exitCode = (stopScriptResult?.exitCode === 0 || dockerResult?.exitCode === 0) ? 0 : 1;
-
-  return { stdout, stderr, exitCode };
+  return {
+    stdout: '',
+    stderr: 'No stop.sh or docker-compose.yml found',
+    exitCode: 1,
+  };
 }
 
 export type ServiceStatusType = 'running' | 'stopped' | 'error';
@@ -287,20 +312,14 @@ export async function isDockerRunning(): Promise<boolean> {
 }
 
 /**
- * Start Docker Desktop (macOS only)
+ * Check if Docker can be started (Colima-based setup)
+ * Note: Docker is provided by Colima, not Docker Desktop.
+ * If Colima is not running, the user must start it manually with: colima start
  */
 export async function startDocker(): Promise<boolean> {
-  if (process.platform !== 'darwin') return false;
-
-  await execCommand('open -a Docker', { timeout: 5000 });
-
-  // Wait for Docker to be ready (up to 60 seconds)
-  for (let i = 0; i < 30; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    if (await isDockerRunning()) return true;
-  }
-
-  return false;
+  // Docker should already be running via Colima (auto-starts on boot via brew services).
+  // If it's not running, we can't auto-start it from here — user needs to run: colima start
+  return await isDockerRunning();
 }
 
 /**

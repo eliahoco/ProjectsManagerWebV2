@@ -17,6 +17,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
 
   const fetchProjects = async () => {
     try {
@@ -40,9 +41,16 @@ export default function ProjectsPage() {
 
   const handleLaunch = async (id: string) => {
     setActionLoading(id);
+    setActionError(null);
     try {
-      await fetch(`/api/projects/${id}/launch`, { method: 'POST' });
+      const res = await fetch(`/api/projects/${id}/launch`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        setActionError({ id, message: data.error || 'Failed to launch project' });
+      }
       await fetchProjects();
+    } catch (error) {
+      setActionError({ id, message: 'Network error launching project' });
     } finally {
       setActionLoading(null);
     }
@@ -50,9 +58,16 @@ export default function ProjectsPage() {
 
   const handleStop = async (id: string) => {
     setActionLoading(id);
+    setActionError(null);
     try {
-      await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
+      const res = await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) {
+        setActionError({ id, message: data.error || 'Failed to stop project' });
+      }
       await fetchProjects();
+    } catch (error) {
+      setActionError({ id, message: 'Network error stopping project' });
     } finally {
       setActionLoading(null);
     }
@@ -239,6 +254,15 @@ export default function ProjectsPage() {
                       >
                         <ExternalLink className="h-3 w-3" />
                       </a>
+                    )}
+                    {actionError?.id === project.id && (
+                      <span
+                        className="text-red-400 text-xs max-w-xs truncate cursor-pointer"
+                        title={actionError.message}
+                        onClick={() => setActionError(null)}
+                      >
+                        {actionError.message}
+                      </span>
                     )}
                   </div>
                 </td>
