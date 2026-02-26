@@ -1,0 +1,681 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e5]
+        - generic [ref=e7]: Projects Manager V2
+      - button "Search... ⌘K" [ref=e9]:
+        - img [ref=e10]
+        - generic [ref=e13]: Search...
+        - generic [ref=e14]: ⌘K
+      - navigation [ref=e15]:
+        - link "Dashboard" [ref=e16] [cursor=pointer]:
+          - /url: /
+          - img [ref=e17]
+          - text: Dashboard
+        - link "CodeBoard" [ref=e22] [cursor=pointer]:
+          - /url: /codeboard
+          - img [ref=e23]
+          - text: CodeBoard
+        - link "QA Board" [ref=e24] [cursor=pointer]:
+          - /url: /codeboard/qa
+          - img [ref=e25]
+          - text: QA Board
+        - link "Projects" [active] [ref=e29] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e30]
+          - text: Projects
+        - link "Create" [ref=e32] [cursor=pointer]:
+          - /url: /create
+          - img [ref=e33]
+          - text: Create
+        - link "Import" [ref=e34] [cursor=pointer]:
+          - /url: /import
+          - img [ref=e35]
+          - text: Import
+        - link "Build" [ref=e38] [cursor=pointer]:
+          - /url: /build
+          - img [ref=e39]
+          - text: Build
+        - link "Ports" [ref=e43] [cursor=pointer]:
+          - /url: /ports
+          - img [ref=e44]
+          - text: Ports
+        - link "GitHub" [ref=e49] [cursor=pointer]:
+          - /url: /github
+          - img [ref=e50]
+          - text: GitHub
+        - link "Settings" [ref=e53] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e54]
+          - text: Settings
+      - generic [ref=e57]:
+        - button "Light Mode" [ref=e58]:
+          - img [ref=e59]
+          - text: Light Mode
+        - button "Shortcuts ?" [ref=e65]:
+          - img [ref=e66]
+          - text: Shortcuts
+          - generic [ref=e68]: "?"
+      - generic [ref=e70]:
+        - paragraph [ref=e71]: Projects Manager Web
+        - paragraph [ref=e72]: v1.0.0
+    - main [ref=e73]:
+      - generic [ref=e571]:
+        - generic [ref=e572]:
+          - generic [ref=e573]:
+            - heading "Projects" [level=1] [ref=e574]
+            - paragraph [ref=e575]: 4 of 14 projects running
+          - generic [ref=e576]:
+            - generic [ref=e577]:
+              - img [ref=e578]
+              - textbox "Search projects..." [ref=e581]
+            - button "Import" [ref=e583]:
+              - img
+              - text: Import
+              - img
+            - button "Refresh" [ref=e584]:
+              - img
+              - text: Refresh
+        - table [ref=e586]:
+          - rowgroup [ref=e587]:
+            - row "Status Name Ports Git Actions" [ref=e588]:
+              - columnheader "Status" [ref=e589]
+              - columnheader "Name" [ref=e590]
+              - columnheader "Ports" [ref=e591]
+              - columnheader "Git" [ref=e592]
+              - columnheader "Actions" [ref=e593]
+          - rowgroup [ref=e594]:
+            - row "Stopped AIDevPlatformProduction AI Development Platform with multiple services 3000 8001 8002 8003 +10 main 6 changes Launch" [ref=e595]:
+              - cell "Stopped" [ref=e596]:
+                - generic [ref=e599]: Stopped
+              - cell "AIDevPlatformProduction AI Development Platform with multiple services" [ref=e600]:
+                - link "AIDevPlatformProduction AI Development Platform with multiple services" [ref=e601] [cursor=pointer]:
+                  - /url: /projects/cmkg0ww0200073qn1k4f28zdq
+                  - generic [ref=e602]:
+                    - paragraph [ref=e603]: AIDevPlatformProduction
+                    - img [ref=e604]
+                  - paragraph [ref=e606]: AI Development Platform with multiple services
+              - cell "3000 8001 8002 8003 +10" [ref=e607]:
+                - generic [ref=e608]:
+                  - generic "Frontend (Next.js)" [ref=e609]: "3000"
+                  - generic "User Service" [ref=e610]: "8001"
+                  - generic "Project Service" [ref=e611]: "8002"
+                  - generic "QA Service" [ref=e612]: "8003"
+                  - generic [ref=e613]: "+10"
+              - cell "main 6 changes" [ref=e614]:
+                - generic [ref=e615]:
+                  - img [ref=e616]
+                  - generic [ref=e620]: main
+                  - generic [ref=e621]: 6 changes
+              - cell "Launch" [ref=e622]:
+                - generic [ref=e623]:
+                  - button "Launch" [ref=e624]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e625]:
+                    - img
+            - row "Stopped AITicketInvestigatorProduction AI-powered ticket investigation system 3200 8200 5450 6400 +3 main Launch" [ref=e626]:
+              - cell "Stopped" [ref=e627]:
+                - generic [ref=e630]: Stopped
+              - cell "AITicketInvestigatorProduction AI-powered ticket investigation system" [ref=e631]:
+                - link "AITicketInvestigatorProduction AI-powered ticket investigation system" [ref=e632] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzm00003qn155yr5hig
+                  - generic [ref=e633]:
+                    - paragraph [ref=e634]: AITicketInvestigatorProduction
+                    - img [ref=e635]
+                  - paragraph [ref=e637]: AI-powered ticket investigation system
+              - cell "3200 8200 5450 6400 +3" [ref=e638]:
+                - generic [ref=e639]:
+                  - generic "Frontend (Next.js)" [ref=e640]: "3200"
+                  - generic "Backend API (FastAPI)" [ref=e641]: "8200"
+                  - generic "PostgreSQL (pgvector)" [ref=e642]: "5450"
+                  - generic "Redis" [ref=e643]: "6400"
+                  - generic [ref=e644]: "+3"
+              - cell "main" [ref=e645]:
+                - generic [ref=e646]:
+                  - img [ref=e647]
+                  - generic [ref=e651]: main
+              - cell "Launch" [ref=e652]:
+                - generic [ref=e653]:
+                  - button "Launch" [ref=e654]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e655]:
+                    - img
+            - row "Running AITicketInvestigatorV3 AI Ticket Investigator Version 3 3400 8300 5550 6500 +3 main 6 changes Stop" [ref=e656]:
+              - cell "Running" [ref=e657]:
+                - generic [ref=e660]: Running
+              - cell "AITicketInvestigatorV3 AI Ticket Investigator Version 3" [ref=e661]:
+                - link "AITicketInvestigatorV3 AI Ticket Investigator Version 3" [ref=e662] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzp00013qn1ujfx5rob
+                  - generic [ref=e663]:
+                    - paragraph [ref=e664]: AITicketInvestigatorV3
+                    - img [ref=e665]
+                  - paragraph [ref=e667]: AI Ticket Investigator Version 3
+              - cell "3400 8300 5550 6500 +3" [ref=e668]:
+                - generic [ref=e669]:
+                  - generic "Frontend (Next.js)" [ref=e670]: "3400"
+                  - generic "Backend API (FastAPI)" [ref=e671]: "8300"
+                  - generic "PostgreSQL (pgvector)" [ref=e672]: "5550"
+                  - generic "Redis" [ref=e673]: "6500"
+                  - generic [ref=e674]: "+3"
+              - cell "main 6 changes" [ref=e675]:
+                - generic [ref=e676]:
+                  - img [ref=e677]
+                  - generic [ref=e681]: main
+                  - generic [ref=e682]: 6 changes
+              - cell "Stop" [ref=e683]:
+                - generic [ref=e684]:
+                  - button "Stop" [ref=e685]:
+                    - img
+                    - text: Stop
+                  - button "Open in Claude" [ref=e686]:
+                    - img
+                  - link "Open in browser" [ref=e1301] [cursor=pointer]:
+                    - /url: http://localhost:3400
+                    - img [ref=e1302]
+            - row "Stopped CulinaShareProduction CulinaShare is a recipe social network application built with Next.js 16 and React 19. Users can share recipes, follow other chefs, join cooking groups, save favorites, and discover local food businesses. The backend uses Supabase for authentication, database, and real-time features. 3600 8600 5460 6390 +2 main Launch" [ref=e692]:
+              - cell "Stopped" [ref=e693]:
+                - generic [ref=e696]: Stopped
+              - cell "CulinaShareProduction CulinaShare is a recipe social network application built with Next.js 16 and React 19. Users can share recipes, follow other chefs, join cooking groups, save favorites, and discover local food businesses. The backend uses Supabase for authentication, database, and real-time features." [ref=e697]:
+                - link "CulinaShareProduction CulinaShare is a recipe social network application built with Next.js 16 and React 19. Users can share recipes, follow other chefs, join cooking groups, save favorites, and discover local food businesses. The backend uses Supabase for authentication, database, and real-time features." [ref=e698] [cursor=pointer]:
+                  - /url: /projects/cmkims9ry00033qxeat9uxxxx
+                  - generic [ref=e699]:
+                    - paragraph [ref=e700]: CulinaShareProduction
+                    - img [ref=e701]
+                  - paragraph [ref=e703]: CulinaShare is a recipe social network application built with Next.js 16 and React 19. Users can share recipes, follow other chefs, join cooking groups, save favorites, and discover local food businesses. The backend uses Supabase for authentication, database, and real-time features.
+              - cell "3600 8600 5460 6390 +2" [ref=e704]:
+                - generic [ref=e705]:
+                  - generic "Frontend (Next.js)" [ref=e706]: "3600"
+                  - generic "Backend API (FastAPI)" [ref=e707]: "8600"
+                  - generic "PostgreSQL" [ref=e708]: "5460"
+                  - generic "Redis" [ref=e709]: "6390"
+                  - generic [ref=e710]: "+2"
+              - cell "main" [ref=e711]:
+                - generic [ref=e712]:
+                  - img [ref=e713]
+                  - generic [ref=e717]: main
+              - cell "Launch" [ref=e718]:
+                - generic [ref=e719]:
+                  - button "Launch" [ref=e720]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e721]:
+                    - img
+            - row "Stopped LicenseSDKSimulationProduction License SDK simulation cluster 8080 8081 8082 main 421 changes Launch" [ref=e722]:
+              - cell "Stopped" [ref=e723]:
+                - generic [ref=e726]: Stopped
+              - cell "LicenseSDKSimulationProduction License SDK simulation cluster" [ref=e727]:
+                - link "LicenseSDKSimulationProduction License SDK simulation cluster" [ref=e728] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzw00043qn1cnysp50u
+                  - generic [ref=e729]:
+                    - paragraph [ref=e730]: LicenseSDKSimulationProduction
+                    - img [ref=e731]
+                  - paragraph [ref=e733]: License SDK simulation cluster
+              - cell "8080 8081 8082" [ref=e734]:
+                - generic [ref=e735]:
+                  - generic "Simulation Instance 1" [ref=e736]: "8080"
+                  - generic "Simulation Instance 2" [ref=e737]: "8081"
+                  - generic "Simulation Instance 3" [ref=e738]: "8082"
+              - cell "main 421 changes" [ref=e739]:
+                - generic [ref=e740]:
+                  - img [ref=e741]
+                  - generic [ref=e745]: main
+                  - generic [ref=e746]: 421 changes
+              - cell "Launch" [ref=e747]:
+                - generic [ref=e748]:
+                  - button "Launch" [ref=e749]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e750]:
+                    - img
+            - row "Stopped LicenseServerPlatform OLD - Replaced by LicenseServerV2. Uses default ports. main 453 changes Launch" [ref=e751]:
+              - cell "Stopped" [ref=e752]:
+                - generic [ref=e755]: Stopped
+              - cell "LicenseServerPlatform OLD - Replaced by LicenseServerV2. Uses default ports." [ref=e756]:
+                - link "LicenseServerPlatform OLD - Replaced by LicenseServerV2. Uses default ports." [ref=e757] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzt00033qn14osnfj0l
+                  - generic [ref=e758]:
+                    - paragraph [ref=e759]: LicenseServerPlatform
+                    - img [ref=e760]
+                  - paragraph [ref=e762]: OLD - Replaced by LicenseServerV2. Uses default ports.
+              - cell [ref=e763]
+              - cell "main 453 changes" [ref=e764]:
+                - generic [ref=e765]:
+                  - img [ref=e766]
+                  - generic [ref=e770]: main
+                  - generic [ref=e771]: 453 changes
+              - cell "Launch" [ref=e772]:
+                - generic [ref=e773]:
+                  - button "Launch" [ref=e774]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e775]:
+                    - img
+            - row "Stopped LicenseServerV2 License management server v2 3100 8100 8101 5434 +2 main 467 changes Launch" [ref=e776]:
+              - cell "Stopped" [ref=e777]:
+                - generic [ref=e780]: Stopped
+              - cell "LicenseServerV2 License management server v2" [ref=e781]:
+                - link "LicenseServerV2 License management server v2" [ref=e782] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzq00023qn1txroa1m7
+                  - generic [ref=e783]:
+                    - paragraph [ref=e784]: LicenseServerV2
+                    - img [ref=e785]
+                  - paragraph [ref=e787]: License management server v2
+              - cell "3100 8100 8101 5434 +2" [ref=e788]:
+                - generic [ref=e789]:
+                  - generic "Frontend (React)" [ref=e790]: "3100"
+                  - generic "Backend API (FastAPI)" [ref=e791]: "8100"
+                  - generic "Orchestrator API" [ref=e792]: "8101"
+                  - generic "PostgreSQL (main)" [ref=e793]: "5434"
+                  - generic [ref=e794]: "+2"
+              - cell "main 467 changes" [ref=e795]:
+                - generic [ref=e796]:
+                  - img [ref=e797]
+                  - generic [ref=e801]: main
+                  - generic [ref=e802]: 467 changes
+              - cell "Launch" [ref=e803]:
+                - generic [ref=e804]:
+                  - button "Launch" [ref=e805]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e806]:
+                    - img
+            - row "Running MeetingsummeryassitanceProduction Meeting transcription and AI assistant 5173 8400 5433 6380 main 353 changes Stop" [ref=e807]:
+              - cell "Running" [ref=e808]:
+                - generic [ref=e811]: Running
+              - cell "MeetingsummeryassitanceProduction Meeting transcription and AI assistant" [ref=e812]:
+                - link "MeetingsummeryassitanceProduction Meeting transcription and AI assistant" [ref=e813] [cursor=pointer]:
+                  - /url: /projects/cmkg0wvzz00053qn16g22luo6
+                  - generic [ref=e814]:
+                    - paragraph [ref=e815]: MeetingsummeryassitanceProduction
+                    - img [ref=e816]
+                  - paragraph [ref=e818]: Meeting transcription and AI assistant
+              - cell "5173 8400 5433 6380" [ref=e819]:
+                - generic [ref=e820]:
+                  - generic "Frontend (Vite/React)" [ref=e821]: "5173"
+                  - generic "Backend API (FastAPI)" [ref=e822]: "8400"
+                  - generic "PostgreSQL" [ref=e823]: "5433"
+                  - generic "Redis" [ref=e824]: "6380"
+              - cell "main 353 changes" [ref=e825]:
+                - generic [ref=e826]:
+                  - img [ref=e827]
+                  - generic [ref=e831]: main
+                  - generic [ref=e832]: 353 changes
+              - cell "Stop" [ref=e833]:
+                - generic [ref=e834]:
+                  - button "Stop" [ref=e835]:
+                    - img
+                    - text: Stop
+                  - button "Open in Claude" [ref=e836]:
+                    - img
+                  - link "Open in browser" [ref=e1306] [cursor=pointer]:
+                    - /url: http://localhost:5173
+                    - img [ref=e1307]
+            - row "Running ProjectsManagerProduction Projects manager CLI - no servers main 6 changes Stop" [ref=e842]:
+              - cell "Running" [ref=e843]:
+                - generic [ref=e846]: Running
+              - cell "ProjectsManagerProduction Projects manager CLI - no servers" [ref=e847]:
+                - link "ProjectsManagerProduction Projects manager CLI - no servers" [ref=e848] [cursor=pointer]:
+                  - /url: /projects/cmkg0ww0500093qn1g8i5kvpc
+                  - generic [ref=e849]:
+                    - paragraph [ref=e850]: ProjectsManagerProduction
+                    - img [ref=e851]
+                  - paragraph [ref=e853]: Projects manager CLI - no servers
+              - cell [ref=e854]
+              - cell "main 6 changes" [ref=e855]:
+                - generic [ref=e856]:
+                  - img [ref=e857]
+                  - generic [ref=e861]: main
+                  - generic [ref=e862]: 6 changes
+              - cell "Stop" [ref=e863]:
+                - generic [ref=e864]:
+                  - button "Stop" [ref=e865]:
+                    - img
+                    - text: Stop
+                  - button "Open in Claude" [ref=e866]:
+                    - img
+            - row "Stopped ProjectsManagerWebProduction A web-based dashboard that replaces the CLI Projects Manager tool. Allows managing multiple development projects from a modern UI - launching, stopping, monitoring status, managing ports, and integrating with Claude. 3500 main 214 changes Launch" [ref=e867]:
+              - cell "Stopped" [ref=e868]:
+                - generic [ref=e871]: Stopped
+              - cell "ProjectsManagerWebProduction A web-based dashboard that replaces the CLI Projects Manager tool. Allows managing multiple development projects from a modern UI - launching, stopping, monitoring status, managing ports, and integrating with Claude." [ref=e872]:
+                - link "ProjectsManagerWebProduction A web-based dashboard that replaces the CLI Projects Manager tool. Allows managing multiple development projects from a modern UI - launching, stopping, monitoring status, managing ports, and integrating with Claude." [ref=e873] [cursor=pointer]:
+                  - /url: /projects/cmkhfx1d000003qvgnn1vldkj
+                  - generic [ref=e874]:
+                    - paragraph [ref=e875]: ProjectsManagerWebProduction
+                    - img [ref=e876]
+                  - paragraph [ref=e878]: A web-based dashboard that replaces the CLI Projects Manager tool. Allows managing multiple development projects from a modern UI - launching, stopping, monitoring status, managing ports, and integrating with Claude.
+              - cell "3500" [ref=e879]:
+                - generic "Frontend (Next.js)" [ref=e881]: "3500"
+              - cell "main 214 changes" [ref=e882]:
+                - generic [ref=e883]:
+                  - img [ref=e884]
+                  - generic [ref=e888]: main
+                  - generic [ref=e889]: 214 changes
+              - cell "Launch" [ref=e890]:
+                - generic [ref=e891]:
+                  - button "Launch" [ref=e892]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e893]:
+                    - img
+            - row "Running ProjectsManagerWebV2 Next-generation project manager with AI-automated task management (CodeBoard). Features Kanban boards, RAG integration, and automatic issue tracking. 3601 8401 8402 main 11 changes Stop" [ref=e1311]:
+              - cell "Running" [ref=e895]:
+                - generic [ref=e898]: Running
+              - cell "ProjectsManagerWebV2 Next-generation project manager with AI-automated task management (CodeBoard). Features Kanban boards, RAG integration, and automatic issue tracking." [ref=e899]:
+                - link "ProjectsManagerWebV2 Next-generation project manager with AI-automated task management (CodeBoard). Features Kanban boards, RAG integration, and automatic issue tracking." [ref=e900] [cursor=pointer]:
+                  - /url: /projects/1511e54f71dccd3fa79f67fe
+                  - generic [ref=e901]:
+                    - paragraph [ref=e902]: ProjectsManagerWebV2
+                    - img [ref=e903]
+                  - paragraph [ref=e905]: Next-generation project manager with AI-automated task management (CodeBoard). Features Kanban boards, RAG integration, and automatic issue tracking.
+              - cell "3601 8401 8402" [ref=e906]:
+                - generic [ref=e907]:
+                  - generic "Frontend (Next.js)" [ref=e908]: "3601"
+                  - generic "Backend (FastAPI)" [ref=e909]: "8401"
+                  - generic "ChromaDB" [ref=e910]: "8402"
+              - cell "main 11 changes" [ref=e1312]:
+                - generic [ref=e912]:
+                  - img [ref=e913]
+                  - generic [ref=e917]: main
+                  - generic [ref=e918]: 11 changes
+              - cell "Stop" [ref=e919]:
+                - generic [ref=e920]:
+                  - button "Stop" [ref=e921]:
+                    - img
+                    - text: Stop
+                  - button "Open in Claude" [ref=e922]:
+                    - img
+            - row "Stopped SecureShareProduction Secure file sharing platform 3300 8380 5435 6382 main 1 changes Launch" [ref=e923]:
+              - cell "Stopped" [ref=e924]:
+                - generic [ref=e927]: Stopped
+              - cell "SecureShareProduction Secure file sharing platform" [ref=e928]:
+                - link "SecureShareProduction Secure file sharing platform" [ref=e929] [cursor=pointer]:
+                  - /url: /projects/cmkg0ww0100063qn1vxy5itk4
+                  - generic [ref=e930]:
+                    - paragraph [ref=e931]: SecureShareProduction
+                    - img [ref=e932]
+                  - paragraph [ref=e934]: Secure file sharing platform
+              - cell "3300 8380 5435 6382" [ref=e935]:
+                - generic [ref=e936]:
+                  - generic "Backend API (Node.js)" [ref=e937]: "3300"
+                  - generic "Frontend" [ref=e938]: "8380"
+                  - generic "PostgreSQL" [ref=e939]: "5435"
+                  - generic "Redis" [ref=e940]: "6382"
+              - cell "main 1 changes" [ref=e941]:
+                - generic [ref=e942]:
+                  - img [ref=e943]
+                  - generic [ref=e947]: main
+                  - generic [ref=e948]: 1 changes
+              - cell "Launch" [ref=e949]:
+                - generic [ref=e950]:
+                  - button "Launch" [ref=e951]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e952]:
+                    - img
+            - row "Stopped TestFileServers Test file servers (FTP, SFTP, WebDAV, MinIO) 21 2222 2121 8480 +2 main 45 changes Launch" [ref=e953]:
+              - cell "Stopped" [ref=e954]:
+                - generic [ref=e957]: Stopped
+              - cell "TestFileServers Test file servers (FTP, SFTP, WebDAV, MinIO)" [ref=e958]:
+                - link "TestFileServers Test file servers (FTP, SFTP, WebDAV, MinIO)" [ref=e959] [cursor=pointer]:
+                  - /url: /projects/cmkg0ww0300083qn1mrpi8nx7
+                  - generic [ref=e960]:
+                    - paragraph [ref=e961]: TestFileServers
+                    - img [ref=e962]
+                  - paragraph [ref=e964]: Test file servers (FTP, SFTP, WebDAV, MinIO)
+              - cell "21 2222 2121 8480 +2" [ref=e965]:
+                - generic [ref=e966]:
+                  - generic "FTP Server" [ref=e967]: "21"
+                  - generic "SFTP Server" [ref=e968]: "2222"
+                  - generic "Pure-FTPd" [ref=e969]: "2121"
+                  - generic "WebDAV Server" [ref=e970]: "8480"
+                  - generic [ref=e971]: "+2"
+              - cell "main 45 changes" [ref=e972]:
+                - generic [ref=e973]:
+                  - img [ref=e974]
+                  - generic [ref=e978]: main
+                  - generic [ref=e979]: 45 changes
+              - cell "Launch" [ref=e980]:
+                - generic [ref=e981]:
+                  - button "Launch" [ref=e982]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e983]:
+                    - img
+            - row "Stopped TestProduction Test/template project - no servers main 26 changes Launch" [ref=e984]:
+              - cell "Stopped" [ref=e985]:
+                - generic [ref=e988]: Stopped
+              - cell "TestProduction Test/template project - no servers" [ref=e989]:
+                - link "TestProduction Test/template project - no servers" [ref=e990] [cursor=pointer]:
+                  - /url: /projects/cmkg0ww06000a3qn1m5qevq0b
+                  - generic [ref=e991]:
+                    - paragraph [ref=e992]: TestProduction
+                    - img [ref=e993]
+                  - paragraph [ref=e995]: Test/template project - no servers
+              - cell [ref=e996]
+              - cell "main 26 changes" [ref=e997]:
+                - generic [ref=e998]:
+                  - img [ref=e999]
+                  - generic [ref=e1003]: main
+                  - generic [ref=e1004]: 26 changes
+              - cell "Launch" [ref=e1005]:
+                - generic [ref=e1006]:
+                  - button "Launch" [ref=e1007]:
+                    - img
+                    - text: Launch
+                  - button "Open in Claude" [ref=e1008]:
+                    - img
+  - button "Open Next.js Dev Tools" [ref=e85] [cursor=pointer]:
+    - img [ref=e86]
+  - alert [ref=e89]
+  - generic [ref=e1009]:
+    - generic [ref=e1010] [cursor=pointer]:
+      - generic [ref=e1011]:
+        - img [ref=e1012]
+        - generic [ref=e1014]: 20 Services Stopped
+      - generic [ref=e1015]:
+        - button "Dismiss All" [ref=e1016]
+        - img [ref=e1017]
+    - generic [ref=e1020]:
+      - generic [ref=e1022]:
+        - generic [ref=e1023]:
+          - paragraph [ref=e1024]: AIDevPlatformProduction
+          - paragraph [ref=e1025]: Git Service (port 8004)
+          - paragraph [ref=e1026]: Stopped at 8:20:33 PM
+        - generic [ref=e1027]:
+          - button "Restart Service" [ref=e1028]:
+            - img [ref=e1029]
+          - button "Dismiss" [ref=e1031]:
+            - img [ref=e1032]
+      - generic [ref=e1036]:
+        - generic [ref=e1037]:
+          - paragraph [ref=e1038]: AIDevPlatformProduction
+          - paragraph [ref=e1039]: Agent Orchestrator (port 8005)
+          - paragraph [ref=e1040]: Stopped at 8:20:33 PM
+        - generic [ref=e1041]:
+          - button "Restart Service" [ref=e1042]:
+            - img [ref=e1043]
+          - button "Dismiss" [ref=e1045]:
+            - img [ref=e1046]
+      - generic [ref=e1050]:
+        - generic [ref=e1051]:
+          - paragraph [ref=e1052]: AIDevPlatformProduction
+          - paragraph [ref=e1053]: PostgreSQL (pgvector) (port 5437)
+          - paragraph [ref=e1054]: Stopped at 8:20:33 PM
+        - generic [ref=e1055]:
+          - button "Restart Service" [ref=e1056]:
+            - img [ref=e1057]
+          - button "Dismiss" [ref=e1059]:
+            - img [ref=e1060]
+      - generic [ref=e1064]:
+        - generic [ref=e1065]:
+          - paragraph [ref=e1066]: AIDevPlatformProduction
+          - paragraph [ref=e1067]: Redis (port 6383)
+          - paragraph [ref=e1068]: Stopped at 8:20:33 PM
+        - generic [ref=e1069]:
+          - button "Restart Service" [ref=e1070]:
+            - img [ref=e1071]
+          - button "Dismiss" [ref=e1073]:
+            - img [ref=e1074]
+      - generic [ref=e1078]:
+        - generic [ref=e1079]:
+          - paragraph [ref=e1080]: AIDevPlatformProduction
+          - paragraph [ref=e1081]: MongoDB (port 27017)
+          - paragraph [ref=e1082]: Stopped at 8:20:33 PM
+        - generic [ref=e1083]:
+          - button "Restart Service" [ref=e1084]:
+            - img [ref=e1085]
+          - button "Dismiss" [ref=e1087]:
+            - img [ref=e1088]
+      - generic [ref=e1092]:
+        - generic [ref=e1093]:
+          - paragraph [ref=e1094]: AIDevPlatformProduction
+          - paragraph [ref=e1095]: NATS (port 4222)
+          - paragraph [ref=e1096]: Stopped at 8:20:33 PM
+        - generic [ref=e1097]:
+          - button "Restart Service" [ref=e1098]:
+            - img [ref=e1099]
+          - button "Dismiss" [ref=e1101]:
+            - img [ref=e1102]
+      - generic [ref=e1106]:
+        - generic [ref=e1107]:
+          - paragraph [ref=e1108]: AIDevPlatformProduction
+          - paragraph [ref=e1109]: NATS Monitor (port 8222)
+          - paragraph [ref=e1110]: Stopped at 8:20:33 PM
+        - generic [ref=e1111]:
+          - button "Restart Service" [ref=e1112]:
+            - img [ref=e1113]
+          - button "Dismiss" [ref=e1115]:
+            - img [ref=e1116]
+      - generic [ref=e1120]:
+        - generic [ref=e1121]:
+          - paragraph [ref=e1122]: AIDevPlatformProduction
+          - paragraph [ref=e1123]: Meilisearch (port 7700)
+          - paragraph [ref=e1124]: Stopped at 8:20:33 PM
+        - generic [ref=e1125]:
+          - button "Restart Service" [ref=e1126]:
+            - img [ref=e1127]
+          - button "Dismiss" [ref=e1129]:
+            - img [ref=e1130]
+      - generic [ref=e1134]:
+        - generic [ref=e1135]:
+          - paragraph [ref=e1136]: AITicketInvestigatorV3
+          - paragraph [ref=e1137]: Frontend (Next.js) (port 3400)
+          - paragraph [ref=e1138]: Stopped at 8:20:33 PM
+        - generic [ref=e1139]:
+          - button "Restart Service" [ref=e1140]:
+            - img [ref=e1141]
+          - button "Dismiss" [ref=e1143]:
+            - img [ref=e1144]
+      - generic [ref=e1148]:
+        - generic [ref=e1149]:
+          - paragraph [ref=e1150]: AITicketInvestigatorV3
+          - paragraph [ref=e1151]: Backend API (FastAPI) (port 8300)
+          - paragraph [ref=e1152]: Stopped at 8:20:33 PM
+        - generic [ref=e1153]:
+          - button "Restart Service" [ref=e1154]:
+            - img [ref=e1155]
+          - button "Dismiss" [ref=e1157]:
+            - img [ref=e1158]
+      - generic [ref=e1162]:
+        - generic [ref=e1163]:
+          - paragraph [ref=e1164]: AITicketInvestigatorV3
+          - paragraph [ref=e1165]: PostgreSQL (pgvector) (port 5550)
+          - paragraph [ref=e1166]: Stopped at 8:20:33 PM
+        - generic [ref=e1167]:
+          - button "Restart Service" [ref=e1168]:
+            - img [ref=e1169]
+          - button "Dismiss" [ref=e1171]:
+            - img [ref=e1172]
+      - generic [ref=e1176]:
+        - generic [ref=e1177]:
+          - paragraph [ref=e1178]: AITicketInvestigatorV3
+          - paragraph [ref=e1179]: Redis (port 6500)
+          - paragraph [ref=e1180]: Stopped at 8:20:33 PM
+        - generic [ref=e1181]:
+          - button "Restart Service" [ref=e1182]:
+            - img [ref=e1183]
+          - button "Dismiss" [ref=e1185]:
+            - img [ref=e1186]
+      - generic [ref=e1190]:
+        - generic [ref=e1191]:
+          - paragraph [ref=e1192]: AITicketInvestigatorV3
+          - paragraph [ref=e1193]: n8n Workflow (port 5800)
+          - paragraph [ref=e1194]: Stopped at 8:20:33 PM
+        - generic [ref=e1195]:
+          - button "Restart Service" [ref=e1196]:
+            - img [ref=e1197]
+          - button "Dismiss" [ref=e1199]:
+            - img [ref=e1200]
+      - generic [ref=e1204]:
+        - generic [ref=e1205]:
+          - paragraph [ref=e1206]: AITicketInvestigatorV3
+          - paragraph [ref=e1207]: Ollama LLM (port 11600)
+          - paragraph [ref=e1208]: Stopped at 8:20:33 PM
+        - generic [ref=e1209]:
+          - button "Restart Service" [ref=e1210]:
+            - img [ref=e1211]
+          - button "Dismiss" [ref=e1213]:
+            - img [ref=e1214]
+      - generic [ref=e1218]:
+        - generic [ref=e1219]:
+          - paragraph [ref=e1220]: AITicketInvestigatorV3
+          - paragraph [ref=e1221]: C++ Analyzer (gRPC) (port 50200)
+          - paragraph [ref=e1222]: Stopped at 8:20:33 PM
+        - generic [ref=e1223]:
+          - button "Restart Service" [ref=e1224]:
+            - img [ref=e1225]
+          - button "Dismiss" [ref=e1227]:
+            - img [ref=e1228]
+      - generic [ref=e1232]:
+        - generic [ref=e1233]:
+          - paragraph [ref=e1234]: MeetingsummeryassitanceProduction
+          - paragraph [ref=e1235]: PostgreSQL (port 5433)
+          - paragraph [ref=e1236]: Stopped at 8:20:33 PM
+        - generic [ref=e1237]:
+          - button "Restart Service" [ref=e1238]:
+            - img [ref=e1239]
+          - button "Dismiss" [ref=e1241]:
+            - img [ref=e1242]
+      - generic [ref=e1246]:
+        - generic [ref=e1247]:
+          - paragraph [ref=e1248]: MeetingsummeryassitanceProduction
+          - paragraph [ref=e1249]: Redis (port 6380)
+          - paragraph [ref=e1250]: Stopped at 8:20:33 PM
+        - generic [ref=e1251]:
+          - button "Restart Service" [ref=e1252]:
+            - img [ref=e1253]
+          - button "Dismiss" [ref=e1255]:
+            - img [ref=e1256]
+      - generic [ref=e1260]:
+        - generic [ref=e1261]:
+          - paragraph [ref=e1262]: ProjectsManagerWebV2
+          - paragraph [ref=e1263]: Frontend (Next.js) (port 3601)
+          - paragraph [ref=e1264]: Stopped at 8:20:33 PM
+        - generic [ref=e1265]:
+          - button "Restart Service" [ref=e1266]:
+            - img [ref=e1267]
+          - button "Dismiss" [ref=e1269]:
+            - img [ref=e1270]
+      - generic [ref=e1274]:
+        - generic [ref=e1275]:
+          - paragraph [ref=e1276]: ProjectsManagerWebV2
+          - paragraph [ref=e1277]: Backend (FastAPI) (port 8401)
+          - paragraph [ref=e1278]: Stopped at 8:20:33 PM
+        - generic [ref=e1279]:
+          - button "Restart Service" [ref=e1280]:
+            - img [ref=e1281]
+          - button "Dismiss" [ref=e1283]:
+            - img [ref=e1284]
+      - generic [ref=e1288]:
+        - generic [ref=e1289]:
+          - paragraph [ref=e1290]: ProjectsManagerWebV2
+          - paragraph [ref=e1291]: ChromaDB (port 8402)
+          - paragraph [ref=e1292]: Stopped at 8:20:33 PM
+        - generic [ref=e1293]:
+          - button "Restart Service" [ref=e1294]:
+            - img [ref=e1295]
+          - button "Dismiss" [ref=e1297]:
+            - img [ref=e1298]

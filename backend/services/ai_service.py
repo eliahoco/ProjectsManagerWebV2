@@ -3,6 +3,7 @@ AI Service - Multi-provider AI support (Ollama local, Claude API fallback)
 """
 
 import httpx
+import logging
 import re
 from anthropic import Anthropic
 from typing import List, Optional, Dict, Any
@@ -10,6 +11,8 @@ import json
 
 from app.config import settings
 from services.rag_service import rag_service
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -60,17 +63,21 @@ class AIService:
                         best = max(matching, key=model_priority)
                         self._ollama_model = best
                         self._ollama_available = True
-                        print(f"Ollama available with model: {self._ollama_model}")
+                        logger.info(f"Ollama available with model: {self._ollama_model}")
                         return True
                 # Use first available model if any
                 if models:
                     self._ollama_model = models[0]
                     self._ollama_available = True
-                    print(f"Ollama available with model: {self._ollama_model}")
+                    logger.info(f"Ollama available with model: {self._ollama_model}")
                     return True
             self._ollama_available = False
             return False
-        except Exception:
+        except (httpx.ConnectError, httpx.TimeoutException):
+            self._ollama_available = False
+            return False
+        except Exception as e:
+            logger.warning(f"Unexpected error checking Ollama: {e}")
             self._ollama_available = False
             return False
 
@@ -88,10 +95,9 @@ class AIService:
 
     async def _call_ollama(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
         """Call Ollama API using chat endpoint for better instruction following"""
-        print(f"[AI] Calling Ollama with model: {self._ollama_model}")
+        logger.info(f"Calling Ollama with model: {self._ollama_model}")
         try:
             async with httpx.AsyncClient() as client:
-                # Use chat API for better instruction following
                 response = await client.post(
                     "http://localhost:11434/api/chat",
                     json={
@@ -103,21 +109,22 @@ class AIService:
                         "stream": False,
                         "options": {
                             "num_predict": max_tokens,
-                            "temperature": 0.3,  # Lower temp for more predictable output
+                            "temperature": 0.3,
                         }
                     },
                     timeout=120.0
                 )
-                print(f"[AI] Ollama response status: {response.status_code}")
                 if response.status_code == 200:
                     data = response.json()
                     result = data.get("message", {}).get("content", "").strip()
-                    print(f"[AI] Ollama returned {len(result)} chars: {result[:100]}...")
+                    logger.info(f"Ollama returned {len(result)} chars")
                     return result
                 else:
-                    print(f"[AI] Ollama error response: {response.text[:200]}")
+                    logger.error(f"Ollama error response ({response.status_code}): {response.text[:200]}")
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.warning(f"Ollama connection failed: {e}")
         except Exception as e:
-            print(f"[AI] Ollama exception: {e}")
+            logger.error(f"Ollama unexpected error: {e}", exc_info=True)
         return None
 
     async def _call_claude(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
@@ -132,24 +139,23 @@ class AIService:
             )
             return response.content[0].text.strip()
         except Exception as e:
-            print(f"Claude error: {e}")
+            logger.error(f"Claude API error: {e}", exc_info=True)
         return None
 
     async def _generate(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
         """Generate response using available AI (Ollama first, then Claude)"""
-        print(f"[AI] _generate called, prompt length: {len(prompt)}")
+        logger.debug(f"_generate called, prompt length: {len(prompt)}")
 
         # Try Ollama first (local, free)
         if self._check_ollama():
-            print("[AI] Trying Ollama...")
+            logger.info("Trying Ollama...")
             result = await self._call_ollama(prompt, max_tokens)
             if result:
-                print(f"[AI] Got result from Ollama: {len(result)} chars")
                 return result
-            print("[AI] Ollama returned empty result")
+            logger.warning("Ollama returned empty result")
 
         # Fallback to Claude API
-        print("[AI] Falling back to Claude...")
+        logger.info("Falling back to Claude API...")
         return await self._call_claude(prompt, max_tokens)
 
     def _parse_text_tasks(self, content: str) -> List[Dict]:
@@ -206,7 +212,7 @@ class AIService:
                     if out_key == 'storyPoints':
                         try:
                             current_task[out_key] = int(re.search(r'\d+', value).group())
-                        except:
+                        except (ValueError, AttributeError):
                             current_task[out_key] = 3
                     elif out_key == 'title':
                         # Only set title if not already set from task marker line
@@ -220,40 +226,40 @@ class AIService:
             tasks.append(current_task)
 
         if tasks:
-            print(f"[AI] Parsed {len(tasks)} tasks from text format")
+            logger.info(f"Parsed {len(tasks)} tasks from text format")
         return tasks
 
     def _extract_json_array(self, content: str) -> List[Dict]:
         """Extract JSON array from response"""
         content = content.strip()
-        print(f"[AI] Extracting JSON array from: {content[:200]}...")
+        logger.debug(f"Extracting JSON array from: {content[:200]}...")
 
         # Remove markdown code blocks if present
         if "```" in content:
             match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
             if match:
                 content = match.group(1).strip()
-                print(f"[AI] Extracted from code block: {content[:200]}...")
+                logger.debug(f"Extracted from code block: {content[:200]}...")
 
         # Try to complete partial JSON (model may continue from prompt)
         if content.startswith("{"):
             # Model continued from our prompt, add the opening bracket
             content = "[" + content
-            print(f"[AI] Added opening bracket")
+            logger.debug("Added opening bracket to partial JSON")
 
         # Ensure array is closed
         if content.startswith("[") and not content.rstrip().endswith("]"):
             # Try to close the array
             content = content.rstrip().rstrip(",") + "]"
-            print(f"[AI] Closed JSON array")
+            logger.debug("Closed JSON array")
 
         if content.startswith("["):
             try:
                 result = json.loads(content)
-                print(f"[AI] Parsed JSON array with {len(result)} items")
+                logger.info(f"Parsed JSON array with {len(result)} items")
                 return result
             except json.JSONDecodeError as e:
-                print(f"[AI] JSON parse error: {e}")
+                logger.warning(f"JSON parse error: {e}")
                 # Try to fix common issues
                 try:
                     # Remove trailing incomplete object
@@ -261,9 +267,9 @@ class AIService:
                     if last_complete > 0:
                         fixed = content[:last_complete+1] + "]"
                         result = json.loads(fixed)
-                        print(f"[AI] Fixed and parsed {len(result)} items")
+                        logger.info(f"Fixed partial JSON and parsed {len(result)} items")
                         return result
-                except:
+                except (json.JSONDecodeError, ValueError):
                     pass
 
         # Try to find JSON array in response
@@ -272,18 +278,18 @@ class AIService:
         if start != -1 and end > start:
             try:
                 result = json.loads(content[start:end])
-                print(f"[AI] Extracted JSON array with {len(result)} items")
+                logger.info(f"Extracted JSON array with {len(result)} items")
                 return result
             except json.JSONDecodeError as e:
-                print(f"[AI] JSON extraction error: {e}")
+                logger.warning(f"JSON extraction error: {e}")
 
         # Fallback: try to parse text/markdown format
-        print("[AI] Trying text format parser...")
+        logger.debug("Trying text format parser...")
         text_result = self._parse_text_tasks(content)
         if text_result:
             return text_result
 
-        print("[AI] No valid tasks found")
+        logger.warning("No valid tasks found in AI response")
         return []
 
     def _extract_json_object(self, content: str) -> Dict:
