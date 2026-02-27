@@ -23,6 +23,7 @@ export { EpicSearchBar, applyEpicSearchFilters, DEFAULT_EPIC_SEARCH_FILTERS, Rel
 export type { EpicSearchFilters, EpicSearchSortField, EpicSearchSortOrder, QuickFilterPreset } from './EpicSearchBar';
 export { FeatureTestingPanel } from './FeatureTestingPanel';
 export { FloatingExecutionStatus } from './FloatingExecutionStatus';
+export { GlobalAgentStatusBar, FloatingAgentStatusBar } from './GlobalAgentStatusBar';
 export { TestPlanGenerator } from './TestPlanGenerator';
 export { TestProgressTracker, TestProgressTrackerCompact, MiniDonutChart } from './TestProgressTracker';
 export type { TaskResult, TestProgressTrackerProps, ProgressTrackingOptions } from './TestProgressTracker';

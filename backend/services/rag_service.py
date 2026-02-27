@@ -6,8 +6,11 @@ import chromadb
 from chromadb.config import Settings
 from typing import List, Optional, Dict, Any
 import hashlib
+import logging
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -197,6 +200,154 @@ class RAGService:
                     context_parts.append(f"  {lines[0]}")
 
         return "\n".join(context_parts)
+
+    async def embed_ai_context(
+        self,
+        project_id: str,
+        issue_id: str,
+        issue_key: str,
+        issue_type: str,
+        ai_context: str,
+    ) -> bool:
+        """
+        Embed an issue's aiContext text into ChromaDB for RAG retrieval.
+
+        Uses a separate doc_id (content_type="ai_context") so it doesn't
+        overwrite the standard issue embedding.
+        """
+        try:
+            collection = self.get_collection(project_id)
+            doc_id = self.generate_doc_id(issue_id, content_type="ai_context")
+
+            document = f"[{issue_key}] AI Context ({issue_type}):\n{ai_context}"
+
+            collection.upsert(
+                ids=[doc_id],
+                documents=[document],
+                metadatas=[{
+                    "issue_id": issue_id,
+                    "key": issue_key,
+                    "type": issue_type,
+                    "context_type": "ai_context",
+                }],
+            )
+
+            logger.info(f"Embedded aiContext for {issue_key} into ChromaDB")
+            return True
+        except Exception as e:
+            logger.warning(f"Error embedding aiContext for {issue_key}: {e}")
+            return False
+
+    async def delete_ai_context_embedding(
+        self,
+        project_id: str,
+        issue_id: str,
+    ) -> bool:
+        """Delete the aiContext embedding for an issue (e.g., when cleared)."""
+        try:
+            collection = self.get_collection(project_id)
+            doc_id = self.generate_doc_id(issue_id, content_type="ai_context")
+            collection.delete(ids=[doc_id])
+            return True
+        except Exception as e:
+            logger.warning(f"Error deleting aiContext embedding: {e}")
+            return False
+
+    async def get_ancestor_ai_context(
+        self,
+        db,
+        issue_id: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Walk up the parent chain from issue_id and collect aiContext values
+        from all ancestor issues (e.g., TASK -> STORY -> EPIC -> FEATURE).
+
+        Returns a list of dicts ordered from nearest parent to furthest ancestor:
+        [
+            {"issue_id": ..., "key": ..., "type": ..., "aiContext": ...},
+            ...
+        ]
+
+        The `db` parameter is an AsyncSession from SQLAlchemy.
+        """
+        from sqlalchemy import select
+        from models import Issue
+
+        ancestors = []
+        current_id = issue_id
+        visited = set()
+
+        while current_id:
+            # Prevent infinite loops in case of data corruption
+            if current_id in visited:
+                break
+            visited.add(current_id)
+
+            # Fetch the current issue's parentId and aiContext
+            result = await db.execute(
+                select(Issue.id, Issue.parentId, Issue.key, Issue.type, Issue.aiContext)
+                .where(Issue.id == current_id)
+            )
+            row = result.one_or_none()
+
+            if not row:
+                break
+
+            issue_id_val, parent_id, key, issue_type, ai_context = row
+
+            # Only collect from ancestors (skip the original issue itself)
+            if issue_id_val != issue_id and ai_context:
+                ancestors.append({
+                    "issue_id": issue_id_val,
+                    "key": key,
+                    "type": issue_type,
+                    "aiContext": ai_context,
+                })
+
+            current_id = parent_id
+
+        return ancestors
+
+    async def get_full_ai_context_for_execution(
+        self,
+        db,
+        issue_id: str,
+    ) -> str:
+        """
+        Build a formatted string of all ancestor AI context for use during
+        issue execution. Includes the issue's own aiContext plus all ancestors.
+
+        Returns a human-readable string suitable for injecting into AI prompts.
+        """
+        from sqlalchemy import select
+        from models import Issue
+
+        # Get the issue's own context
+        result = await db.execute(
+            select(Issue.key, Issue.type, Issue.aiContext)
+            .where(Issue.id == issue_id)
+        )
+        row = result.one_or_none()
+
+        parts = []
+
+        if row:
+            key, issue_type, own_context = row
+            if own_context:
+                parts.append(f"[{key}] ({issue_type}) AI Context:\n{own_context}")
+
+        # Get ancestor contexts (nearest parent first)
+        ancestors = await self.get_ancestor_ai_context(db, issue_id)
+
+        for ancestor in ancestors:
+            parts.append(
+                f"[{ancestor['key']}] ({ancestor['type']}) AI Context:\n{ancestor['aiContext']}"
+            )
+
+        if not parts:
+            return ""
+
+        return "\n\n---\n\n".join(parts)
 
 
 # Singleton instance

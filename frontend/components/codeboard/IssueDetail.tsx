@@ -6,7 +6,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { X, Edit2, Trash2, MessageSquare, Clock, User, Calendar, GitCommit, Sparkles, ChevronRight, Play, GitMerge, CheckCircle, AlertCircle, Link2, ExternalLink, Square, CheckSquare, PlayCircle, FileText, Loader2 } from 'lucide-react';
+import { X, Edit2, Trash2, MessageSquare, Clock, User, Calendar, GitCommit, Sparkles, ChevronRight, ChevronDown, Play, GitMerge, CheckCircle, AlertCircle, Link2, ExternalLink, Square, CheckSquare, PlayCircle, FileText, Loader2, Brain } from 'lucide-react';
 import { Issue, ISSUE_TYPES, PRIORITIES, STATUS_COLUMNS, IssueStatus, Priority, IssueType } from '@/types/codeboard';
 import { useIssueCommits, useLinkedCommits, useIssue, useStartExecution, useGenerateDocumentation, CommitLink } from '@/hooks/useCodeBoard';
 import { ExecuteButton } from './ExecuteButton';
@@ -34,6 +34,9 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
   const [selectedChildren, setSelectedChildren] = useState<Set<string>>(new Set());
   const [isExecutingBatch, setIsExecutingBatch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAIContextOpen, setIsAIContextOpen] = useState(false);
+  const [isEditingAIContext, setIsEditingAIContext] = useState(false);
+  const [editAIContext, setEditAIContext] = useState('');
 
   const startExecution = useStartExecution();
   const generateDocs = useGenerateDocumentation();
@@ -336,6 +339,75 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
                 <p className="text-zinc-400 whitespace-pre-wrap">{issue.description}</p>
               )}
             </>
+          )}
+
+          {/* AI Context - only for FEATURE, EPIC, STORY */}
+          {(issue.type === 'FEATURE' || issue.type === 'EPIC' || issue.type === 'STORY') && (
+            <div className="border border-zinc-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setIsAIContextOpen(!isAIContextOpen)}
+                className="w-full flex items-center gap-2 px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors text-left"
+              >
+                <Brain className="w-4 h-4 text-purple-400 shrink-0" />
+                <span className="text-sm font-medium text-zinc-300 flex-1">AI Context</span>
+                {issue.aiContext && (
+                  <span className="text-xs text-zinc-500 mr-2">configured</span>
+                )}
+                <ChevronDown className={cn(
+                  'w-4 h-4 text-zinc-500 transition-transform',
+                  isAIContextOpen && 'rotate-180'
+                )} />
+              </button>
+              {isAIContextOpen && (
+                <div className="px-4 py-3 border-t border-zinc-800 space-y-2">
+                  <p className="text-xs text-zinc-500">
+                    Provide context and instructions for AI agents working on this issue and its children.
+                  </p>
+                  {isEditingAIContext ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editAIContext}
+                        onChange={(e) => setEditAIContext(e.target.value)}
+                        placeholder="e.g. Use the existing auth middleware pattern. All new endpoints need unit tests. Prefer composition over inheritance..."
+                        rows={5}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm
+                                   focus:outline-none focus:border-purple-500 resize-none placeholder:text-zinc-600"
+                        autoFocus
+                        onBlur={() => {
+                          if (editAIContext !== (issue.aiContext || '')) {
+                            onUpdate({ aiContext: editAIContext || undefined });
+                          }
+                          setIsEditingAIContext(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setEditAIContext(issue.aiContext || '');
+                            setIsEditingAIContext(false);
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-zinc-600">
+                        Saves on blur. Press Esc to cancel.
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      className="min-h-[40px] px-3 py-2 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors"
+                      onClick={() => {
+                        setEditAIContext(issue.aiContext || '');
+                        setIsEditingAIContext(true);
+                      }}
+                    >
+                      {issue.aiContext ? (
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{issue.aiContext}</p>
+                      ) : (
+                        <p className="text-sm text-zinc-600 italic">Click to add AI context...</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Properties */}

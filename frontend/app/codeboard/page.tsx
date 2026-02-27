@@ -7,9 +7,10 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, RefreshCw, LayoutGrid, List, Sparkles, Layers, GitCommit, Keyboard, FolderInput, Rocket } from 'lucide-react';
-import { useProjects, useIssues, useCreateIssue, useUpdateIssue, useDeleteIssue, useAIStatus, useExecutionSessions, useProjectLabels, type ExecutionSession } from '@/hooks/useCodeBoard';
+import { useProjects, useIssues, useCreateIssue, useUpdateIssue, useDeleteIssue, useAIStatus, useExecutionSessions, useStopExecution, useProjectLabels, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { KanbanBoard, EpicSwimlanesBoard, HierarchyListView, FilterBar, CreateIssueModal, IssueDetailModal, ExecutionModal, SemanticSearchPanel, FeatureExecutionPanel, FeatureSelector } from '@/components/codeboard';
 import { FloatingExecutionStatus } from '@/components/codeboard/FloatingExecutionStatus';
+import { GlobalAgentStatusBar, FloatingAgentStatusBar } from '@/components/codeboard/GlobalAgentStatusBar';
 import { AIBreakdownModal } from '@/components/codeboard/AIBreakdownModal';
 import { GitSyncPanel } from '@/components/codeboard/GitSyncPanel';
 import { KeyboardShortcutsHelp } from '@/components/codeboard/KeyboardShortcutsHelp';
@@ -82,6 +83,14 @@ export default function CodeBoardPage() {
   const createIssue = useCreateIssue();
   const updateIssue = useUpdateIssue();
   const deleteIssue = useDeleteIssue();
+  const stopExecution = useStopExecution();
+
+  // Stop all running executions
+  const handleStopAllExecutions = useCallback(async () => {
+    if (!executionSessions) return;
+    const running = executionSessions.filter(s => s.status === 'running' || s.status === 'pending');
+    await Promise.allSettled(running.map(s => stopExecution.mutateAsync(s.session_id)));
+  }, [executionSessions, stopExecution]);
 
   // Derived data - needs to be before keyboard shortcuts
   const rawIssues = issuesData?.items || [];
@@ -668,6 +677,16 @@ export default function CodeBoardPage() {
         </div>
       </div>
 
+      {/* Global Agent Status Bar */}
+      <GlobalAgentStatusBar
+        projectId={selectedProjectId || undefined}
+        onSessionClick={(session) => {
+          setActiveExecution(session);
+          setIsExecutionMinimized(false);
+        }}
+        onStopAll={handleStopAllExecutions}
+      />
+
       {/* Content */}
       <div className="flex-1 overflow-hidden p-6">
         {!selectedProjectId ? (
@@ -794,6 +813,18 @@ export default function CodeBoardPage() {
             setIsExecutionMinimized(false);
             refetchIssues();
           }}
+        />
+      )}
+
+      {/* Floating Agent Status - visible above AutoPilot modal */}
+      {featureExecutionIssue && (
+        <FloatingAgentStatusBar
+          projectId={selectedProjectId || undefined}
+          onSessionClick={(session) => {
+            setActiveExecution(session);
+            setIsExecutionMinimized(false);
+          }}
+          onStopAll={handleStopAllExecutions}
         />
       )}
 

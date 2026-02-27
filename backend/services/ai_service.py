@@ -418,7 +418,7 @@ Return ONLY the JSON array."""
                 return self._extract_json_array(content)
             return []
         except Exception as e:
-            print(f"Error in feature breakdown: {e}")
+            logger.error(f"Error in feature breakdown: {e}", exc_info=True)
             return []
 
     async def suggest_status_update(
@@ -470,7 +470,7 @@ Common patterns:
                     return suggestion
             return None
         except Exception as e:
-            print(f"Error suggesting status: {e}")
+            logger.error(f"Error suggesting status: {e}", exc_info=True)
             return None
 
     async def detect_potential_bug(
@@ -506,7 +506,7 @@ Return ONLY the JSON object, no other text."""
                     return result
             return {"is_bug": False}
         except Exception as e:
-            print(f"Error detecting bug: {e}")
+            logger.error(f"Error detecting bug: {e}", exc_info=True)
             return {"is_bug": False}
 
     async def generate_qa_tasks(
@@ -547,7 +547,7 @@ Return ONLY a JSON array of tasks, no other text."""
                 return self._extract_json_array(content)
             return []
         except Exception as e:
-            print(f"Error generating QA tasks: {e}")
+            logger.error(f"Error generating QA tasks: {e}", exc_info=True)
             return []
 
     async def hierarchical_breakdown_feature(
@@ -636,7 +636,7 @@ Return ONLY the JSON object, no other text."""
                 "stories": []
             }
         except Exception as e:
-            print(f"Error in hierarchical breakdown: {e}")
+            logger.error(f"Error in hierarchical breakdown: {e}", exc_info=True)
             raise ValueError(f"Failed to generate breakdown: {e}")
 
 

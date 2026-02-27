@@ -24,6 +24,8 @@ import re
 import struct
 import termios
 
+from services.session_pool import session_pool
+
 
 class PathValidationError(Exception):
     """Raised when path validation fails"""
@@ -116,6 +118,7 @@ class TerminalSession:
     issue_id: str
     issue_key: str
     issue_title: str
+    project_id: str
     provider: ExecutionProvider
     status: ExecutionStatus
     process: Optional[subprocess.Popen] = None
@@ -142,6 +145,8 @@ class TerminalService:
         self._sessions: Dict[str, TerminalSession] = {}
         self._sessions_by_issue: Dict[str, str] = {}  # issue_id -> session_id
         self._pending_completions: Dict[str, bool] = {}  # session_id -> needs_status_update
+        # Cache preservation: track which feature's cache is loaded per project
+        self._active_feature_by_project: Dict[str, str] = {}  # project_path -> feature_issue_id
 
     def get_session(self, session_id: str) -> Optional[TerminalSession]:
         """Get a session by ID"""
@@ -157,6 +162,14 @@ class TerminalService:
     def get_all_sessions(self) -> List[TerminalSession]:
         """Get all sessions"""
         return list(self._sessions.values())
+
+    def get_running_sessions(self) -> List[TerminalSession]:
+        """Get all currently running sessions"""
+        return [s for s in self._sessions.values() if s.status == ExecutionStatus.RUNNING]
+
+    def get_running_count(self) -> int:
+        """Get the number of currently running sessions"""
+        return len(self.get_running_sessions())
 
     def _parse_progress(self, session: TerminalSession, line: str):
         """Parse Claude Code output to track progress and phase"""
@@ -345,6 +358,9 @@ class TerminalService:
                     pass
             session.completed_at = datetime.utcnow()
 
+            # Release the pool slot (cleans up worktree if one was created)
+            session_pool.release(session_id)
+
     def _process_stream_json_event(self, session: TerminalSession, line: str):
         """Process a stream-json event from Claude CLI"""
         if not line:
@@ -445,10 +461,21 @@ class TerminalService:
         issue_type: str,
         provider: ExecutionProvider,
         project_path: str,
+        project_id: str = "",
         parent_context: Optional[str] = None,
+        prompt_override: Optional[str] = None,
+        feature_id: Optional[str] = None,
         on_complete: Optional[CompletionCallback] = None,
+        db: Optional[object] = None,
     ) -> TerminalSession:
-        """Start a new terminal session for executing a task"""
+        """Start a new terminal session for executing a task.
+
+        Args:
+            db: Optional AsyncSession for dependency checking. When provided,
+                the dependency_analyzer verifies this task's blocking
+                constraints before allowing execution. When None, dependency
+                checks are skipped (backward-compatible).
+        """
 
         # Validate the project path for security
         try:
@@ -461,6 +488,7 @@ class TerminalService:
                 issue_id=issue_id,
                 issue_key=issue_key,
                 issue_title=issue_title,
+                project_id=project_id,
                 provider=provider,
                 status=ExecutionStatus.FAILED,
                 started_at=datetime.utcnow(),
@@ -479,52 +507,80 @@ class TerminalService:
         if existing and existing.status == ExecutionStatus.RUNNING:
             return existing
 
-        # GLOBAL CONCURRENCY CHECK: Only allow one execution at a time
-        # This prevents issues when frontend crashes and restarts, or when
-        # manual execution is started while auto-pilot is running
-        running_sessions = [s for s in self._sessions.values() if s.status == ExecutionStatus.RUNNING]
-        if running_sessions:
-            # Return a "queued" response - don't start a new execution
-            running = running_sessions[0]
+        # DEPENDENCY CHECK: If a db session is provided, verify this task's
+        # blocking dependencies are satisfied before allowing execution.
+        # This enables parallel execution of independent tasks while
+        # respecting BLOCKS/IS_BLOCKED_BY link constraints.
+        if db is not None:
+            from services.dependency_analyzer import dependency_analyzer
+            can_run, reason = await dependency_analyzer.can_execute(db, issue_id)
+            if not can_run:
+                session_id = str(uuid.uuid4())
+                session = TerminalSession(
+                    id=session_id,
+                    issue_id=issue_id,
+                    issue_key=issue_key,
+                    issue_title=issue_title,
+                    project_id=project_id,
+                    provider=provider,
+                    status=ExecutionStatus.FAILED,
+                    started_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
+                    error=f"Dependency check failed: {reason}",
+                )
+                session.output.append(f"[BLOCKED] {reason}")
+                self._sessions[session_id] = session
+                return session
+
+        # POOL CONCURRENCY CHECK: Use session pool to manage concurrent slots
+        # The pool enforces max_sessions limit (default 3). When full, new
+        # executions are rejected with a clear error.
+        if session_pool.is_full:
+            active_keys = [s.issue_key for s in session_pool.get_active_sessions()]
             session_id = str(uuid.uuid4())
             session = TerminalSession(
                 id=session_id,
                 issue_id=issue_id,
                 issue_key=issue_key,
                 issue_title=issue_title,
+                project_id=project_id,
                 provider=provider,
                 status=ExecutionStatus.FAILED,
                 started_at=datetime.utcnow(),
                 completed_at=datetime.utcnow(),
-                error=f"Another task is already running: {running.issue_key}. Please wait for it to complete.",
+                error=f"Session pool is full ({session_pool.max_sessions} max). Active: {', '.join(active_keys)}",
             )
-            session.output.append(f"[BLOCKED] Cannot start - {running.issue_key} is still running")
-            session.output.append(f"[INFO] Wait for the current task to complete before starting another")
+            session.output.append(f"[BLOCKED] Session pool full - {', '.join(active_keys)} are running")
+            session.output.append(f"[INFO] Wait for a task to complete before starting another")
             self._sessions[session_id] = session
             return session
 
         session_id = str(uuid.uuid4())
 
         # Build the prompt for Claude Code
-        prompt_parts = [
-            f"I need you to implement the following {issue_type}:",
-            f"",
-            f"**{issue_key}: {issue_title}**",
-            f"",
-        ]
+        if prompt_override:
+            # Use the rich context prompt from context_builder
+            prompt = prompt_override
+        else:
+            # Fallback: basic prompt (for backward compatibility)
+            prompt_parts = [
+                f"I need you to implement the following {issue_type}:",
+                f"",
+                f"**{issue_key}: {issue_title}**",
+                f"",
+            ]
 
-        if parent_context:
-            prompt_parts.append(f"Context: {parent_context}")
-            prompt_parts.append("")
+            if parent_context:
+                prompt_parts.append(f"Context: {parent_context}")
+                prompt_parts.append("")
 
-        if issue_description:
-            prompt_parts.append("Description:")
-            prompt_parts.append(issue_description)
-            prompt_parts.append("")
+            if issue_description:
+                prompt_parts.append("Description:")
+                prompt_parts.append(issue_description)
+                prompt_parts.append("")
 
-        prompt_parts.append("Please implement this task. When you're done, summarize what you did.")
-
-        prompt = "\n".join(prompt_parts)
+            prompt_parts.append("Please implement this task. When you're done, summarize what you did.")
+            prompt = "\n".join(prompt_parts)
 
         # Create session
         session = TerminalSession(
@@ -532,6 +588,7 @@ class TerminalService:
             issue_id=issue_id,
             issue_key=issue_key,
             issue_title=issue_title,
+            project_id=project_id,
             provider=provider,
             status=ExecutionStatus.RUNNING,
             started_at=datetime.utcnow(),
@@ -541,10 +598,27 @@ class TerminalService:
         self._sessions[session_id] = session
         self._sessions_by_issue[issue_id] = session_id
 
+        # Acquire a pool slot for concurrency tracking
+        try:
+            pool_slot = session_pool.acquire(session_id, issue_id, issue_key)
+        except RuntimeError as e:
+            # Pool became full between our check and acquire (race condition)
+            session.status = ExecutionStatus.FAILED
+            session.error = str(e)
+            session.completed_at = datetime.utcnow()
+            session.output.append(f"[BLOCKED] {e}")
+            return session
+
+        # Create isolated worktree if multiple sessions are active
+        working_dir = session_pool.create_worktree(session_id, project_path)
+
         # Add initial status message
         session.output.append(f"[INFO] Starting {provider.value} execution...")
         session.output.append(f"[INFO] Task: {issue_key} - {issue_title}")
-        session.output.append(f"[INFO] Working directory: {project_path}")
+        session.output.append(f"[INFO] Working directory: {working_dir}")
+        if working_dir != project_path:
+            session.output.append(f"[INFO] Isolated worktree: {pool_slot.branch_name}")
+        session.output.append(f"[INFO] Pool: {session_pool.active_count}/{session_pool.max_sessions} slots used")
         session.output.append("")
 
         try:
@@ -556,18 +630,29 @@ class TerminalService:
                 if not os.path.exists(claude_path):
                     claude_path = "claude"
 
-                # Clear Claude's project cache to prevent "duplicate tool_use id" errors
-                # This ensures a fresh conversation without corrupted state
+                # Cache preservation: only clear cache when switching features
+                # If executing tasks within the same feature, keep the cache
+                # so Claude retains context from prior tasks in the same feature
                 cache_dir = os.path.join(home_dir, ".claude", "projects")
                 project_cache_name = project_path.replace("/", "-")
                 project_cache_path = os.path.join(cache_dir, project_cache_name)
-                if os.path.exists(project_cache_path):
+
+                prev_feature = self._active_feature_by_project.get(project_path)
+                same_feature = feature_id and prev_feature == feature_id
+
+                if os.path.exists(project_cache_path) and not same_feature:
                     import shutil
                     try:
                         shutil.rmtree(project_cache_path)
-                        session.output.append("[INFO] Cleared project cache for fresh session")
+                        session.output.append("[INFO] Cleared project cache (new feature context)")
                     except Exception as e:
                         session.output.append(f"[WARN] Could not clear cache: {e}")
+                elif same_feature:
+                    session.output.append("[INFO] Keeping cache (same feature context)")
+
+                # Track the active feature for this project
+                if feature_id:
+                    self._active_feature_by_project[project_path] = feature_id
 
                 # Build command - use stream-json for real-time output streaming
                 # Note: Requires Claude Code 2.0.76 (2.1.19 has duplicate tool_use ID bug)
@@ -587,10 +672,10 @@ class TerminalService:
                 env.pop('CLAUDECODE', None)
                 env.pop('CLAUDE_CODE_ENTRYPOINT', None)
 
-                # Run in background thread
+                # Run in background thread (use working_dir for worktree isolation)
                 thread = threading.Thread(
                     target=self._run_claude_async,
-                    args=(session_id, cmd, project_path, env),
+                    args=(session_id, cmd, working_dir, env),
                     daemon=True
                 )
                 thread.start()
@@ -604,7 +689,7 @@ class TerminalService:
 
                 thread = threading.Thread(
                     target=self._run_claude_async,
-                    args=(session_id, cmd, project_path, env),
+                    args=(session_id, cmd, working_dir, env),
                     daemon=True
                 )
                 thread.start()
@@ -614,11 +699,13 @@ class TerminalService:
             session.error = f"Command not found: {str(e)}"
             session.output.append(f"[ERROR] Command not found: {str(e)}")
             session.completed_at = datetime.utcnow()
+            session_pool.release(session_id)
         except Exception as e:
             session.status = ExecutionStatus.FAILED
             session.error = str(e)
             session.output.append(f"[ERROR] Failed to start: {str(e)}")
             session.completed_at = datetime.utcnow()
+            session_pool.release(session_id)
 
         return session
 
@@ -642,6 +729,10 @@ class TerminalService:
         session.status = ExecutionStatus.CANCELLED
         session.completed_at = datetime.utcnow()
         session.output.append("[INFO] Execution cancelled by user")
+
+        # Release pool slot (the async runner's finally block may also call this,
+        # but release() is idempotent - second call is a no-op)
+        session_pool.release(session_id)
         return True
 
     def get_output(self, session_id: str, since_line: int = 0) -> List[str]:
@@ -661,6 +752,8 @@ class TerminalService:
             del self._sessions[session_id]
             # Also clean up pending completion flag
             self._pending_completions.pop(session_id, None)
+            # Defensive: release pool slot if still held (normally released in _run_claude_async)
+            session_pool.release(session_id)
 
     def check_pending_completion(self, session_id: str) -> bool:
         """Check if a session has pending auto-completion (and consume the flag)"""

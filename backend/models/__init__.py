@@ -7,6 +7,8 @@ from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Pro
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation
+from models.agent_registry import AgentProfile
+from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
 from models.schemas import (
     IssueType,
     IssueStatus,
@@ -51,6 +53,19 @@ from models.schemas import (
     FeatureDocumentationUpdate,
     FeatureDocumentationResponse,
 )
+from models.pipeline_schemas import (
+    PipelineStatus,
+    StageStatus,
+    StageName,
+    PipelineExecutionCreate,
+    PipelineExecutionUpdate,
+    PipelineExecutionResponse,
+    PipelineExecutionSummary,
+    PipelineStageResponse,
+    PipelineConfigCreate,
+    PipelineConfigUpdate,
+    PipelineConfigResponse,
+)
 
 __all__ = [
     # Database
@@ -76,6 +91,12 @@ __all__ = [
     # SQLAlchemy Models - Documentation
     "ExecutionSummary",
     "FeatureDocumentation",
+    # SQLAlchemy Models - Agent Registry
+    "AgentProfile",
+    # SQLAlchemy Models - Pipeline
+    "PipelineExecution",
+    "PipelineStage",
+    "PipelineConfig",
     # Enums - Issues
     "IssueType",
     "IssueStatus",
@@ -86,6 +107,10 @@ __all__ = [
     "QATaskStatus",
     "QATaskType",
     "QAPriority",
+    # Enums - Pipeline
+    "PipelineStatus",
+    "StageStatus",
+    "StageName",
     # Pydantic Schemas - Issues
     "IssueBase",
     "IssueCreate",
@@ -121,4 +146,13 @@ __all__ = [
     "FeatureDocumentationCreate",
     "FeatureDocumentationUpdate",
     "FeatureDocumentationResponse",
+    # Pydantic Schemas - Pipeline
+    "PipelineExecutionCreate",
+    "PipelineExecutionUpdate",
+    "PipelineExecutionResponse",
+    "PipelineExecutionSummary",
+    "PipelineStageResponse",
+    "PipelineConfigCreate",
+    "PipelineConfigUpdate",
+    "PipelineConfigResponse",
 ]

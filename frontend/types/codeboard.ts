@@ -38,6 +38,8 @@ export interface Issue {
   estimatedHours?: number;
   actualHours?: number;
   complexity?: Complexity;
+  // AI Context
+  aiContext?: string;
   children?: Issue[];
 }
 
@@ -117,6 +119,8 @@ export interface UpdateIssueData {
   estimatedHours?: number;
   actualHours?: number;
   complexity?: Complexity;
+  // AI Context
+  aiContext?: string;
 }
 
 // Status column configuration

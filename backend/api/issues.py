@@ -541,6 +541,27 @@ async def update_issue(
     # Re-embed for RAG search
     await embed_issue_for_rag(issue)
 
+    # Embed aiContext into ChromaDB when the field changes
+    if "aiContext" in update_data:
+        try:
+            new_ai_context = update_data["aiContext"]
+            if new_ai_context:
+                await rag_service.embed_ai_context(
+                    project_id=issue.projectId,
+                    issue_id=issue.id,
+                    issue_key=issue.key,
+                    issue_type=issue.type,
+                    ai_context=new_ai_context,
+                )
+            else:
+                # aiContext was cleared — remove the embedding
+                await rag_service.delete_ai_context_embedding(
+                    project_id=issue.projectId,
+                    issue_id=issue.id,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to embed aiContext for {issue.key}: {e}")
+
     return IssueResponse.model_validate(issue)
 
 
@@ -562,9 +583,10 @@ async def delete_issue(
     await db.delete(issue)
     await db.commit()
 
-    # Remove from RAG store
+    # Remove from RAG store (both issue embedding and aiContext embedding)
     try:
         await rag_service.delete_issue_embedding(project_id, issue_id)
+        await rag_service.delete_ai_context_embedding(project_id, issue_id)
     except Exception as e:
         logger.warning(f"Failed to delete RAG embedding for issue {issue_id}: {e}")
 

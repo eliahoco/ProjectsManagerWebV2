@@ -114,6 +114,8 @@ class IssueUpdate(BaseModel):
     estimatedHours: Optional[float] = Field(None, ge=0)
     actualHours: Optional[float] = Field(None, ge=0)
     complexity: Optional[Complexity] = None
+    # AI Context
+    aiContext: Optional[str] = None
 
 
 class IssueResponse(IssueBase):
@@ -135,6 +137,8 @@ class IssueResponse(IssueBase):
     estimatedHours: Optional[float] = None
     actualHours: Optional[float] = None
     complexity: Optional[str] = None
+    # AI Context
+    aiContext: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -4,6 +4,7 @@
  * with error handling and retry logic
  */
 
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Issue,
@@ -811,6 +812,7 @@ export interface ExecutionSession {
   session_id: string;
   issue_id: string;
   issue_key: string;
+  project_id?: string;
   provider: 'claude_code' | 'local_ai';
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   started_at?: string;
@@ -821,6 +823,10 @@ export interface ExecutionSession {
   current_action?: string;
   phase?: string;
   error?: string;
+  // Pipeline tracking
+  pipeline_stage?: string;  // IMPLEMENT, VERIFY, FIX, RE_VERIFY
+  retry_count?: number;
+  max_retries?: number;
 }
 
 export interface ExecutionOutput {
@@ -985,17 +991,106 @@ export function useCompleteExecution() {
   });
 }
 
-// List all execution sessions
+// SSE backend URL - connect directly to FastAPI for streaming
+const SSE_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8401';
+
+/**
+ * SSE hook for real-time execution session updates.
+ * Connects directly to the FastAPI backend SSE endpoint.
+ */
+export function useExecutionSessionsSSE() {
+  const [sessions, setSessions] = useState<ExecutionSession[]>([]);
+  const [connected, setConnected] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    function connect() {
+      // Clean up any existing connection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      const eventSource = new EventSource(
+        `${SSE_BACKEND_URL}/api/execute/sessions/stream`
+      );
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        if (isMounted) {
+          setConnected(true);
+        }
+      };
+
+      eventSource.onmessage = (event) => {
+        if (!isMounted) return;
+        try {
+          const data = JSON.parse(event.data) as ExecutionSession[];
+          setSessions(data);
+        } catch (e) {
+          console.error('[SSE] Failed to parse execution sessions data:', e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (!isMounted) return;
+        setConnected(false);
+        // EventSource auto-reconnects on most errors, but if it's in CLOSED state
+        // we need to reconnect manually after a delay
+        if (eventSource.readyState === EventSource.CLOSED) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isMounted) {
+              connect();
+            }
+          }, 3000);
+        }
+      };
+    }
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  return { data: sessions, connected };
+}
+
+/**
+ * List all execution sessions with SSE for real-time updates
+ * and polling as a fallback when SSE is disconnected.
+ */
 export function useExecutionSessions() {
-  return useQuery<ExecutionSession[]>({
+  const sse = useExecutionSessionsSSE();
+
+  // Polling fallback - only active when SSE is disconnected
+  const polling = useQuery<ExecutionSession[]>({
     queryKey: ['executions'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/execute/sessions`);
       if (!res.ok) return [];
       return res.json();
     },
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: sse.connected ? false : 5000, // Disable polling when SSE is connected
+    enabled: !sse.connected, // Only fetch when SSE is not connected
   });
+
+  return {
+    data: sse.connected ? sse.data : polling.data,
+    isLoading: !sse.connected && polling.isLoading,
+    connected: sse.connected,
+  };
 }
 
 // ==================== Comments Hooks ====================

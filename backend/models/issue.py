@@ -70,6 +70,10 @@ class Issue(Base):
     actualHours = Column(Float, nullable=True)  # Actual hours spent
     complexity = Column(String, nullable=True)  # LOW, MEDIUM, HIGH, CRITICAL
 
+    # AI Context — free-text field for guiding AI agents during execution
+    # Stored in ChromaDB for RAG retrieval from ancestor issues
+    aiContext = Column(Text, nullable=True)
+
     # Relationships
     parent = relationship("Issue", remote_side=[id], back_populates="children")
     children = relationship("Issue", back_populates="parent")

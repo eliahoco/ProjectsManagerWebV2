@@ -3,11 +3,14 @@ Execution API - Endpoints for AI task execution
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
+import asyncio
+import json
 
 from models import get_db, Issue, Project, Comment, Activity
 import uuid
@@ -18,6 +21,10 @@ from services.terminal_service import (
     ExecutionPhase,
     TerminalSession,
 )
+from services.context_builder import build_execution_context
+from services.dependency_analyzer import dependency_analyzer
+from services.autopilot_service import autopilot_service
+from services.session_pool import session_pool
 from utils.db_queries import bulk_update_descendant_status, get_all_descendants_with_details, cascade_status_to_parents, cascade_done_to_parents, cascade_in_progress_to_parents
 
 router = APIRouter(prefix="/execute")
@@ -33,6 +40,7 @@ class ExecutionResponse(BaseModel):
     session_id: str
     issue_id: str
     issue_key: str
+    project_id: str = ""
     provider: str
     status: str
     started_at: Optional[str] = None
@@ -43,6 +51,10 @@ class ExecutionResponse(BaseModel):
     phase: str = "initializing"
     progress_percent: int = 0
     current_action: str = "Starting..."
+    # Pipeline tracking
+    pipeline_stage: Optional[str] = None
+    retry_count: Optional[int] = None
+    max_retries: Optional[int] = None
 
 
 class ExecutionOutputResponse(BaseModel):
@@ -72,6 +84,7 @@ def session_to_response(session: TerminalSession) -> ExecutionResponse:
         session_id=session.id,
         issue_id=session.issue_id,
         issue_key=session.issue_key,
+        project_id=session.project_id,
         provider=session.provider.value,
         status=session.status.value,
         started_at=session.started_at.isoformat() if session.started_at else None,
@@ -115,15 +128,24 @@ async def start_execution(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get parent context if exists
-    parent_context = None
-    if issue.parentId:
-        parent_result = await db.execute(
-            select(Issue).where(Issue.id == issue.parentId)
-        )
-        parent = parent_result.scalar_one_or_none()
-        if parent:
-            parent_context = f"Part of {parent.type} '{parent.key}: {parent.title}'"
+    # Build rich execution context (parent chain + siblings + description)
+    rich_prompt = await build_execution_context(
+        db=db,
+        issue_id=issue.id,
+        issue_key=issue.key,
+        issue_title=issue.title,
+        issue_type=issue.type,
+        issue_description=issue.description or "",
+    )
+
+    # Resolve the root feature ID for cache preservation
+    from services.context_builder import get_parent_chain
+    parent_chain = await get_parent_chain(db, issue.id)
+    feature_id = None
+    for ancestor in parent_chain:
+        if ancestor["type"] == "FEATURE":
+            feature_id = ancestor["id"]
+            break
 
     # Determine provider
     try:
@@ -136,7 +158,7 @@ async def start_execution(
     await cascade_in_progress_to_parents(db, issue.id)
     await db.commit()
 
-    # Start execution
+    # Start execution with rich context prompt and dependency checking
     session = await terminal_service.start_execution(
         issue_id=issue.id,
         issue_key=issue.key,
@@ -145,7 +167,10 @@ async def start_execution(
         issue_type=issue.type,
         provider=provider,
         project_path=project.path,
-        parent_context=parent_context,
+        project_id=project.id,
+        prompt_override=rich_prompt,
+        feature_id=feature_id,
+        db=db,
     )
 
     return session_to_response(session)
@@ -302,6 +327,64 @@ async def complete_execution(
         "status": "DONE",
         "children_updated": children_updated
     }
+
+
+@router.get("/sessions/stream")
+async def stream_execution_sessions():
+    """SSE endpoint for real-time execution session updates.
+
+    Streams execution session data every 500ms as Server-Sent Events.
+    Much faster than the 2-second polling interval of GET /sessions.
+    Falls back gracefully - clients should use GET /sessions as fallback.
+    """
+    async def event_generator():
+        last_data = None
+        while True:
+            try:
+                sessions = terminal_service.get_all_sessions()
+                data = json.dumps([{
+                    "session_id": s.id,
+                    "issue_id": s.issue_id,
+                    "issue_key": s.issue_key,
+                    "project_id": s.project_id,
+                    "provider": s.provider.value,
+                    "status": s.status.value,
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                    "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+                    "output_lines": len(s.output),
+                    "error": s.error,
+                    "phase": s.phase.value,
+                    "progress_percent": s.progress_percent,
+                    "current_action": s.current_action,
+                    "pipeline_stage": None,  # TODO: from pipeline executor
+                    "retry_count": None,
+                    "max_retries": None,
+                } for s in sessions])
+
+                # Only send if data changed (avoid unnecessary client processing)
+                if data != last_data:
+                    yield f"data: {data}\n\n"
+                    last_data = data
+                else:
+                    # Send a heartbeat comment to keep connection alive
+                    yield ": heartbeat\n\n"
+
+            except Exception as e:
+                # Send error event but keep connection open
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+            # Check every 500ms for updates (much faster than 2s polling)
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/sessions", response_model=List[ExecutionResponse])
@@ -520,3 +603,172 @@ async def generate_execution_documentation(
         tasks_documented=total_count,
         comment_id=comment.id,
     )
+
+
+# ===========================================================================
+# AutoPilot & Dependency Graph Endpoints
+# ===========================================================================
+
+class AutoPilotBatchRequest(BaseModel):
+    """Request to execute a batch of tasks via AutoPilot."""
+    provider: str = "claude_code"
+    max_parallel: int = 0  # 0 = use pool's available slots
+
+
+class AutoPilotBatchResponse(BaseModel):
+    """Response for a batch execution request."""
+    parent_id: str
+    tasks_started: int
+    results: List[dict]
+
+
+@router.get("/autopilot/{parent_id}/next-batch")
+async def get_next_batch(
+    parent_id: str,
+    max_parallel: int = Query(0, ge=0, description="Max tasks to return (0=pool limit)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get the next batch of tasks that can run in parallel under a parent.
+
+    Analyzes dependency constraints and pool capacity to determine which
+    leaf tasks (TASK, SUBTASK, BUG) are ready for execution.
+    """
+    # Validate parent exists
+    result = await db.execute(
+        select(Issue).where(Issue.id == parent_id)
+    )
+    parent = result.scalar_one_or_none()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent issue not found")
+
+    batch = await autopilot_service.get_next_batch(db, parent_id, max_parallel)
+    return {
+        "parent_id": parent_id,
+        "parent_key": parent.key,
+        "available_slots": session_pool.available_slots,
+        "batch": batch,
+        "count": len(batch),
+    }
+
+
+@router.post("/autopilot/{parent_id}/execute-batch", response_model=AutoPilotBatchResponse)
+async def execute_batch(
+    parent_id: str,
+    request: AutoPilotBatchRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute the next batch of runnable tasks under a parent in parallel.
+
+    Discovers runnable tasks, starts them all, and returns the results.
+    """
+    # Validate parent exists and get project
+    result = await db.execute(
+        select(Issue).where(Issue.id == parent_id)
+    )
+    parent = result.scalar_one_or_none()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent issue not found")
+
+    project_result = await db.execute(
+        select(Project).where(Project.id == parent.projectId)
+    )
+    project = project_result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get runnable batch
+    batch = await autopilot_service.get_next_batch(
+        db, parent_id, request.max_parallel
+    )
+
+    if not batch:
+        return AutoPilotBatchResponse(
+            parent_id=parent_id,
+            tasks_started=0,
+            results=[],
+        )
+
+    # Execute the batch
+    results = await autopilot_service.execute_batch(
+        db=db,
+        tasks=batch,
+        provider=request.provider,
+        project_path=project.path,
+        project_id=project.id,
+    )
+
+    started = sum(1 for r in results if r.get("status") == "running")
+
+    return AutoPilotBatchResponse(
+        parent_id=parent_id,
+        tasks_started=started,
+        results=results,
+    )
+
+
+@router.get("/autopilot/{parent_id}/status")
+async def get_autopilot_status(
+    parent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get comprehensive AutoPilot status for a parent issue.
+
+    Includes progress, running sessions, next batch, pool status,
+    and dependency graph.
+    """
+    status = await autopilot_service.get_autopilot_status(db, parent_id)
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+    return status
+
+
+@router.get("/dependencies/{parent_id}/graph")
+async def get_dependency_graph(
+    parent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get the dependency graph for all children of a parent issue.
+
+    Returns nodes (issues) and edges (BLOCKS links) for visualization,
+    along with which tasks are currently runnable.
+    """
+    # Validate parent exists
+    result = await db.execute(
+        select(Issue).where(Issue.id == parent_id)
+    )
+    parent = result.scalar_one_or_none()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent issue not found")
+
+    graph = await dependency_analyzer.get_dependency_graph(db, parent_id)
+    graph["parent_key"] = parent.key
+    graph["parent_title"] = parent.title
+    return graph
+
+
+@router.get("/dependencies/{issue_id}/can-execute")
+async def check_can_execute(
+    issue_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Check if a specific issue can execute right now.
+
+    Verifies type, status, and blocking dependency constraints.
+    """
+    can_run, reason = await dependency_analyzer.can_execute(db, issue_id)
+    return {
+        "issue_id": issue_id,
+        "can_execute": can_run,
+        "reason": reason,
+    }
+
+
+@router.get("/pool/status")
+async def get_pool_status():
+    """Get the current session pool status (capacity, active sessions)."""
+    return session_pool.get_pool_status()

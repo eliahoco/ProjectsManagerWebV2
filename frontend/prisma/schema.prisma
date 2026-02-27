@@ -131,6 +131,10 @@ model Issue {
   actualHours           Float?    // Actual hours spent
   complexity            String?   // LOW, MEDIUM, HIGH, CRITICAL
 
+  // AI Context — free-text guidance for AI agents during execution
+  // Embedded into ChromaDB for RAG retrieval from ancestor issues
+  aiContext             String?
+
   // Relations - Implementation Documentation
   executionSummaries    ExecutionSummary[]
   implementationNotes   ImplementationNote[]
