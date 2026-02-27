@@ -5,10 +5,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, FolderOpen, RefreshCw, Database, Terminal, Save, Check, Loader2, Github, Eye, EyeOff } from 'lucide-react';
+import { Settings, FolderOpen, RefreshCw, Database, Terminal, Save, Check, Loader2, Github, Eye, EyeOff, Brain, Sparkles, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8401';
 
 interface SettingsData {
   projectsDir: string;
@@ -19,6 +21,25 @@ interface SettingsData {
   githubEmail: string;
   githubToken: string;
   githubAutoConnect: string;
+}
+
+interface ApiKeyStatus {
+  configured: boolean;
+  masked_key: string;
+  provider: string;
+  available: boolean;
+}
+
+interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
+interface OllamaStatus {
+  available: boolean;
+  models: OllamaModel[];
+  current_model: string;
 }
 
 export default function SettingsPage() {
@@ -39,8 +60,21 @@ export default function SettingsPage() {
   const [showToken, setShowToken] = useState(false);
   const [testingGithub, setTestingGithub] = useState(false);
 
+  // Anthropic API Key state
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
+  const [testingApiKey, setTestingApiKey] = useState(false);
+  const [apiKeyTestResult, setApiKeyTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Ollama state
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+
   useEffect(() => {
     fetchSettings();
+    fetchApiKeyStatus();
+    fetchOllamaStatus();
   }, []);
 
   const fetchSettings = async () => {
@@ -54,6 +88,88 @@ export default function SettingsPage() {
       console.error('Failed to fetch settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchApiKeyStatus = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai/api-key`);
+      if (res.ok) {
+        const data = await res.json();
+        setApiKeyStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch API key status:', error);
+    }
+  };
+
+  const fetchOllamaStatus = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai/ollama/models`);
+      if (res.ok) {
+        setOllamaStatus(await res.json());
+      }
+    } catch (error) {
+      console.error('Failed to fetch Ollama status:', error);
+    }
+  };
+
+  const handleSelectOllamaModel = async (model: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai/ollama/model`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      if (res.ok) {
+        fetchOllamaStatus();
+        fetchApiKeyStatus();
+        toast.success('Model Selected', `Ollama model set to ${model}`);
+      }
+    } catch (error) {
+      toast.error('Failed', 'Could not set Ollama model');
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!newApiKey.trim()) return;
+    setSavingApiKey(true);
+    setApiKeyTestResult(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai/api-key`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: newApiKey.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setApiKeyStatus(data);
+        setNewApiKey('');
+        toast.success('API Key Saved', 'Anthropic API key has been configured');
+      } else {
+        toast.error('Save Failed', data.detail || 'Failed to save API key');
+      }
+    } catch (error) {
+      toast.error('Save Failed', 'Could not connect to backend');
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  const handleTestApiKey = async () => {
+    setTestingApiKey(true);
+    setApiKeyTestResult(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/ai/api-key/test`, { method: 'POST' });
+      const data = await res.json();
+      setApiKeyTestResult({
+        success: data.success,
+        message: data.success ? data.message : data.error,
+      });
+    } catch (error) {
+      setApiKeyTestResult({ success: false, message: 'Could not connect to backend' });
+    } finally {
+      setTestingApiKey(false);
     }
   };
 
@@ -192,6 +308,177 @@ export default function SettingsPage() {
                 <option value="terminal">Terminal.app</option>
                 <option value="alacritty">Alacritty</option>
               </select>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Provider Configuration */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-zinc-800 rounded-lg">
+              <Brain className="h-5 w-5 text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-white font-medium">AI Provider</h3>
+                  <p className="text-sm text-zinc-400 mt-1">
+                    Configure AI for feature breakdown, analysis, and execution
+                  </p>
+                </div>
+                {apiKeyStatus && (
+                  <span className={cn(
+                    'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border',
+                    apiKeyStatus.available
+                      ? 'text-green-400 bg-green-500/10 border-green-500/30'
+                      : 'text-zinc-400 bg-zinc-500/10 border-zinc-500/30'
+                  )}>
+                    {apiKeyStatus.available ? (
+                      <><CheckCircle className="h-3 w-3" /> {apiKeyStatus.provider}</>
+                    ) : (
+                      <><XCircle className="h-3 w-3" /> Not configured</>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-5">
+                {/* Claude API Section */}
+                <div className="border border-zinc-700 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-orange-400 mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Claude (Anthropic API)
+                  </h4>
+
+                  {/* Current key status */}
+                  {apiKeyStatus?.configured && (
+                    <div className="p-3 bg-zinc-800 rounded-lg mb-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-zinc-400">Current Key</span>
+                        <span className="text-zinc-300 font-mono text-xs">{apiKeyStatus.masked_key}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* New key input */}
+                  <div>
+                    <label className="text-sm text-zinc-400">
+                      {apiKeyStatus?.configured ? 'Update API Key' : 'Enter API Key'}
+                    </label>
+                    <div className="relative mt-2">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        value={newApiKey}
+                        onChange={(e) => setNewApiKey(e.target.value)}
+                        placeholder="sk-ant-api03-..."
+                        className="w-full px-4 py-2 pr-10 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Get your key from console.anthropic.com/settings/keys
+                    </p>
+                  </div>
+
+                  {/* Test result */}
+                  {apiKeyTestResult && (
+                    <div className={cn(
+                      'mt-3 p-3 rounded-lg text-sm flex items-center gap-2',
+                      apiKeyTestResult.success
+                        ? 'bg-green-900/30 border border-green-700/50 text-green-400'
+                        : 'bg-red-900/30 border border-red-700/50 text-red-400'
+                    )}>
+                      {apiKeyTestResult.success
+                        ? <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                        : <XCircle className="h-4 w-4 flex-shrink-0" />
+                      }
+                      {apiKeyTestResult.message}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-3 mt-3">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSaveApiKey}
+                      loading={savingApiKey}
+                      disabled={!newApiKey.trim()}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      Save Key
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTestApiKey}
+                      loading={testingApiKey}
+                      disabled={!apiKeyStatus?.configured}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Test Connection
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Ollama Section */}
+                <div className="border border-zinc-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-violet-400 flex items-center gap-2">
+                      <Terminal className="h-4 w-4" />
+                      Ollama (Local AI)
+                    </h4>
+                    <span className={cn(
+                      'text-xs px-2 py-0.5 rounded-full',
+                      ollamaStatus?.available
+                        ? 'text-green-400 bg-green-500/10'
+                        : 'text-zinc-500 bg-zinc-800'
+                    )}>
+                      {ollamaStatus?.available ? 'Running' : 'Not running'}
+                    </span>
+                  </div>
+
+                  {ollamaStatus?.available ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm text-zinc-400">Model</label>
+                        <select
+                          value={ollamaStatus.current_model}
+                          onChange={(e) => handleSelectOllamaModel(e.target.value)}
+                          className="mt-2 w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        >
+                          {ollamaStatus.models.map((m) => (
+                            <option key={m.name} value={m.name}>
+                              {m.name} {m.size ? `(${(m.size / 1e9).toFixed(1)}GB)` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchOllamaStatus}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Refresh Models
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-800 rounded-lg">
+                      <p className="text-sm text-zinc-400">
+                        Ollama is not running. Start it with <code className="text-zinc-300 bg-zinc-700 px-1.5 py-0.5 rounded text-xs">ollama serve</code> to use local AI models.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

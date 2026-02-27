@@ -30,6 +30,58 @@ class AIService:
             self._anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         return self._anthropic_client
 
+    def set_api_key(self, api_key: str):
+        """Update the Anthropic API key at runtime and reinitialize the client."""
+        settings.ANTHROPIC_API_KEY = api_key
+        if api_key and api_key != "your-api-key-here":
+            self._anthropic_client = Anthropic(api_key=api_key)
+        else:
+            self._anthropic_client = None
+
+    def get_masked_api_key(self) -> str:
+        """Return the API key masked for display (show first 10 and last 4 chars)."""
+        key = settings.ANTHROPIC_API_KEY
+        if not key or key == "your-api-key-here":
+            return ""
+        if len(key) <= 14:
+            return key[:4] + "..." + key[-4:]
+        return key[:10] + "..." + key[-4:]
+
+    def get_ollama_models(self) -> list:
+        """Fetch available models from Ollama."""
+        try:
+            response = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+            if response.status_code == 200:
+                data = response.json()
+                return [
+                    {
+                        "name": m.get("name", ""),
+                        "size": m.get("size", 0),
+                        "modified_at": m.get("modified_at", ""),
+                    }
+                    for m in data.get("models", [])
+                ]
+        except Exception:
+            pass
+        return []
+
+    def set_ollama_model(self, model: str):
+        """Set the preferred Ollama model."""
+        self._ollama_model = model
+        logger.info(f"Ollama model set to: {model}")
+
+    def get_ollama_model(self) -> str:
+        """Get the current Ollama model name."""
+        return self._ollama_model
+
+    def is_ollama_available(self) -> bool:
+        """Check if Ollama is running (without caching)."""
+        try:
+            response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+            return response.status_code == 200
+        except Exception:
+            return False
+
     def _check_ollama(self) -> bool:
         """Check if Ollama is running locally"""
         if self._ollama_available is not None:
@@ -90,7 +142,7 @@ class AIService:
         if self._check_ollama():
             return f"ollama/{self._ollama_model}"
         elif self.anthropic_client:
-            return "claude-sonnet-4-20250514"
+            return "claude-sonnet-4-6"
         return "none"
 
     async def _call_ollama(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
@@ -133,7 +185,7 @@ class AIService:
             return None
         try:
             response = self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             )

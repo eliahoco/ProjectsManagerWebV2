@@ -188,6 +188,204 @@ async def ai_status():
     }
 
 
+class ApiKeyUpdate(BaseModel):
+    """Request to update the Anthropic API key"""
+    api_key: str
+
+
+@router.get("/api-key")
+async def get_api_key():
+    """Get the current API key status (masked for security)"""
+    masked = ai_service.get_masked_api_key()
+    return {
+        "configured": bool(masked),
+        "masked_key": masked,
+        "provider": ai_service.get_provider(),
+        "available": ai_service.is_available(),
+    }
+
+
+@router.put("/api-key")
+async def update_api_key(request: ApiKeyUpdate):
+    """Update the Anthropic API key at runtime and persist to .env"""
+    import os
+    import re
+
+    api_key = request.api_key.strip()
+
+    # Basic validation
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key cannot be empty")
+
+    # Update the service at runtime
+    ai_service.set_api_key(api_key)
+
+    # Persist to .env file
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                content = f.read()
+            # Replace existing key or add new one
+            if re.search(r"^ANTHROPIC_API_KEY=.*$", content, re.MULTILINE):
+                content = re.sub(
+                    r"^ANTHROPIC_API_KEY=.*$",
+                    f"ANTHROPIC_API_KEY={api_key}",
+                    content,
+                    flags=re.MULTILINE,
+                )
+            else:
+                content += f"\nANTHROPIC_API_KEY={api_key}\n"
+            with open(env_path, "w") as f:
+                f.write(content)
+            logger.info("Anthropic API key updated and persisted to .env")
+        else:
+            logger.warning(f".env file not found at {env_path}, key set in memory only")
+    except Exception as e:
+        logger.warning(f"Failed to persist API key to .env: {e}")
+        # Key is still set in memory, just won't survive restart
+
+    # Test the key by checking availability
+    available = ai_service.is_available()
+
+    return {
+        "success": True,
+        "configured": True,
+        "masked_key": ai_service.get_masked_api_key(),
+        "available": available,
+        "provider": ai_service.get_provider(),
+    }
+
+
+@router.delete("/api-key")
+async def remove_api_key():
+    """Remove the Anthropic API key"""
+    import os
+    import re
+
+    ai_service.set_api_key("")
+
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                content = f.read()
+            content = re.sub(
+                r"^ANTHROPIC_API_KEY=.*$",
+                "ANTHROPIC_API_KEY=",
+                content,
+                flags=re.MULTILINE,
+            )
+            with open(env_path, "w") as f:
+                f.write(content)
+    except Exception as e:
+        logger.warning(f"Failed to clear API key from .env: {e}")
+
+    return {"success": True, "configured": False}
+
+
+@router.get("/ollama/models")
+async def list_ollama_models():
+    """List available Ollama models"""
+    available = ai_service.is_ollama_available()
+    models = ai_service.get_ollama_models() if available else []
+    return {
+        "available": available,
+        "models": models,
+        "current_model": ai_service.get_ollama_model(),
+    }
+
+
+class OllamaModelSelect(BaseModel):
+    """Request to select an Ollama model"""
+    model: str
+
+
+@router.put("/ollama/model")
+async def select_ollama_model(request: OllamaModelSelect):
+    """Set the preferred Ollama model"""
+    ai_service.set_ollama_model(request.model)
+    return {
+        "success": True,
+        "model": request.model,
+        "provider": ai_service.get_provider(),
+    }
+
+
+@router.post("/api-key/test")
+async def test_api_key():
+    """Test the current API key by making a minimal API call"""
+    if not ai_service.is_available():
+        return {
+            "success": False,
+            "error": "No AI provider available. Please configure an API key.",
+        }
+
+    try:
+        import asyncio
+        import concurrent.futures
+
+        provider = ai_service.get_provider()
+        if provider.startswith("claude"):
+            # Run the sync API call in a thread to avoid blocking the event loop
+            client = ai_service.anthropic_client
+
+            def _test_call():
+                return client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=5,
+                    messages=[{"role": "user", "content": "Say OK"}],
+                )
+
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(pool, _test_call),
+                    timeout=10.0,
+                )
+            return {
+                "success": True,
+                "provider": provider,
+                "message": "Claude API key is valid and working",
+            }
+        else:
+            # Ollama - just check status
+            return {
+                "success": True,
+                "provider": provider,
+                "message": f"Connected to {provider}",
+            }
+    except asyncio.TimeoutError:
+        return {
+            "success": False,
+            "error": "Connection timed out. The API may be temporarily unavailable.",
+        }
+    except Exception as e:
+        error_msg = str(e)
+        logger.warning(f"API key test failed: {error_msg}")
+
+        # Parse specific error types
+        if "credit balance" in error_msg.lower() or "billing" in error_msg.lower():
+            return {
+                "success": False,
+                "error": "API key is valid but account has insufficient credits. Please add credits at console.anthropic.com.",
+            }
+        if "authentication" in error_msg.lower() or "invalid" in error_msg.lower() or "api_key" in error_msg.lower():
+            return {
+                "success": False,
+                "error": "Invalid API key. Please check and try again.",
+            }
+        if "rate_limit" in error_msg.lower():
+            return {
+                "success": False,
+                "error": "Rate limited. The key is valid but temporarily throttled. Try again shortly.",
+            }
+        return {
+            "success": False,
+            "error": f"API test failed: {error_msg[:200]}",
+        }
+
+
 @router.post("/{project_id}/breakdown", response_model=BreakdownResponse)
 async def breakdown_feature(project_id: str, request: BreakdownRequest):
     """
