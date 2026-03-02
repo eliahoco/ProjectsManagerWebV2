@@ -76,3 +76,27 @@ no i see that updated incofmation but the applicaitons like toggeling all togeth
 
 ---
 
+## 2026-02-27 07:39:46
+
+OK what is next
+
+---
+
+## 2026-02-27 07:40:30
+
+one sec before next, how can we test everything you just worked on can you do an end to end testing?
+
+---
+
+## 2026-02-27 14:33:22
+
+anything else on the pipeline?
+
+---
+
+## 2026-02-28 11:43:40
+
+that is great but i can't access the portal, before starting implementing that, please check why i can't access the portal
+
+---
+

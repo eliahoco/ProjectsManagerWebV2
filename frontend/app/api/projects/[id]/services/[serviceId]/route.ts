@@ -48,32 +48,32 @@ export async function POST(
 
     // Handle actions
     if (action === 'stop' || action === 'restart') {
-      if (isRunning) {
-        // Kill process on this port - get PIDs first, then kill each
-        const pidsResult = await execCommand(
-          `lsof -ti :${port.port}`,
-          { timeout: 5000 }
-        );
+      // Try to kill process on this port — attempt even if port check says not running,
+      // because the process may be in a zombie/hung state
+      const pidsResult = await execCommand(
+        `lsof -ti :${port.port}`,
+        { timeout: 5000 }
+      );
 
-        if (pidsResult.stdout.trim()) {
-          const pids = pidsResult.stdout.trim().split('\n').filter(Boolean);
-          for (const pid of pids) {
-            await execCommand(`kill -9 ${pid}`, { timeout: 5000 });
-          }
+      if (pidsResult.stdout.trim()) {
+        const pids = pidsResult.stdout.trim().split('\n').filter(Boolean);
+        for (const pid of pids) {
+          if (!/^\d+$/.test(pid)) continue;
+          await execCommand(`kill -9 ${pid}`, { timeout: 5000 });
         }
+      }
 
-        // Wait for process to stop
-        await new Promise(resolve => setTimeout(resolve, 1500));
+      // Wait for process to stop
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // Verify it actually stopped
-        const stillRunning = await isPortInUse(port.port);
-        if (stillRunning && action === 'stop') {
-          return NextResponse.json({
-            success: false,
-            error: 'Failed to stop service - process still running',
-            data: { port: port.port, status: 'running' }
-          }, { status: 500 });
-        }
+      // Verify it actually stopped
+      const stillRunning = await isPortInUse(port.port);
+      if (stillRunning && action === 'stop') {
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to stop service - process still running',
+          data: { port: port.port, status: 'running' }
+        }, { status: 500 });
       }
     }
 
@@ -88,6 +88,14 @@ export async function POST(
         });
       }
 
+      // Build a clean environment — remove V2 platform vars that pollute child processes
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.DATABASE_URL;
+      delete cleanEnv.PORT;
+      delete cleanEnv.__NEXT_PRIVATE_ORIGIN;
+      delete cleanEnv.__NEXT_PRIVATE_STANDALONE_CONFIG;
+      const serviceEnv = { ...cleanEnv, LAUNCHED_FROM_WEB: '1', NONINTERACTIVE: '1' };
+
       // Try to start the service based on service type
       let startCommand = '';
       const serviceType = port.serviceType?.toUpperCase();
@@ -97,18 +105,38 @@ export async function POST(
       let useDetached = false;
       let startCwd = project.path;
 
-      if (serviceName.includes('next') || serviceName.includes('frontend')) {
-        // Next.js frontend
-        const frontendPath = `${project.path}/frontend`;
+      if (serviceName.includes('next') || (serviceName.includes('frontend') && !serviceName.includes('fastapi'))) {
+        // Next.js frontend — detect whether frontend/ subdir or project root
+        const fs = await import('fs');
+        const hasFrontendDir = fs.existsSync(`${project.path}/frontend/package.json`);
+        const frontendPath = hasFrontendDir ? `${project.path}/frontend` : project.path;
         startCwd = frontendPath;
         startCommand = `npm run dev -- --port ${port.port}`;
         useDetached = true;
       } else if (serviceName.includes('fastapi') || serviceName.includes('backend')) {
-        // FastAPI backend - use full paths for reliability
+        // FastAPI backend — detect entry point: app.main:app (uvicorn) vs main.py (direct)
+        const fs = await import('fs');
         const backendPath = `${project.path}/backend`;
+        const hasAppDir = fs.existsSync(`${backendPath}/app/main.py`);
+        const hasMainPy = fs.existsSync(`${backendPath}/main.py`);
+        const venvPython = `${backendPath}/venv/bin/python`;
+        const hasVenv = fs.existsSync(venvPython);
         startCwd = backendPath;
-        // Export env vars, then run uvicorn with the venv python (cd is handled by execDetached)
-        startCommand = `export $(grep -v '^#' .env | xargs) 2>/dev/null; "${backendPath}/venv/bin/python" -m uvicorn app.main:app --host 0.0.0.0 --port ${port.port}`;
+
+        // Build env export prefix (load .env if it exists)
+        const envPrefix = `export $(grep -v '^#' .env | xargs) 2>/dev/null;`;
+        const pythonBin = hasVenv ? `"${venvPython}"` : 'python3';
+
+        if (hasAppDir) {
+          // Standard uvicorn with app.main:app
+          startCommand = `${envPrefix} ${pythonBin} -m uvicorn app.main:app --host 0.0.0.0 --port ${port.port}`;
+        } else if (hasMainPy) {
+          // Direct main.py execution (e.g. CulinaShare)
+          startCommand = `${envPrefix} ${pythonBin} main.py`;
+        } else {
+          // Fallback: try uvicorn
+          startCommand = `${envPrefix} ${pythonBin} -m uvicorn app.main:app --host 0.0.0.0 --port ${port.port}`;
+        }
         useDetached = true;
       } else if (serviceName.includes('postgres')) {
         // PostgreSQL - typically managed by docker
@@ -120,8 +148,10 @@ export async function POST(
         // ChromaDB
         startCommand = `docker-compose up -d chromadb 2>/dev/null`;
       } else if (serviceName.includes('vite')) {
-        // Vite frontend
-        const frontendPath = `${project.path}/frontend`;
+        // Vite frontend — detect whether frontend/ subdir or project root
+        const fs = await import('fs');
+        const hasFrontendDir = fs.existsSync(`${project.path}/frontend/package.json`);
+        const frontendPath = hasFrontendDir ? `${project.path}/frontend` : project.path;
         startCwd = frontendPath;
         startCommand = `npm run dev`;
         useDetached = true;
@@ -134,22 +164,26 @@ export async function POST(
         if (useDetached) {
           const result = execDetached(startCommand, {
             cwd: startCwd,
-            logFile: `/tmp/service-${port.port}.log`
+            logFile: `/tmp/service-${port.port}.log`,
+            env: serviceEnv,
           });
           console.log(`Started service with PID: ${result.pid}`);
         } else {
           // For docker-compose and other commands, use regular exec
           await execCommand(startCommand, {
             timeout: 30000,
-            cwd: project.path
+            cwd: project.path,
+            env: serviceEnv,
           });
         }
 
-        // Wait for service to start
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Check if it started
-        const nowRunning = await isPortInUse(port.port);
+        // Poll for service to start — check every 2s up to 10s total
+        let nowRunning = false;
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          nowRunning = await isPortInUse(port.port);
+          if (nowRunning) break;
+        }
 
         return NextResponse.json({
           success: true,

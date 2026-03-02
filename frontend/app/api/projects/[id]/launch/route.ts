@@ -36,12 +36,19 @@ export async function POST(
       );
     }
 
-    // Port conflicts are prevented by the central port database — each project
-    // has unique allocated ports, so no pre-launch port checking is needed.
-    // The project's own startup scripts handle restarting their own services.
-
-    // Launch the project
+    // Launch the project (includes pre-launch port validation)
     const result = await launchProject(project.path);
+
+    // Port conflict — exitCode 2 from validateProjectPorts
+    if (result.exitCode === 2) {
+      return NextResponse.json({
+        success: false,
+        error: result.stdout, // Human-readable conflict message
+        portConflicts: (() => {
+          try { return JSON.parse(result.stderr); } catch { return []; }
+        })(),
+      }, { status: 409 }); // 409 Conflict
+    }
 
     if (result.exitCode !== 0) {
       return NextResponse.json({

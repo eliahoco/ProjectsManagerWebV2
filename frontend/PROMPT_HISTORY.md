@@ -242,3 +242,135 @@ trying to stop all services and start them again
 
 ---
 
+## 2026-02-27 07:31:23
+
+claude is working with Sonnet 4 and there is no way to chose the model, it should work with the newest one and the best for code and agents
+
+---
+
+## 2026-02-28 11:57:03
+
+before implementing this feature here is another important feature, i would like to have a better way to injectg features planning into the codeboard, at the moment every project is not famamilier with the codebaord and the project managerv2 application and everytime i need to give a link to the project and it should scann the project code, i want to have some simple way to inject the planning into the system, what do you duggest
+
+---
+
+## 2026-02-28 12:11:17
+
+yes please go ahead and do that
+
+---
+
+## 2026-02-28 16:28:26
+
+ok start implementing the port validation feature
+
+---
+
+## 2026-02-28 20:33:24
+
+can you give me an updated list of the frontend of all applications? i currently dont have access to the portal of the projectmanagerwebV2
+
+---
+
+## 2026-02-28 20:46:02
+
+OK new feature.. watch dog, we already have 50% of that, but we need to have a watchdog that restart/start a service if it stopped for no reason
+
+---
+
+## 2026-03-01 00:00:42
+
+continue
+
+---
+
+## 2026-03-01 00:02:44
+
+enter into the codeboard and approved, start implementing
+
+---
+
+## 2026-03-01 08:35:52
+
+conitnue
+
+---
+
+## 2026-03-01 14:54:51
+
+ok if you implemented the auto restart engin why my services are down
+
+---
+
+## 2026-03-01 14:56:23
+
+enable it on all of them but i don't see a button in the UI to enable that or disable the watchdog
+
+---
+
+## 2026-03-01 14:59:53
+
+please turn the logo into an off-on button with the logo next to it that turn green when it's enable disable will be red
+
+---
+
+## 2026-03-01 15:01:46
+
+that is great so the watchdog is there and eneable, but and this is a very big but... services are down, and i don't get the alerts i used to get on the right buttom side
+
+---
+
+## 2026-03-01 15:36:57
+
+OK i disabled it on projects which i need to leave them shutdown but when i tried to start culinaShareProduction or AIDevPlatformProduction it give me a message that the docker server is down, 
+
+---
+
+## 2026-03-01 17:54:14
+
+open /docker in the browser and test it
+
+---
+
+## 2026-03-01 18:35:16
+
+somthing is totaly borken since the implementation of the watchdog, some projects are running and can't be stopped, others services are crashing , some are not running and the watchdog doesn't even trying to run them
+
+---
+
+## 2026-03-01 19:35:00
+
+ projects are still crashing or just simply restart with no reason, and there are projects like the MeetingsummeryassitanceProduction that are not stopping, even if I press the stop button it is only stoping the fronend and that restart and start again, as i said something is not working in the watchdog mechanizem   
+
+---
+
+## 2026-03-01 19:43:37
+
+open the projects page in the browser and test stopping a project
+
+---
+
+## 2026-03-01 20:11:02
+
+that is fine but the 2 projects which are running for some reason get services stop and than the watchdog is working to start them again, it wasn't like that before implementing the watchdog feature so i'm wondering if the watchdog is not stopping them and then starting the again
+
+---
+
+## 2026-03-01 20:39:25
+
+still crashing and restarting
+
+---
+
+## 2026-03-01 20:42:16
+
+yes but most of the services of the AIdevelopment project are down
+
+---
+
+## 2026-03-02 07:29:36
+
+OK but still same services are down, maybe i'll restart my mac? what do you suggest to do?
+
+---
+

@@ -23,6 +23,16 @@ BACKEND_PORT=8401
 # Create logs directory
 mkdir -p logs
 
+# --- Port Validation ---
+SHARED_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_shared"
+if [[ -f "$SHARED_DIR/validate-ports.sh" ]]; then
+    source "$SHARED_DIR/validate-ports.sh"
+    _parse_args "$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")"
+    validate_project_ports || exit 1
+else
+    echo -e "\033[1;33mWarning: validate-ports.sh not found, skipping port validation\033[0m"
+fi
+
 # Function to check if port is in use
 check_port() {
     lsof -i :$1 >/dev/null 2>&1

@@ -60,6 +60,7 @@ export interface ProjectWithStatus extends Project {
   isRunning: boolean;
   services: ServiceStatus[];
   gitStatus?: GitStatus;
+  watchdogEnabled?: boolean;
 }
 
 export type ServiceStatusType = 'running' | 'stopped' | 'error';
@@ -94,4 +95,18 @@ export interface LaunchResult {
   success: boolean;
   message: string;
   logs?: string;
+}
+
+// Watchdog
+export type WatchdogAction = 'RESTART_ATTEMPTED' | 'RESTART_SUCCESS' | 'RESTART_FAILED' | 'MAX_RETRIES_EXCEEDED';
+
+export interface WatchdogEvent {
+  id: string;
+  projectId: string;
+  port: number;
+  serviceName: string;
+  action: WatchdogAction;
+  attempt: number;
+  error: string | null;
+  createdAt: string;
 }

@@ -170,3 +170,7 @@ All data fetching in `hooks/useCodeBoard.ts`:
 - `launch.sh` — start all services
 - `stop.sh` — stop all services
 - `frontend/lib/shell.ts` — programmatic launch/stop from UI (sets `LAUNCHED_FROM_WEB=1`, `NONINTERACTIVE=1`)
+
+## CodeBoard Integration
+For creating issues, planning features, and managing work items in CodeBoard, see:
+`/Volumes/Seagate/Claude/_shared/codeboard-instructions.md`

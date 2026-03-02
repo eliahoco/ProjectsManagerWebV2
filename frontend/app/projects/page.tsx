@@ -6,11 +6,17 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Play, Square, Terminal, GitBranch, ExternalLink, RefreshCw, Search, ChevronRight } from 'lucide-react';
+import { Play, Square, Terminal, GitBranch, ExternalLink, RefreshCw, Search, ChevronRight, AlertTriangle, X, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ImportButton } from '@/components/codeboard/ImportButton';
 import { cn, getServiceTypeColor } from '@/lib/utils';
 import type { ProjectWithStatus } from '@/types';
+
+interface PortConflictInfo {
+  port: number;
+  service: string;
+  owner: string;
+}
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectWithStatus[]>([]);
@@ -18,6 +24,8 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
+  const [portConflicts, setPortConflicts] = useState<{ id: string; conflicts: PortConflictInfo[] } | null>(null);
+  const [watchdogLoading, setWatchdogLoading] = useState<string | null>(null);
 
   const fetchProjects = async () => {
     try {
@@ -42,13 +50,25 @@ export default function ProjectsPage() {
   const handleLaunch = async (id: string) => {
     setActionLoading(id);
     setActionError(null);
+    setPortConflicts(null);
     try {
       const res = await fetch(`/api/projects/${id}/launch`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) {
-        setActionError({ id, message: data.error || 'Failed to launch project' });
+        // Check for port conflict response (HTTP 409)
+        if (data.portConflicts && data.portConflicts.length > 0) {
+          setPortConflicts({ id, conflicts: data.portConflicts });
+        } else {
+          setActionError({ id, message: data.error || 'Failed to launch project' });
+        }
       }
       await fetchProjects();
+      if (data.success || !data.error) {
+        // Tell ServiceMonitor this project was launched (clear manual-stop state)
+        window.dispatchEvent(new CustomEvent('service-launched', {
+          detail: { projectId: id }
+        }));
+      }
     } catch (error) {
       setActionError({ id, message: 'Network error launching project' });
     } finally {
@@ -60,6 +80,13 @@ export default function ProjectsPage() {
     setActionLoading(id);
     setActionError(null);
     try {
+      // Tell ServiceMonitor BEFORE we stop — prevents watchdog from restarting
+      // services during the stop transition
+      const projectPorts = projects.find(p => p.id === id)?.ports.map(p => p.port) || [];
+      window.dispatchEvent(new CustomEvent('service-manual-stop', {
+        detail: { projectId: id, ports: projectPorts }
+      }));
+
       const res = await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) {
@@ -70,6 +97,33 @@ export default function ProjectsPage() {
       setActionError({ id, message: 'Network error stopping project' });
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleToggleWatchdog = async (projectId: string, currentEnabled: boolean) => {
+    setWatchdogLoading(projectId);
+    try {
+      const res = await fetch('/api/watchdog', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, enabled: !currentEnabled }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const newEnabled = !currentEnabled;
+        // Update local state
+        setProjects(prev => prev.map(p =>
+          p.id === projectId ? { ...p, watchdogEnabled: newEnabled } : p
+        ));
+        // Notify ServiceMonitor so it can clear manual-stop markers on re-enable
+        window.dispatchEvent(new CustomEvent('watchdog-toggled', {
+          detail: { projectId, enabled: newEnabled }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to toggle watchdog:', error);
+    } finally {
+      setWatchdogLoading(null);
     }
   };
 
@@ -213,7 +267,7 @@ export default function ProjectsPage() {
                 </td>
 
                 {/* Actions */}
-                <td className="p-4">
+                <td className="p-4 relative">
                   <div className="flex items-center gap-2">
                     {project.isRunning ? (
                       <Button
@@ -244,6 +298,34 @@ export default function ProjectsPage() {
                     >
                       <Terminal className="h-3 w-3" />
                     </Button>
+                    <button
+                      onClick={() => handleToggleWatchdog(project.id, project.watchdogEnabled ?? false)}
+                      disabled={watchdogLoading === project.id}
+                      title={project.watchdogEnabled ? 'Watchdog active — click to disable' : 'Watchdog off — click to enable'}
+                      className="flex items-center gap-1.5 group disabled:opacity-50"
+                    >
+                      {watchdogLoading === project.id ? (
+                        <RefreshCw className="h-3 w-3 animate-spin text-zinc-400" />
+                      ) : (
+                        <>
+                          <div className={cn(
+                            'relative w-7 h-4 rounded-full transition-colors duration-200',
+                            project.watchdogEnabled ? 'bg-green-500' : 'bg-red-500/60'
+                          )}>
+                            <div className={cn(
+                              'absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200',
+                              project.watchdogEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                            )} />
+                          </div>
+                          <Shield className={cn(
+                            'h-3.5 w-3.5 transition-colors',
+                            project.watchdogEnabled
+                              ? 'text-green-400 fill-green-400/20'
+                              : 'text-red-400/60'
+                          )} />
+                        </>
+                      )}
+                    </button>
                     {project.isRunning && project.ports.find(p => p.serviceType === 'FRONTEND')?.url && (
                       <a
                         href={project.ports.find(p => p.serviceType === 'FRONTEND')?.url!}
@@ -263,6 +345,40 @@ export default function ProjectsPage() {
                       >
                         {actionError.message}
                       </span>
+                    )}
+                    {portConflicts?.id === project.id && (
+                      <div className="absolute top-full left-0 mt-1 z-10 bg-zinc-900 border border-red-500/30 rounded-lg p-3 shadow-xl min-w-[340px]">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1.5 text-red-400 text-xs font-medium">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Port conflict detected
+                          </div>
+                          <button
+                            onClick={() => setPortConflicts(null)}
+                            className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-zinc-500">
+                              <th className="text-left pr-3 pb-1">Port</th>
+                              <th className="text-left pr-3 pb-1">Service</th>
+                              <th className="text-left pb-1">Conflicting Process</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {portConflicts.conflicts.map((c) => (
+                              <tr key={c.port} className="text-zinc-300">
+                                <td className="pr-3 py-0.5 text-red-400 font-mono">{c.port}</td>
+                                <td className="pr-3 py-0.5">{c.service}</td>
+                                <td className="py-0.5 text-orange-400 truncate max-w-[160px]" title={c.owner}>{c.owner}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 </td>

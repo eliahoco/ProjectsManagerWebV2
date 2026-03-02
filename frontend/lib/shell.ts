@@ -42,10 +42,11 @@ ${command} > "${logFile}" 2>&1
     // Write script
     fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
 
-    // Run script detached
+    // Run script detached — pass env if provided, otherwise inherit parent env
     const child = spawn(scriptPath, [], {
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore'],
+      env: options.env || process.env,
     });
 
     child.unref();
@@ -112,6 +113,19 @@ async function fileExists(filePath: string): Promise<boolean> {
  * Falls back to launch.sh -a if start.sh doesn't exist
  */
 export async function launchProject(projectPath: string): Promise<CommandResult> {
+  // Validate ports before launching — abort early if conflicts detected
+  const portValidation = await validateProjectPorts(projectPath);
+  if (!portValidation.valid) {
+    const conflictLines = portValidation.conflicts.map(
+      (c) => `  Port ${c.port} (${c.service}) — in use by: ${c.owner}`
+    );
+    return {
+      stdout: `Port conflict detected for ${portValidation.project}:\n${conflictLines.join('\n')}`,
+      stderr: JSON.stringify(portValidation.conflicts),
+      exitCode: 2, // Distinct exit code for port conflicts
+    };
+  }
+
   const startScript = path.join(projectPath, 'start.sh');
   const launchScript = path.join(projectPath, 'launch.sh');
 
@@ -197,6 +211,93 @@ export async function stopProject(projectPath: string): Promise<CommandResult> {
     stderr: 'No stop.sh or docker-compose.yml found',
     exitCode: 1,
   };
+}
+
+// --- Port Validation Types ---------------------------------------------------
+
+export interface PortStatus {
+  port: number;
+  service: string;
+  type: string;
+  status: 'free' | 'self' | 'conflict';
+}
+
+export interface PortConflict {
+  port: number;
+  service: string;
+  owner: string;
+}
+
+export interface PortValidationResult {
+  valid: boolean;
+  project: string;
+  ports: PortStatus[];
+  conflicts: PortConflict[];
+}
+
+const VALIDATE_PORTS_SCRIPT = '/Volumes/Seagate/Claude/_shared/validate-ports.sh';
+
+/**
+ * Validate project ports before launch using the central validate-ports.sh script.
+ * Returns { valid: true } on any error so we never block launches due to validation issues.
+ */
+export async function validateProjectPorts(projectPath: string): Promise<PortValidationResult> {
+  const projectName = path.basename(projectPath);
+  const emptyResult: PortValidationResult = {
+    valid: true,
+    project: projectName,
+    ports: [],
+    conflicts: [],
+  };
+
+  try {
+    // Check if the validation script exists
+    const scriptExists = await fileExists(VALIDATE_PORTS_SCRIPT);
+    if (!scriptExists) {
+      return emptyResult;
+    }
+
+    const result = await execCommand(
+      `bash "${VALIDATE_PORTS_SCRIPT}" --check-only --json "${projectName}"`,
+      { timeout: 15000 }
+    );
+
+    if (result.exitCode !== 0 && !result.stdout.trim()) {
+      // Script failed and produced no JSON output — don't block launch
+      return emptyResult;
+    }
+
+    // Parse JSON from stdout (the script outputs JSON to stdout)
+    const output = result.stdout.trim();
+    if (!output) {
+      return emptyResult;
+    }
+
+    const parsed = JSON.parse(output);
+
+    const ports: PortStatus[] = (parsed.ports || []).map((p: Record<string, unknown>) => ({
+      port: p.port as number,
+      service: p.service as string,
+      type: p.type as string,
+      status: p.status as 'free' | 'self' | 'conflict',
+    }));
+
+    const conflicts: PortConflict[] = (parsed.conflicts || []).map((c: Record<string, unknown>) => ({
+      port: c.port as number,
+      service: c.service as string,
+      owner: c.owner as string,
+    }));
+
+    return {
+      valid: conflicts.length === 0,
+      project: parsed.project || projectName,
+      ports,
+      conflicts,
+    };
+  } catch {
+    // Any error (script not found, JSON parse error, etc.) — don't block launch
+    return emptyResult;
+  }
 }
 
 export type ServiceStatusType = 'running' | 'stopped' | 'error';

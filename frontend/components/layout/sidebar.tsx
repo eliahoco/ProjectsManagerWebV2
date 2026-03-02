@@ -22,6 +22,7 @@ import {
   Keyboard,
   Kanban,
   ClipboardCheck,
+  Container,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
@@ -35,6 +36,7 @@ const navigation = [
   { name: 'Import', href: '/import', icon: FolderInput },
   { name: 'Build', href: '/build', icon: Package },
   { name: 'Ports', href: '/ports', icon: Network },
+  { name: 'Docker', href: '/docker', icon: Container },
   { name: 'GitHub', href: '/github', icon: Github },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

@@ -1311,3 +1311,111 @@ of course that is what i meant
 
 ---
 
+## 2026-02-27 07:09:17
+
+OK what is the next phase
+
+---
+
+## 2026-02-27 07:09:54
+
+check the backlog for other pending work
+
+---
+
+## 2026-02-27 07:10:50
+
+check also the backlog tasks stories epics and subtasks and create me a list in a table
+
+---
+
+## 2026-02-27 07:17:02
+
+keep this list please and present it next time i now noticed that i had a "new feature" feature in the codeboard to that is using AI to create automaticly new feature with spries epics tasks and subtasks from only prompt and i don't see this button on the UI now
+
+---
+
+## 2026-02-27 07:18:59
+
+it can run with Cladue not just ollama, Ollama with local model is a general option
+
+---
+
+## 2026-02-27 07:20:45
+
+OK new feature, add in the setting an option to add the API key for cladue
+
+---
+
+## 2026-02-27 14:39:42
+
+commit and push
+
+---
+
+## 2026-02-27 14:42:02
+
+now I'll start the culineshareproduction project, please monitor and let's make sure all services are starting correctly
+
+---
+
+## 2026-02-27 22:14:04
+
+try again
+
+---
+
+## 2026-02-27 23:33:33
+
+try again
+
+---
+
+## 2026-02-27 23:38:14
+
+try again now the internet was restored
+
+---
+
+## 2026-02-28 00:02:08
+
+open it in the browser let me see
+
+---
+
+## 2026-02-28 00:07:29
+
+i'n going to sleep, render and keep all options
+
+---
+
+## 2026-02-28 08:04:25
+
+something happand here with the ports and they got mix again, the projectmanager is not avilable for me anymore, I want you to make sure that once i start a project it always check aand validate with the port database that the ports that are about to be used are the ones, and then start the services 
+
+---
+
+## 2026-03-02 15:34:12
+
+tried to stop the CulinaShareProduction and see how it will behive
+
+---
+
+## 2026-03-02 15:36:32
+
+trid stopping AIDevPlatformProduction
+
+---
+
+## 2026-03-02 15:39:55
+
+the Temporal and the Temporal UI don't spend time on them,
+
+---
+
+## 2026-03-02 16:11:17
+
+comit the changes it is finaly work
+
+---
+
