@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
+import asyncio
 import uuid
 import logging
 
@@ -224,8 +225,7 @@ async def update_api_key(request: ApiKeyUpdate):
     env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
     try:
         if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                content = f.read()
+            content = await asyncio.to_thread(lambda: open(env_path, "r").read())
             # Replace existing key or add new one
             if re.search(r"^ANTHROPIC_API_KEY=.*$", content, re.MULTILINE):
                 content = re.sub(
@@ -236,8 +236,7 @@ async def update_api_key(request: ApiKeyUpdate):
                 )
             else:
                 content += f"\nANTHROPIC_API_KEY={api_key}\n"
-            with open(env_path, "w") as f:
-                f.write(content)
+            await asyncio.to_thread(lambda: open(env_path, "w").write(content))
             logger.info("Anthropic API key updated and persisted to .env")
         else:
             logger.warning(f".env file not found at {env_path}, key set in memory only")
@@ -268,16 +267,14 @@ async def remove_api_key():
     env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
     try:
         if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                content = f.read()
+            content = await asyncio.to_thread(lambda: open(env_path, "r").read())
             content = re.sub(
                 r"^ANTHROPIC_API_KEY=.*$",
                 "ANTHROPIC_API_KEY=",
                 content,
                 flags=re.MULTILINE,
             )
-            with open(env_path, "w") as f:
-                f.write(content)
+            await asyncio.to_thread(lambda: open(env_path, "w").write(content))
     except Exception as e:
         logger.warning(f"Failed to clear API key from .env: {e}")
 
@@ -287,8 +284,8 @@ async def remove_api_key():
 @router.get("/ollama/models")
 async def list_ollama_models():
     """List available Ollama models"""
-    available = ai_service.is_ollama_available()
-    models = ai_service.get_ollama_models() if available else []
+    available = await asyncio.to_thread(ai_service.is_ollama_available)
+    models = await asyncio.to_thread(ai_service.get_ollama_models) if available else []
     return {
         "available": available,
         "models": models,
@@ -521,10 +518,11 @@ async def hierarchical_breakdown_feature(
             feature_title=request.feature_title,
             feature_description=request.feature_description,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error in hierarchical breakdown: {e}")
+    except ValueError:
+        logger.exception("Invalid input for hierarchical breakdown")
+        raise HTTPException(status_code=400, detail="Invalid breakdown request")
+    except Exception:
+        logger.exception("Error in hierarchical breakdown")
         raise HTTPException(status_code=500, detail="AI service error")
 
     # Count tasks and hours

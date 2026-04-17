@@ -5,7 +5,7 @@
 
 import { execCommand } from './shell';
 
-import type { ColimaStatus, DockerInfo, DockerContainer } from '@/types/docker';
+import type { ColimaStatus, DockerInfo, DockerContainer, ContainerMetrics } from '@/types/docker';
 
 export async function getColimaStatus(): Promise<ColimaStatus> {
   const result = await execCommand('colima status --json', { timeout: 10000 });
@@ -142,6 +142,120 @@ export async function getContainerLogs(
     { timeout: 10000 }
   );
   return { stdout: result.stdout, stderr: result.stderr };
+}
+
+export async function getVmMemory(): Promise<{ totalMB: number; usedMB: number; freeMB: number; availableMB: number }> {
+  const result = await execCommand('colima ssh -- free -m', { timeout: 10000 });
+  if (result.exitCode !== 0) {
+    return { totalMB: 0, usedMB: 0, freeMB: 0, availableMB: 0 };
+  }
+
+  // Parse "Mem:" line: total used free shared buff/cache available
+  const memLine = result.stdout.split('\n').find((l) => l.startsWith('Mem:'));
+  if (!memLine) {
+    return { totalMB: 0, usedMB: 0, freeMB: 0, availableMB: 0 };
+  }
+
+  const parts = memLine.split(/\s+/);
+  return {
+    totalMB: parseInt(parts[1], 10) || 0,
+    usedMB: parseInt(parts[2], 10) || 0,
+    freeMB: parseInt(parts[3], 10) || 0,
+    availableMB: parseInt(parts[6], 10) || 0,
+  };
+}
+
+export interface CpuTicks {
+  user: number;
+  nice: number;
+  system: number;
+  idle: number;
+  iowait: number;
+  total: number;
+}
+
+export async function getVmCpuTicks(): Promise<CpuTicks> {
+  const result = await execCommand('colima ssh -- cat /proc/stat', { timeout: 10000 });
+  if (result.exitCode !== 0) {
+    return { user: 0, nice: 0, system: 0, idle: 0, iowait: 0, total: 0 };
+  }
+
+  // First line: cpu  user nice system idle iowait irq softirq steal guest guest_nice
+  const cpuLine = result.stdout.split('\n').find((l) => l.startsWith('cpu '));
+  if (!cpuLine) {
+    return { user: 0, nice: 0, system: 0, idle: 0, iowait: 0, total: 0 };
+  }
+
+  const parts = cpuLine.split(/\s+/).slice(1).map(Number);
+  const [user, nice, system, idle, iowait] = parts;
+  const total = parts.reduce((a, b) => a + b, 0);
+  return { user, nice, system, idle, iowait, total };
+}
+
+export async function getVmLoadAverage(): Promise<{ load1: number; load5: number; load15: number }> {
+  const result = await execCommand('colima ssh -- uptime', { timeout: 10000 });
+  if (result.exitCode !== 0) {
+    return { load1: 0, load5: 0, load15: 0 };
+  }
+
+  // Parse "load average: 0.36, 0.15, 0.06"
+  const match = result.stdout.match(/load average:\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)/);
+  if (!match) {
+    return { load1: 0, load5: 0, load15: 0 };
+  }
+
+  return {
+    load1: parseFloat(match[1]) || 0,
+    load5: parseFloat(match[2]) || 0,
+    load15: parseFloat(match[3]) || 0,
+  };
+}
+
+export async function getContainerStats(): Promise<ContainerMetrics[]> {
+  const result = await execCommand('docker stats --no-stream --format "{{json .}}"', { timeout: 15000 });
+  if (result.exitCode !== 0 || !result.stdout.trim()) {
+    return [];
+  }
+
+  try {
+    const lines = result.stdout.trim().split('\n');
+    return lines.map((line) => {
+      const data = JSON.parse(line);
+      // CPUPerc comes as "5.10%" — strip the %
+      const cpuPercent = parseFloat((data.CPUPerc || '0').replace('%', '')) || 0;
+      const memPercent = parseFloat((data.MemPerc || '0').replace('%', '')) || 0;
+
+      // MemUsage comes as "168MiB / 7.737GiB" — parse both sides
+      const memParts = (data.MemUsage || '').split('/').map((s: string) => s.trim());
+      const memUsageMB = parseMemToMB(memParts[0] || '0');
+      const memLimitMB = parseMemToMB(memParts[1] || '0');
+
+      return {
+        name: (data.Name || '').replace(/^\//, ''),
+        cpuPercent,
+        memoryPercent: memPercent,
+        memoryUsageMB: memUsageMB,
+        memoryLimitMB: memLimitMB,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function parseMemToMB(str: string): number {
+  const match = str.match(/([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)/i);
+  if (!match) return 0;
+  const value = parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  switch (unit) {
+    case 'b': return value / (1024 * 1024);
+    case 'kib': case 'kb': return value / 1024;
+    case 'mib': case 'mb': return value;
+    case 'gib': case 'gb': return value * 1024;
+    case 'tib': case 'tb': return value * 1024 * 1024;
+    default: return value;
+  }
 }
 
 function sanitizeContainerId(id: string): string {

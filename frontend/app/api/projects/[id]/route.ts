@@ -31,6 +31,8 @@ export async function GET(
       port: p.port,
       serviceName: p.serviceName,
       serviceType: p.serviceType,
+      url: p.url,
+      notes: p.notes,
     }));
     const status = await getProjectStatus(project.path, knownPorts);
     const gitStatus = await getGitStatus(project.path);

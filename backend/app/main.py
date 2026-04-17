@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.errors import setup_exception_handlers, ErrorResponse, ErrorCode
+from app.background import cancel_all_background_tasks
 from api import router as api_router
 
 # Initialize rate limiter
@@ -30,6 +31,30 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+async def evict_stale_sessions():
+    """Evict completed sessions older than 1 hour to prevent memory growth."""
+    from services.terminal_service import terminal_service
+    from datetime import timedelta
+    while True:
+        try:
+            cutoff = datetime.utcnow() - timedelta(hours=1)
+            with terminal_service._sessions_lock:
+                to_evict = [
+                    sid for sid, s in terminal_service._sessions.items()
+                    if s.status.value in ("completed", "cancelled", "failed")
+                    and s.completed_at and s.completed_at < cutoff
+                ]
+            for sid in to_evict:
+                terminal_service.cleanup_session(sid)
+                logger.info(f"Evicted stale session {sid}")
+            await asyncio.sleep(300)  # 5 min
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Eviction loop error")
+            await asyncio.sleep(60)
 
 
 async def process_pending_completions():
@@ -53,10 +78,10 @@ async def process_pending_completions():
                                 select(Issue).where(Issue.id == session.issue_id)
                             )
                             issue = result.scalar_one_or_none()
-                            if issue and issue.status != "DONE":
-                                issue.status = "DONE"
-                                issue.completedAt = datetime.utcnow()
-                                logger.info(f"[AUTO-DONE] Marked {session.issue_key} as DONE after successful execution")
+                            if issue and issue.status not in ("COMPLETED_WAITING_QA", "DONE"):
+                                issue.status = "COMPLETED_WAITING_QA"
+                                issue.updatedAt = datetime.utcnow()
+                                logger.info(f"[AUTO-COMPLETE] Marked {session.issue_key} as COMPLETED_WAITING_QA after successful execution")
 
                     await db.commit()
         except Exception as e:
@@ -72,18 +97,34 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting ProjectsManagerWebV2 Backend on port {settings.PORT}")
 
+    # Ensure all tables exist (creates any missing tables like CommitLink, GitSyncState)
+    from models.database import init_db
+    await init_db()
+    logger.info("Database tables verified/created")
+
     # Start background task for processing pending completions
     completion_task = asyncio.create_task(process_pending_completions())
     logger.info("Started background task for auto-completion processing")
+
+    # Start background task for evicting stale sessions (memory leak prevention)
+    evict_task = asyncio.create_task(evict_stale_sessions())
+    logger.info("Started background task for stale session eviction")
 
     yield
 
     # Shutdown
     completion_task.cancel()
+    evict_task.cancel()
     try:
         await completion_task
     except asyncio.CancelledError:
         pass
+    try:
+        await evict_task
+    except asyncio.CancelledError:
+        pass
+    # Cancel any remaining fire-and-forget background tasks
+    await cancel_all_background_tasks()
     logger.info("Shutting down ProjectsManagerWebV2 Backend")
 
 
@@ -119,6 +160,37 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
+
+
+# Allowed origins for state-changing requests
+ALLOWED_ORIGINS = {
+    "http://localhost:3601",
+    "http://127.0.0.1:3601",
+}
+
+
+@app.middleware("http")
+async def validate_origin(request: Request, call_next):
+    """Reject state-changing requests from unexpected origins.
+
+    Only enforces on POST/PUT/PATCH/DELETE — GET and OPTIONS (CORS preflight)
+    are left to the CORS middleware. Server-to-server calls (curl, internal
+    services) typically send no Origin header and are allowed through.
+    """
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin and origin not in ALLOWED_ORIGINS:
+            logger.warning(
+                "Rejected cross-origin %s request from %s to %s",
+                request.method,
+                origin,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "invalid_origin"},
+            )
+    return await call_next(request)
 
 
 # Request logging middleware

@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Play, Square, Terminal, GitBranch, ExternalLink, RefreshCw, Search, ChevronRight, AlertTriangle, X, Shield } from 'lucide-react';
+import { Play, PauseCircle, Terminal, GitBranch, ExternalLink, RefreshCw, Search, ChevronRight, AlertTriangle, X, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ImportButton } from '@/components/codeboard/ImportButton';
 import { cn, getServiceTypeColor } from '@/lib/utils';
@@ -76,7 +76,7 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleStop = async (id: string) => {
+  const handlePark = async (id: string) => {
     setActionLoading(id);
     setActionError(null);
     try {
@@ -87,14 +87,14 @@ export default function ProjectsPage() {
         detail: { projectId: id, ports: projectPorts }
       }));
 
-      const res = await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
+      const res = await fetch(`/api/projects/${id}/park`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) {
-        setActionError({ id, message: data.error || 'Failed to stop project' });
+        setActionError({ id, message: data.error || 'Failed to park project' });
       }
       await fetchProjects();
     } catch (error) {
-      setActionError({ id, message: 'Network error stopping project' });
+      setActionError({ id, message: 'Network error parking project' });
     } finally {
       setActionLoading(null);
     }
@@ -196,14 +196,14 @@ export default function ProjectsPage() {
                     <div
                       className={cn(
                         'w-2.5 h-2.5 rounded-full',
-                        project.isRunning ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'
+                        project.isRunning ? 'bg-green-500 animate-pulse' : 'bg-amber-600'
                       )}
                     />
                     <span className={cn(
                       'text-xs font-medium',
-                      project.isRunning ? 'text-green-400' : 'text-zinc-500'
+                      project.isRunning ? 'text-green-400' : 'text-amber-500'
                     )}>
-                      {project.isRunning ? 'Running' : 'Stopped'}
+                      {project.isRunning ? 'Running' : 'Parked'}
                     </span>
                   </div>
                 </td>
@@ -271,13 +271,14 @@ export default function ProjectsPage() {
                   <div className="flex items-center gap-2">
                     {project.isRunning ? (
                       <Button
-                        variant="destructive"
+                        variant="default"
                         size="sm"
-                        onClick={() => handleStop(project.id)}
+                        onClick={() => handlePark(project.id)}
                         loading={actionLoading === project.id}
+                        className="bg-amber-600 hover:bg-amber-500 text-white"
                       >
-                        <Square className="h-3 w-3" />
-                        Stop
+                        <PauseCircle className="h-3 w-3" />
+                        Park
                       </Button>
                     ) : (
                       <Button

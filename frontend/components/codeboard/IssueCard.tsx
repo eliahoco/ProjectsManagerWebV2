@@ -25,9 +25,9 @@ interface IssueCardProps {
 // Type-specific styling
 const TYPE_STYLES: Record<string, { bg: string; border: string; badge: string }> = {
   FEATURE: {
-    bg: 'bg-amber-950/40',
-    border: 'border-amber-600/60 hover:border-amber-500 border-2',
-    badge: 'bg-amber-600 text-amber-100',
+    bg: 'bg-blue-950/40',
+    border: 'border-blue-700/60 hover:border-blue-600 border-2',
+    badge: 'bg-blue-800 text-white',
   },
   EPIC: {
     bg: 'bg-purple-950/30',
@@ -153,7 +153,7 @@ export function IssueCard({ issue, parent, grandparent, completionInfo, childCou
           {(issue.type === 'FEATURE' || issue.type === 'EPIC' || issue.type === 'STORY') && descendantCount !== undefined && descendantCount > 0 && (
             <span className={cn(
               'px-1.5 py-0.5 rounded text-[10px] font-medium',
-              issue.type === 'FEATURE' ? 'bg-amber-900/50 text-amber-400' :
+              issue.type === 'FEATURE' ? 'bg-blue-900/50 text-blue-400' :
               issue.type === 'EPIC' ? 'bg-purple-900/50 text-purple-400' :
               'bg-blue-900/50 text-blue-400'
             )} title={`${childCount || 0} direct children, ${descendantCount} total descendants`}>

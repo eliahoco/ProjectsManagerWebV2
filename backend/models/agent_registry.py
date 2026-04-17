@@ -2,12 +2,42 @@
 SQLAlchemy model for the Agent Registry - tracks available AI agents and their capabilities
 """
 
+import json
+
 from sqlalchemy import (
     Column, String, Integer, DateTime, Text, Index, Boolean
 )
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql import func
 
 from models.database import Base
+
+
+class JsonList(TypeDecorator):
+    """TypeDecorator that transparently serializes Python lists as JSON text in SQLite.
+
+    Prevents ``sqlite3.ProgrammingError: type 'list' is not supported`` when
+    raw list values are bound to a text column.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        """Serialize list → JSON string on the way into the DB."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):
+        """Deserialize JSON string → list on the way out of the DB."""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value
+        return json.loads(value)
 
 
 class AgentProfile(Base):
@@ -20,10 +50,10 @@ class AgentProfile(Base):
     description = Column(Text, nullable=True)  # What this agent specializes in
     agentPath = Column(String, nullable=False)  # Path to AGENT.md file
 
-    # Matching criteria (stored as JSON arrays)
-    capabilities = Column(Text, nullable=True)  # JSON array, e.g., ["python", "fastapi", "sqlalchemy"]
-    issueTypeAffinity = Column(Text, nullable=True)  # JSON array, e.g., ["TASK", "BUG"]
-    projectPatterns = Column(Text, nullable=True)  # JSON array, e.g., ["*.py", "backend/**"]
+    # Matching criteria (stored as JSON arrays via JsonList TypeDecorator)
+    capabilities = Column(JsonList, nullable=True)  # e.g., ["python", "fastapi", "sqlalchemy"]
+    issueTypeAffinity = Column(JsonList, nullable=True)  # e.g., ["TASK", "BUG"]
+    projectPatterns = Column(JsonList, nullable=True)  # e.g., ["*.py", "backend/**"]
 
     # Status and ranking
     isActive = Column(Boolean, default=True, nullable=False)

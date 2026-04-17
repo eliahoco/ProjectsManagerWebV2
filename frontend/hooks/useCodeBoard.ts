@@ -4,7 +4,7 @@
  * with error handling and retry logic
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   Issue,
@@ -16,6 +16,7 @@ import type {
   UpdateIssueData,
   IssueStatus
 } from '@/types/codeboard';
+import { apiFetch as apiFetchHttp } from '@/lib/api/api-fetch';
 
 const API_BASE = '/api/codeboard';
 
@@ -40,7 +41,7 @@ export class APIError extends Error {
  * Fetch wrapper with error handling
  */
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetchHttp(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -118,6 +119,7 @@ export function useIssues(projectId: string | null, filters?: {
   sortOrder?: string;
   page?: number;
   pageSize?: number;
+  refetchInterval?: number | false;
 }) {
   return useQuery<PaginatedResponse<Issue>>({
     queryKey: ['issues', projectId, filters],
@@ -143,6 +145,7 @@ export function useIssues(projectId: string | null, filters?: {
       return apiFetch<PaginatedResponse<Issue>>(url);
     },
     enabled: !!projectId,
+    refetchInterval: filters?.refetchInterval,
   });
 }
 
@@ -852,14 +855,22 @@ export function useStartExecution() {
     mutationFn: async ({
       issueId,
       provider,
+      executionMode,
+      force,
     }: {
       issueId: string;
       provider: 'claude_code' | 'local_ai';
+      executionMode?: string;  // 'implement' | 'audit' | 'rewrite'
+      force?: boolean;
     }) => {
+      const body: Record<string, unknown> = { provider };
+      if (executionMode) body.execution_mode = executionMode;
+      if (force) body.force = force;
+
       const res = await fetch(`${API_BASE}/execute/issue/${issueId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to start execution');
       return res.json() as Promise<ExecutionSession>;
@@ -1137,6 +1148,36 @@ export interface DocumentationResponse {
   documentation: string;
   tasks_documented: number;
   comment_id?: string;
+}
+
+/**
+ * Hook for real-time feature page data.
+ * Combines SSE execution sessions with a derived activeSessionMap
+ * keyed by issue_id for O(1) lookups in the tree.
+ */
+export function useFeatureLiveData(projectId: string | null) {
+  const { data: sessions, connected } = useExecutionSessions();
+
+  const activeSessionMap = useMemo(() => {
+    const map = new Map<string, ExecutionSession>();
+    if (!sessions || !projectId) return map;
+    for (const session of sessions) {
+      if (
+        (session.status === 'running' || session.status === 'pending') &&
+        session.project_id === projectId
+      ) {
+        map.set(session.issue_id, session);
+      }
+    }
+    return map;
+  }, [sessions, projectId]);
+
+  return {
+    activeSessionMap,
+    hasActiveSessions: activeSessionMap.size > 0,
+    sseConnected: connected,
+    allSessions: sessions || [],
+  };
 }
 
 // Generate execution documentation for an Epic/Story

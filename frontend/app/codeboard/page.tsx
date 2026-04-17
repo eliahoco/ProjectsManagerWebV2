@@ -4,13 +4,13 @@
  * CodeBoard - AI-Powered Issue Tracking
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, RefreshCw, LayoutGrid, List, Sparkles, Layers, GitCommit, Keyboard, FolderInput, Rocket } from 'lucide-react';
-import { useProjects, useIssues, useCreateIssue, useUpdateIssue, useDeleteIssue, useAIStatus, useExecutionSessions, useStopExecution, useProjectLabels, type ExecutionSession } from '@/hooks/useCodeBoard';
+import { useProjects, useIssues, useCreateIssue, useUpdateIssue, useDeleteIssue, useBatchUpdateStatus, useAIStatus, useExecutionSessions, useStopExecution, useProjectLabels, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { KanbanBoard, EpicSwimlanesBoard, HierarchyListView, FilterBar, CreateIssueModal, IssueDetailModal, ExecutionModal, SemanticSearchPanel, FeatureExecutionPanel, FeatureSelector } from '@/components/codeboard';
 import { FloatingExecutionStatus } from '@/components/codeboard/FloatingExecutionStatus';
-import { GlobalAgentStatusBar, FloatingAgentStatusBar } from '@/components/codeboard/GlobalAgentStatusBar';
+import { GlobalAgentStatusBar } from '@/components/codeboard/GlobalAgentStatusBar';
 import { AIBreakdownModal } from '@/components/codeboard/AIBreakdownModal';
 import { GitSyncPanel } from '@/components/codeboard/GitSyncPanel';
 import { KeyboardShortcutsHelp } from '@/components/codeboard/KeyboardShortcutsHelp';
@@ -64,7 +64,7 @@ export default function CodeBoardPage() {
   const { data: projects, isLoading: projectsLoading, error: projectsError } = useProjects();
   const { data: aiStatus } = useAIStatus();
   const { data: labelsData, refetch: refetchLabels } = useProjectLabels(selectedProjectId);
-  const { data: issuesData, isLoading: issuesLoading, error: issuesError, refetch: refetchIssues } = useIssues(
+  const { data: issuesData, isLoading: issuesLoading, isFetching: issuesFetching, error: issuesError, refetch: refetchIssues } = useIssues(
     selectedProjectId,
     {
       search,
@@ -82,6 +82,7 @@ export default function CodeBoardPage() {
   // Mutations
   const createIssue = useCreateIssue();
   const updateIssue = useUpdateIssue();
+  const batchUpdateStatus = useBatchUpdateStatus();
   const deleteIssue = useDeleteIssue();
   const stopExecution = useStopExecution();
 
@@ -155,7 +156,7 @@ export default function CodeBoardPage() {
   const issues = useMemo(() => sortIssues(rawIssues), [rawIssues, sortIssues]);
 
   // Auto-select ProjectsManagerWebV2 or first project
-  useMemo(() => {
+  useEffect(() => {
     if (projects?.length && !selectedProjectId) {
       const pmv2 = projects.find(p => p.name === 'ProjectsManagerWebV2');
       setSelectedProjectId(pmv2?.id || projects[0].id);
@@ -426,8 +427,7 @@ export default function CodeBoardPage() {
   const handleCascadeMove = useCallback(async (feature: Issue, newStatus: IssueStatus) => {
     if (feature.type !== 'FEATURE') return;
 
-    // Fetch all descendants from the API (CB-813 fix)
-    // This ensures we get ALL descendants regardless of any filters applied in the UI
+    // Fetch all descendants from the API
     let descendantIds: string[] = [];
     try {
       const response = await fetch(`/api/codeboard/issues/${feature.id}/descendants`);
@@ -439,7 +439,6 @@ export default function CodeBoardPage() {
       console.error('Failed to fetch descendants:', error);
     }
 
-    // Show toast with count
     if (descendantIds.length > 0) {
       toast.info(
         `Moving ${feature.key}`,
@@ -447,29 +446,21 @@ export default function CodeBoardPage() {
       );
     }
 
-    // Update the FEATURE first
-    updateIssue.mutate(
-      { issueId: feature.id, data: { status: newStatus } },
+    // Batch update the feature + all descendants in a single API call
+    const allIds = [feature.id, ...descendantIds];
+    batchUpdateStatus.mutate(
+      { issueIds: allIds, status: newStatus },
       {
         onSuccess: () => {
-          // Then update all descendants
-          descendantIds.forEach(id => {
-            updateIssue.mutate({ issueId: id, data: { status: newStatus } });
-          });
-          // Refetch after updates complete
-          setTimeout(() => {
-            refetchIssues();
-            if (descendantIds.length > 0) {
-              toast.success(
-                'Move complete',
-                `Moved ${descendantIds.length + 1} items to ${newStatus.replace('_', ' ')}`
-              );
-            }
-          }, 300);
+          refetchIssues();
+          toast.success(
+            'Move complete',
+            `Moved ${allIds.length} items to ${newStatus.replace('_', ' ')}`
+          );
         },
       }
     );
-  }, [updateIssue, refetchIssues, toast]);
+  }, [batchUpdateStatus, refetchIssues, toast]);
 
   const handleExecutionStart = (sessionId: string) => {
     // Find the session from the list
@@ -548,11 +539,14 @@ export default function CodeBoardPage() {
 
             {/* Refresh */}
             <button
-              onClick={() => refetchIssues()}
+              onClick={() => {
+                refetchIssues();
+                toast.info('Refreshing...');
+              }}
               className="p-2 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors"
               title={`Refresh (${formatShortcut(SHORTCUTS.REFRESH)})`}
             >
-              <RefreshCw className={cn('w-4 h-4', issuesLoading && 'animate-spin')} />
+              <RefreshCw className={cn('w-4 h-4', issuesFetching && 'animate-spin')} />
             </button>
 
             {/* View Toggle */}
@@ -816,31 +810,16 @@ export default function CodeBoardPage() {
         />
       )}
 
-      {/* Floating Agent Status - visible above AutoPilot modal */}
-      {featureExecutionIssue && (
-        <FloatingAgentStatusBar
-          projectId={selectedProjectId || undefined}
-          onSessionClick={(session) => {
-            setActiveExecution(session);
-            setIsExecutionMinimized(false);
-          }}
-          onStopAll={handleStopAllExecutions}
-        />
-      )}
-
-      {/* Feature Execution Panel */}
-      {featureExecutionIssue && (
+      {/* Feature Execution Panel — execution runs in AutoPilotContext (providers.tsx) */}
+      {featureExecutionIssue && selectedProjectId && (
         <FeatureExecutionPanel
           feature={featureExecutionIssue}
           allIssues={issues}
+          projectId={selectedProjectId}
           isOpen={!!featureExecutionIssue}
           onClose={() => {
             setFeatureExecutionIssue(null);
             refetchIssues();
-          }}
-          onExecutionStart={(session) => {
-            setActiveExecution(session);
-            setIsExecutionMinimized(true); // Minimize so user can see both
           }}
           onIssueClick={handleIssueClick}
         />

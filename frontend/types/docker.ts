@@ -30,3 +30,36 @@ export interface DockerStatusResponse {
   docker: DockerInfo | null;
   containers: DockerContainer[];
 }
+
+export interface VmMetrics {
+  cpuPercent: number;
+  memoryUsedMB: number;
+  memoryTotalMB: number;
+  memoryPercent: number;
+  loadAvg1: number;
+  loadAvg5: number;
+  loadAvg15: number;
+}
+
+export interface ContainerMetrics {
+  name: string;
+  cpuPercent: number;
+  memoryPercent: number;
+  memoryUsageMB: number;
+  memoryLimitMB: number;
+}
+
+export interface MetricsSnapshot {
+  timestamp: number;
+  vm: VmMetrics;
+  containers: ContainerMetrics[];
+}
+
+export interface MetricsDataPoint {
+  time: string;
+  timestamp: number;
+  cpuPercent: number;
+  memoryPercent: number;
+  memoryUsedMB: number;
+  loadAvg1: number;
+}

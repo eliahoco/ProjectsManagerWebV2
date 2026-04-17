@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import VmResourceCharts from '@/components/docker/vm-resource-charts';
 import type { ColimaStatus, DockerInfo, DockerContainer } from '@/types/docker';
 
 export default function DockerPage() {
@@ -354,6 +355,11 @@ export default function DockerPage() {
           </div>
         )}
       </div>
+
+      {/* VM Resource Charts */}
+      {isVmRunning && !isDegraded && (
+        <VmResourceCharts />
+      )}
 
       {/* Container Summary */}
       {isVmRunning && docker && (

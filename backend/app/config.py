@@ -11,7 +11,8 @@ class Settings(BaseSettings):
 
     # Server
     PORT: int = 8401
-    HOST: str = "0.0.0.0"
+    HOST: str = "127.0.0.1"  # Bind to localhost by default — set HOST=0.0.0.0 or ALLOW_LAN=true for LAN access
+    ALLOW_LAN: bool = False  # Set to True (or HOST=0.0.0.0) to bind on all interfaces for LAN access
     DEBUG: bool = False  # Default to False for security; set DEBUG=true in .env for development
     ENVIRONMENT: str = "production"  # Default to production; set ENVIRONMENT=development in .env
 
@@ -44,6 +45,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @property
+    def effective_host(self) -> str:
+        """Returns the actual host to bind to. Respects ALLOW_LAN override."""
+        return "0.0.0.0" if self.ALLOW_LAN else self.HOST
 
 
 settings = Settings()

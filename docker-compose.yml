@@ -10,7 +10,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3601:3601"
+      - "127.0.0.1:3601:3601"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://localhost:8401
@@ -28,7 +28,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8401:8401"
+      - "127.0.0.1:8401:8401"
     environment:
       - HOST=0.0.0.0
       - PORT=8401
@@ -47,9 +47,9 @@ services:
 
   # ChromaDB - Vector Database for RAG
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.6.3
     ports:
-      - "8402:8000"
+      - "127.0.0.1:8402:8000"
     volumes:
       - chroma_data:/chroma/chroma
     environment:

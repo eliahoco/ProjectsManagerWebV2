@@ -95,7 +95,7 @@ function LinkedIssueCard({ issue, onClick }: LinkedIssueCardProps) {
 
   // Type-specific border colors
   const borderColor = {
-    FEATURE: 'border-l-amber-500',
+    FEATURE: 'border-l-blue-700',
     EPIC: 'border-l-purple-500',
     STORY: 'border-l-blue-500',
     TASK: 'border-l-zinc-500',
@@ -105,7 +105,7 @@ function LinkedIssueCard({ issue, onClick }: LinkedIssueCardProps) {
 
   // Type badge styles
   const badgeStyle = {
-    FEATURE: 'bg-amber-600 text-amber-100',
+    FEATURE: 'bg-blue-800 text-white',
     EPIC: 'bg-purple-600 text-purple-100',
     STORY: 'bg-blue-600 text-blue-100',
     TASK: 'bg-zinc-600 text-zinc-100',

@@ -23,7 +23,7 @@ interface ServiceAlert {
   projectName: string;
   serviceName: string;
   port: number;
-  status: 'stopped' | 'crashed';
+  status: 'parked' | 'crashed';
   timestamp: Date;
   dismissed: boolean;
   watchdogStatus?: 'restarting' | 'success' | 'failed' | 'gave-up';
@@ -223,7 +223,7 @@ export function ServiceMonitor() {
             projectName: project.name,
             serviceName: svc.name,
             port: svc.port,
-            status: 'stopped' as const,
+            status: 'parked' as const,
             timestamp: new Date(),
             dismissed: false,
             watchdogStatus: 'restarting' as const,
@@ -392,7 +392,7 @@ export function ServiceMonitor() {
                   projectName: project.name,
                   serviceName: service.name,
                   port: service.port,
-                  status: 'stopped',
+                  status: 'parked',
                   timestamp: new Date(),
                   dismissed: false,
                 });
@@ -444,7 +444,7 @@ export function ServiceMonitor() {
                 projectName: project.name,
                 serviceName: svc.name,
                 port: svc.port,
-                status: 'stopped',
+                status: 'parked',
                 timestamp: new Date(),
                 dismissed: false,
                 watchdogStatus: 'gave-up',
@@ -467,7 +467,6 @@ export function ServiceMonitor() {
     } catch (error) {
       console.error('Error checking services:', error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRestartProject, logWatchdogEvent]);
 
   // Check Docker health — polls /api/docker/status to see if Docker is back
@@ -660,6 +659,10 @@ export function ServiceMonitor() {
   checkServicesRef.current = checkServices;
 
   useEffect(() => {
+    // NOTE: setInterval captures checkServicesRef.current (the ref), not the
+    // callback itself. checkServicesRef is updated on every render (above), so
+    // this always calls the latest checkServices. This is the canonical pattern
+    // for "use latest callback in an effect without restarting the interval".
     const initialTimeout = setTimeout(() => checkServicesRef.current(), 2000);
     const interval = setInterval(() => checkServicesRef.current(), 15000);
 
@@ -747,7 +750,7 @@ export function ServiceMonitor() {
   const hasGaveUp = activeAlerts.some(a => a.watchdogStatus === 'gave-up');
   const hasSuccess = activeAlerts.some(a => a.watchdogStatus === 'success');
 
-  let headerText = `${activeAlerts.length} Service${activeAlerts.length > 1 ? 's' : ''} Stopped`;
+  let headerText = `${activeAlerts.length} Service${activeAlerts.length > 1 ? 's' : ''} Parked`;
   let headerClasses = 'bg-red-900/90 border-red-700 text-red-200';
   let headerTextColor = 'text-red-200';
   let dismissTextColor = 'text-red-300';
@@ -860,7 +863,7 @@ export function ServiceMonitor() {
                   {/* Timestamp for non-watchdog or gave-up alerts */}
                   {(!alert.watchdogStatus || alert.watchdogStatus === 'gave-up' || alert.watchdogStatus === 'failed') && (
                     <p className="text-zinc-500 text-xs mt-1">
-                      Stopped at {alert.timestamp.toLocaleTimeString()}
+                      Parked at {alert.timestamp.toLocaleTimeString()}
                     </p>
                   )}
                 </div>

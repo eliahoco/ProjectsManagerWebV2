@@ -4,6 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetch as apiFetchHttp } from '@/lib/api/api-fetch';
 
 const API_BASE = 'http://localhost:8401/api';
 
@@ -11,7 +12,7 @@ const API_BASE = 'http://localhost:8401/api';
  * Fetch wrapper with error handling
  */
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetchHttp(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

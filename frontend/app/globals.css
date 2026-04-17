@@ -152,55 +152,66 @@ body {
 
 /* Light mode specific overrides */
 
+/* ===== LIGHT MODE PALETTE (Slate-tinted for visual hierarchy) =====
+ *
+ * Page bg (zinc-950):  #ffffff  pure white
+ * Surface (zinc-900):  #f8fafc  slate-50 — cards, panels, sidebar
+ * Elevated (zinc-800): #f1f5f9  slate-100 — inputs, search, hover
+ * Border (zinc-700):   #cbd5e1  slate-300 — visible borders
+ * Muted (zinc-600):    #94a3b8  slate-400 — progress tracks, dividers
+ *
+ * This creates visible layering instead of washed-out zinc grays.
+ */
+
 /* ===== BACKGROUND COLORS ===== */
 .light .bg-zinc-950 {
   background-color: rgb(255 255 255) !important;
 }
 
 .light .bg-zinc-900 {
-  background-color: rgb(255 255 255) !important;
-  border-color: rgb(228 228 231) !important;
+  background-color: rgb(248 250 252) !important;  /* slate-50 */
+  border-color: rgb(203 213 225) !important;       /* slate-300 */
 }
 
 .light .bg-zinc-900\/50 {
-  background-color: rgb(250 250 250 / 0.5) !important;
+  background-color: rgb(248 250 252 / 0.5) !important;
 }
 
 .light .bg-zinc-900\/30 {
-  background-color: rgb(250 250 250 / 0.3) !important;
+  background-color: rgb(248 250 252 / 0.3) !important;
 }
 
 .light .bg-zinc-800 {
-  background-color: rgb(244 244 245) !important;
+  background-color: rgb(241 245 249) !important;  /* slate-100 */
 }
 
 .light .bg-zinc-800\/50 {
-  background-color: rgb(244 244 245 / 0.5) !important;
+  background-color: rgb(241 245 249 / 0.5) !important;
 }
 
 .light .bg-zinc-800\/30 {
-  background-color: rgb(244 244 245 / 0.3) !important;
+  background-color: rgb(241 245 249 / 0.3) !important;
 }
 
 .light .bg-zinc-700 {
-  background-color: rgb(228 228 231) !important;
+  background-color: rgb(203 213 225) !important;  /* slate-300 — visible contrast */
 }
 
 .light .bg-zinc-700\/50 {
-  background-color: rgb(228 228 231 / 0.5) !important;
+  background-color: rgb(203 213 225 / 0.5) !important;
 }
 
-/* ===== BORDER COLORS ===== */
+/* ===== BORDER COLORS (Slate-based — visible on white) ===== */
 .light .border-zinc-800 {
-  border-color: rgb(228 228 231) !important;
+  border-color: rgb(226 232 240) !important;  /* slate-200 */
 }
 
 .light .border-zinc-700 {
-  border-color: rgb(212 212 216) !important;
+  border-color: rgb(203 213 225) !important;  /* slate-300 */
 }
 
 .light .border-zinc-600 {
-  border-color: rgb(161 161 170) !important;
+  border-color: rgb(148 163 184) !important;  /* slate-400 */
 }
 
 /* ===== TEXT COLORS - Most critical for readability ===== */
@@ -267,13 +278,15 @@ body {
 
 /* ===== SIDEBAR ===== */
 .light .bg-zinc-900.border-r {
-  background-color: rgb(250 250 250) !important;
+  background-color: rgb(248 250 252) !important;  /* slate-50 — matches surface */
+  border-color: rgb(226 232 240) !important;       /* slate-200 */
 }
 
 /* ===== CARDS ===== */
 .light .bg-zinc-900.border {
   background-color: rgb(255 255 255) !important;
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  border-color: rgb(226 232 240) !important;        /* slate-200 */
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06) !important;
 }
 
 /* Light mode card backgrounds for issue types */
@@ -343,10 +356,6 @@ body {
 
 .light .bg-zinc-700 {
   background-color: rgb(161 161 170) !important;
-}
-
-.light .text-zinc-100 {
-  color: rgb(255 255 255) !important;
 }
 
 /* Keyboard shortcut badges */
@@ -501,7 +510,7 @@ body {
 
 /* Progress bar background */
 .light .bg-zinc-800.rounded-full {
-  background-color: rgb(228 228 231) !important;
+  background-color: rgb(226 232 240) !important;  /* slate-200 */
 }
 
 /* Modal backdrop */
@@ -964,8 +973,162 @@ body {
   background-color: rgb(207 250 254 / 0.7) !important;
 }
 
+/* ===== ALERT / STATUS PANEL BACKGROUNDS (90% opacity variants) ===== */
+.light .bg-cyan-900\/90 {
+  background-color: rgb(236 254 255) !important;
+}
+
+.light .bg-red-900\/90 {
+  background-color: rgb(254 242 242) !important;
+}
+
+.light .bg-amber-900\/90 {
+  background-color: rgb(255 251 235) !important;
+}
+
+.light .bg-green-900\/90 {
+  background-color: rgb(240 253 244) !important;
+}
+
+/* ===== ALERT / STATUS PANEL BORDERS ===== */
+.light .border-cyan-700 {
+  border-color: rgb(165 243 252) !important;
+}
+
+.light .border-red-700 {
+  border-color: rgb(254 202 202) !important;
+}
+
+.light .border-amber-700 {
+  border-color: rgb(253 230 138) !important;
+}
+
+.light .border-green-700 {
+  border-color: rgb(187 247 208) !important;
+}
+
+/* ===== ALERT / STATUS PANEL TEXT (light -200 variants → dark equivalents) ===== */
+.light .text-cyan-200 {
+  color: rgb(14 116 144) !important;
+}
+
+.light .text-red-200 {
+  color: rgb(185 28 28) !important;
+}
+
+.light .text-amber-200 {
+  color: rgb(180 83 9) !important;
+}
+
+.light .text-green-200 {
+  color: rgb(21 128 61) !important;
+}
+
+/* -300 text variants used in alert body copy */
+.light .text-amber-300 {
+  color: rgb(217 119 6) !important;
+}
+
+.light .text-green-300 {
+  color: rgb(22 163 74) !important;
+}
+
+/* ===== MODAL BACKGROUNDS ===== */
+.light .bg-zinc-900\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* ===== INPUT FIELDS WITH EXPLICIT BG CLASS ===== */
+.light input.bg-zinc-800,
+.light select.bg-zinc-800,
+.light textarea.bg-zinc-800 {
+  background-color: rgb(255 255 255) !important;
+  border-color: rgb(228 228 231) !important;
+}
+
 .light .text-cyan-400 {
   color: rgb(6 148 162) !important;
+}
+
+/* ===== FEATURE PAGE — ISSUE TREE & PROGRESS ===== */
+
+/* Progress bar track — must be clearly visible on white/slate-50 background */
+.light .bg-zinc-700.rounded-full {
+  background-color: rgb(226 232 240) !important;  /* slate-200 — visible track */
+}
+
+/* Muted backgrounds (progress inactive, badges) — distinct from page bg */
+.light .bg-zinc-600 {
+  background-color: rgb(148 163 184) !important;  /* slate-400 — clearly visible */
+}
+
+/* Issue row hover states */
+.light .hover\:bg-zinc-700\/50:hover {
+  background-color: rgb(244 244 245 / 0.7) !important;
+}
+
+.light .hover\:bg-zinc-600:hover {
+  background-color: rgb(228 228 231) !important;
+}
+
+.light .hover\:bg-zinc-700:hover {
+  background-color: rgb(244 244 245) !important;
+}
+
+/* SUBTASK toggle (dark bg on light) */
+.light .bg-zinc-700.text-zinc-400 {
+  background-color: rgb(228 228 231) !important;
+  color: rgb(113 113 122) !important;
+}
+
+/* Status dropdown menu */
+.light .bg-zinc-800.border.border-zinc-600 {
+  background-color: rgb(255 255 255) !important;
+  border-color: rgb(212 212 216) !important;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.1) !important;
+}
+
+/* Filter/toggle button borders */
+.light .bg-zinc-700.border.border-zinc-600 {
+  background-color: rgb(244 244 245) !important;
+  border-color: rgb(212 212 216) !important;
+}
+
+.light .border-zinc-600.hover\:border-zinc-500:hover {
+  border-color: rgb(161 161 170) !important;
+}
+
+/* Feature page main container */
+.light .min-h-screen.bg-zinc-900 {
+  background-color: rgb(255 255 255) !important;
+}
+
+/* Feature page sticky header */
+.light .bg-zinc-800.border-b.border-zinc-700 {
+  background-color: rgb(250 250 250) !important;
+  border-color: rgb(228 228 231) !important;
+}
+
+/* Skeleton loading placeholders */
+.light .h-8.bg-zinc-700,
+.light .h-4.bg-zinc-700,
+.light .h-12.bg-zinc-700,
+.light .h-2.bg-zinc-700 {
+  background-color: rgb(228 228 231) !important;
+}
+
+/* Issue row active status dropdown item */
+.light .bg-zinc-700:not(.rounded-full):not(.text-zinc-400):not(.border) {
+  background-color: rgb(244 244 245) !important;
+}
+
+/* Back button in feature header */
+.light .hover\:bg-zinc-700.text-zinc-300 {
+  color: rgb(82 82 91) !important;
+}
+
+.light .hover\:bg-zinc-700.text-zinc-300:hover {
+  background-color: rgb(244 244 245) !important;
 }
 
 /* Execution history timestamps */

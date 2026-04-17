@@ -116,7 +116,7 @@ function IssueTreeItem({
   const hasChildren = node.children.length > 0;
 
   const typeColors: Record<string, string> = {
-    FEATURE: 'text-amber-500',
+    FEATURE: 'text-blue-400',
     EPIC: 'text-purple-500',
     STORY: 'text-green-500',
     TASK: 'text-blue-500',

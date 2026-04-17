@@ -568,6 +568,28 @@ class PipelineExecutor:
             ],
         }
 
+    async def cancel_all_pipelines(self, db: AsyncSession) -> List[str]:
+        """Cancel all currently running pipeline executions.
+
+        Iterates over every execution tracked in ``_running`` and cancels each
+        one.  Returns a list of execution IDs that were successfully cancelled.
+        """
+        # Snapshot the keys to avoid mutating the dict while iterating
+        execution_ids = list(self._running.keys())
+        cancelled_ids: List[str] = []
+        for execution_id in execution_ids:
+            try:
+                success = await self.cancel_pipeline(db, execution_id)
+                if success:
+                    cancelled_ids.append(execution_id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to cancel pipeline %s during stop-all: %s",
+                    execution_id,
+                    exc,
+                )
+        return cancelled_ids
+
     async def cancel_pipeline(
         self,
         db: AsyncSession,

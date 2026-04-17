@@ -362,7 +362,7 @@ function IssueBrowser({
   const getTypeConfig = (type: string) => {
     const normalizedType = type?.toUpperCase() || 'TASK';
     switch (normalizedType) {
-      case 'FEATURE': return { color: 'text-amber-400 bg-amber-900/30', icon: '🚀' };
+      case 'FEATURE': return { color: 'text-blue-400 bg-blue-900/30', icon: '🚀' };
       case 'EPIC': return { color: 'text-purple-400 bg-purple-900/30', icon: '⚡' };
       case 'STORY': return { color: 'text-green-400 bg-green-900/30', icon: '📖' };
       default: return { color: 'text-zinc-400 bg-zinc-800', icon: '📋' };

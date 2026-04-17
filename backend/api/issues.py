@@ -4,14 +4,16 @@ Issue CRUD API Routes
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
 from typing import Optional, List
 from datetime import datetime
 import uuid
 import logging
 import asyncio
 
+from app.background import create_tracked_task
 from models import (
     get_db,
     AsyncSessionLocal,
@@ -109,23 +111,54 @@ async def trigger_qa_generation(issue_id: str, issue_key: str, project_id: str):
             # Create QA tasks in the database
             created_keys = []
             for suggestion in qa_suggestions:
-                # Get next QA task key
-                result = await db.execute(
-                    select(QASequence).where(QASequence.projectId == project_id)
+                # Get next QA task key — atomic increment to prevent duplicates
+                qa_result = await db.execute(
+                    text(
+                        'UPDATE "QASequence" '
+                        'SET "lastNumber" = "lastNumber" + 1 '
+                        'WHERE "projectId" = :pid '
+                        'RETURNING "lastNumber", "prefix"'
+                    ),
+                    {"pid": project_id},
                 )
-                sequence = result.scalar_one_or_none()
-
-                if not sequence:
-                    sequence = QASequence(
-                        id=str(uuid.uuid4()),
-                        projectId=project_id,
-                        prefix="QA",
-                        lastNumber=0,
-                    )
-                    db.add(sequence)
-
-                sequence.lastNumber += 1
-                qa_key = f"{sequence.prefix}-{sequence.lastNumber}"
+                qa_row = qa_result.first()
+                if qa_row:
+                    qa_seq_number = qa_row[0]
+                    qa_key = f"{qa_row[1]}-{qa_seq_number}"
+                else:
+                    # First QA task for this project — INSERT the sequence row
+                    qa_seq_number = None
+                    for _attempt in range(5):
+                        try:
+                            await db.execute(
+                                text(
+                                    'INSERT INTO "QASequence" ("id", "projectId", "prefix", "lastNumber") '
+                                    'VALUES (:id, :pid, :prefix, 1)'
+                                ),
+                                {"id": str(uuid.uuid4()), "pid": project_id, "prefix": "QA"},
+                            )
+                            qa_seq_number = 1
+                            qa_key = "QA-1"
+                            break
+                        except IntegrityError:
+                            await db.rollback()
+                            qa_result = await db.execute(
+                                text(
+                                    'UPDATE "QASequence" '
+                                    'SET "lastNumber" = "lastNumber" + 1 '
+                                    'WHERE "projectId" = :pid '
+                                    'RETURNING "lastNumber", "prefix"'
+                                ),
+                                {"pid": project_id},
+                            )
+                            qa_row = qa_result.first()
+                            if qa_row:
+                                qa_seq_number = qa_row[0]
+                                qa_key = f"{qa_row[1]}-{qa_seq_number}"
+                                break
+                    else:
+                        logger.error(f"Failed to generate QA key for project {project_id} after 5 retries")
+                        continue
 
                 # Handle scenario as list or string
                 scenario = suggestion.get('scenario', '')
@@ -142,7 +175,7 @@ async def trigger_qa_generation(issue_id: str, issue_key: str, project_id: str):
                     id=str(uuid.uuid4()),
                     projectId=project_id,
                     key=qa_key,
-                    sequence=sequence.lastNumber,
+                    sequence=qa_seq_number,
                     title=suggestion.get('title', 'Unnamed test'),
                     scenario=scenario,
                     expectedResult=expected_result,
@@ -172,32 +205,64 @@ async def trigger_qa_generation(issue_id: str, issue_key: str, project_id: str):
         logger.error(f"Failed to generate QA tasks for issue {issue_key}: {e}")
 
 
-# Helper function to generate issue key
+# Helper function to generate issue key — atomic to prevent duplicate keys under concurrency
 async def get_next_issue_key(db: AsyncSession, project_id: str) -> tuple[str, int]:
-    """Get the next issue key for a project"""
+    """Get the next issue key for a project using atomic SQL increment.
+
+    Uses SQL-level UPDATE ... RETURNING to atomically increment the sequence
+    counter, preventing duplicate keys when concurrent requests race.
+    Falls back to INSERT on first use, with retry on IntegrityError race.
+    """
+    # Determine the prefix once (needed for INSERT path)
+    prefix = project_id[:4].upper()
+
+    # Try atomic increment of existing sequence row
     result = await db.execute(
-        select(IssueSequence).where(IssueSequence.projectId == project_id)
+        text(
+            'UPDATE "IssueSequence" '
+            'SET "lastNumber" = "lastNumber" + 1 '
+            'WHERE "projectId" = :pid '
+            'RETURNING "lastNumber", "prefix"'
+        ),
+        {"pid": project_id},
     )
-    sequence = result.scalar_one_or_none()
+    row = result.first()
+    if row:
+        next_number = row[0]
+        key = f"{row[1]}-{next_number}"
+        # No separate commit here — caller (create_issue) commits the full transaction
+        return key, next_number
 
-    if not sequence:
-        # Create new sequence with project name prefix
-        # For now, use first 4 chars of project_id as prefix
-        prefix = project_id[:4].upper()
-        sequence = IssueSequence(
-            id=str(uuid.uuid4()),
-            projectId=project_id,
-            prefix=prefix,
-            lastNumber=0,
-        )
-        db.add(sequence)
+    # Sequence row doesn't exist yet — INSERT it, with retry on concurrent race
+    for attempt in range(5):
+        try:
+            await db.execute(
+                text(
+                    'INSERT INTO "IssueSequence" ("id", "projectId", "prefix", "lastNumber") '
+                    'VALUES (:id, :pid, :prefix, 1)'
+                ),
+                {"id": str(uuid.uuid4()), "pid": project_id, "prefix": prefix},
+            )
+            return f"{prefix}-1", 1
+        except IntegrityError:
+            await db.rollback()
+            # Another request won the race — retry the atomic UPDATE
+            result = await db.execute(
+                text(
+                    'UPDATE "IssueSequence" '
+                    'SET "lastNumber" = "lastNumber" + 1 '
+                    'WHERE "projectId" = :pid '
+                    'RETURNING "lastNumber", "prefix"'
+                ),
+                {"pid": project_id},
+            )
+            row = result.first()
+            if row:
+                next_number = row[0]
+                key = f"{row[1]}-{next_number}"
+                return key, next_number
 
-    sequence.lastNumber += 1
-    next_number = sequence.lastNumber
-    key = f"{sequence.prefix}-{next_number}"
-
-    await db.commit()
-    return key, next_number
+    raise RuntimeError(f"Failed to generate issue key for project {project_id} after 5 retries")
 
 
 # Helper function to create activity log
@@ -507,8 +572,11 @@ async def update_issue(
                 # Detect status change to COMPLETED_WAITING_QA for QA hook (CB-566)
                 if new_value == IssueStatus.COMPLETED_WAITING_QA.value:
                     logger.info(f"Issue {issue.key} status changed to COMPLETED_WAITING_QA - triggering async QA generation")
-                    # Fire-and-forget async QA generation
-                    asyncio.create_task(trigger_qa_generation(issue.id, issue.key, issue.projectId))
+                    # Fire-and-forget async QA generation — tracked to prevent GC
+                    create_tracked_task(
+                        trigger_qa_generation(issue.id, issue.key, issue.projectId),
+                        name=f"qa-gen-{issue.key}",
+                    )
             else:
                 await log_activity(
                     db, issue_id, "System", "UPDATED",
@@ -692,8 +760,11 @@ async def batch_update_status(
             # Detect status change to COMPLETED_WAITING_QA for QA hook (CB-566)
             if new_status == IssueStatus.COMPLETED_WAITING_QA.value:
                 logger.info(f"Issue {issue.key} status changed to COMPLETED_WAITING_QA - triggering async QA generation")
-                # Fire-and-forget async QA generation
-                asyncio.create_task(trigger_qa_generation(issue.id, issue.key, issue.projectId))
+                # Fire-and-forget async QA generation — tracked to prevent GC
+                create_tracked_task(
+                    trigger_qa_generation(issue.id, issue.key, issue.projectId),
+                    name=f"qa-gen-{issue.key}",
+                )
 
             await log_activity(
                 db, issue.id, "System", "STATUS_CHANGED",

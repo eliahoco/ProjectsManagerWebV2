@@ -4,37 +4,38 @@
  * Feature Detail Page - Shows all issues under a FEATURE with hierarchy
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search } from 'lucide-react';
-import { useIssues, useIssue, useUpdateIssue, useDeleteIssue, useStartExecution, type ExecutionSession } from '@/hooks/useCodeBoard';
+import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search, Loader2, PanelRightClose, Wifi, WifiOff, Terminal } from 'lucide-react';
+import { useIssues, useIssue, useUpdateIssue, useDeleteIssue, useStartExecution, useFeatureLiveData, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { Issue, IssueStatus, IssueType } from '@/types/codeboard';
-import { ExecutionModal, FeatureTestingPanel, FeatureExecutionPanel, FeatureSearchBar, applyFeatureSearchFilters, DEFAULT_FEATURE_SEARCH_FILTERS } from '@/components/codeboard';
+import { ExecutionModal, FeatureTestingPanel, FeatureExecutionPanel, FeatureSearchBar, applyFeatureSearchFilters, DEFAULT_FEATURE_SEARCH_FILTERS, InlineTerminalPanel } from '@/components/codeboard';
 import type { FeatureSearchFilters } from '@/components/codeboard';
 import { EpicSearchBar, applyEpicSearchFilters, DEFAULT_EPIC_SEARCH_FILTERS, RelevanceBadge, highlightEpicMatch } from '@/components/codeboard/EpicSearchBar';
 import type { EpicSearchFilters } from '@/components/codeboard/EpicSearchBar';
 import { cn } from '@/lib/utils';
 import { highlightMatch } from '@/components/codeboard/IssueSearchBar';
+import { useAutoPilot } from '@/contexts/AutoPilotContext';
 
-// Status icons and colors with dark mode support
+// Status icons and colors — dark mode defaults; light mode handled by globals.css .light overrides
 const STATUS_CONFIG: Record<IssueStatus, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; darkBg: string }> = {
-  'BACKLOG': { icon: Circle, color: 'text-gray-400', bg: 'bg-gray-100', darkBg: 'dark:bg-gray-700' },
-  'TODO': { icon: Circle, color: 'text-blue-500', bg: 'bg-blue-100', darkBg: 'dark:bg-blue-900/30' },
-  'IN_PROGRESS': { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-100', darkBg: 'dark:bg-yellow-900/30' },
-  'IN_REVIEW': { icon: AlertCircle, color: 'text-purple-500', bg: 'bg-purple-100', darkBg: 'dark:bg-purple-900/30' },
-  'COMPLETED_WAITING_QA': { icon: Clock, color: 'text-orange-500', bg: 'bg-orange-100', darkBg: 'dark:bg-orange-900/30' },
-  'DONE': { icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-100', darkBg: 'dark:bg-green-900/30' },
-  'CANCELLED': { icon: XCircle, color: 'text-red-500', bg: 'bg-red-100', darkBg: 'dark:bg-red-900/30' },
+  'BACKLOG': { icon: Circle, color: 'text-gray-400', bg: 'bg-gray-100', darkBg: 'bg-gray-700' },
+  'TODO': { icon: Circle, color: 'text-blue-500', bg: 'bg-blue-100', darkBg: 'bg-blue-900/30' },
+  'IN_PROGRESS': { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-100', darkBg: 'bg-yellow-900/30' },
+  'IN_REVIEW': { icon: AlertCircle, color: 'text-purple-500', bg: 'bg-purple-100', darkBg: 'bg-purple-900/30' },
+  'COMPLETED_WAITING_QA': { icon: Clock, color: 'text-blue-700', bg: 'bg-blue-100', darkBg: 'bg-blue-900/30' },
+  'DONE': { icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-100', darkBg: 'bg-green-900/30' },
+  'CANCELLED': { icon: XCircle, color: 'text-red-500', bg: 'bg-red-100', darkBg: 'bg-red-900/30' },
 };
 
-// Type colors with dark mode support
+// Type colors — dark mode defaults; light mode handled by globals.css .light overrides
 const TYPE_CONFIG: Record<IssueType, { color: string; bg: string; darkBg: string; icon: string }> = {
-  'FEATURE': { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100', darkBg: 'dark:bg-amber-900/30', icon: '🚀' },
-  'EPIC': { color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100', darkBg: 'dark:bg-purple-900/30', icon: '⚡' },
-  'STORY': { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100', darkBg: 'dark:bg-blue-900/30', icon: '📖' },
-  'TASK': { color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100', darkBg: 'dark:bg-green-900/30', icon: '✓' },
-  'SUBTASK': { color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-100', darkBg: 'dark:bg-gray-700', icon: '○' },
-  'BUG': { color: 'text-red-600 dark:text-red-400', bg: 'bg-red-100', darkBg: 'dark:bg-red-900/30', icon: '🐛' },
+  'FEATURE': { color: 'text-blue-400', bg: 'bg-blue-100', darkBg: 'bg-blue-900/30', icon: '🚀' },
+  'EPIC': { color: 'text-purple-400', bg: 'bg-purple-100', darkBg: 'bg-purple-900/30', icon: '⚡' },
+  'STORY': { color: 'text-blue-400', bg: 'bg-blue-100', darkBg: 'bg-blue-900/30', icon: '📖' },
+  'TASK': { color: 'text-green-400', bg: 'bg-green-100', darkBg: 'bg-green-900/30', icon: '✓' },
+  'SUBTASK': { color: 'text-gray-400', bg: 'bg-gray-100', darkBg: 'bg-gray-700', icon: '○' },
+  'BUG': { color: 'text-red-400', bg: 'bg-red-100', darkBg: 'bg-red-900/30', icon: '🐛' },
 };
 
 interface TreeNode extends Issue {
@@ -141,15 +142,18 @@ interface TreeItemProps {
   onEpicSearchToggle?: (epicId: string) => void;
   onEpicSearchChange?: (epicId: string, filters: EpicSearchFilters) => void;
   allDescendantIssues?: Array<{ id: string; parentId?: string; title: string; key: string; description?: string; type: string; status: string; priority: string; labels?: string; createdAt: string; updatedAt: string; dueDate?: string; startedAt?: string; completedAt?: string }>;
+  activeSessionMap?: Map<string, ExecutionSession>;
+  onRunningTaskClick?: (issueId: string) => void;
 }
 
-function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate, searchQuery, epicSearchFilters, epicSearchVisibleIds, onEpicSearchToggle, onEpicSearchChange, allDescendantIssues }: TreeItemProps) {
+const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate, searchQuery, epicSearchFilters, epicSearchVisibleIds, onEpicSearchToggle, onEpicSearchChange, allDescendantIssues, activeSessionMap, onRunningTaskClick }: TreeItemProps) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const isExpanded = expanded.has(node.id);
   const isSelected = selected.has(node.id);
   const hasChildren = node.children.length > 0;
   const StatusIcon = STATUS_CONFIG[node.status].icon;
   const typeConfig = TYPE_CONFIG[node.type];
+  const runningSession = activeSessionMap?.get(node.id);
   const progress = calculateProgress(node);
   const completedCount = progress.done + progress.waitingQA;
   const progressPercent = progress.total > 0 ? Math.round((completedCount / progress.total) * 100) : 0;
@@ -217,10 +221,11 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
     <div className="select-none">
       <div
         className={cn(
-          "flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-zinc-700/50 cursor-pointer group",
+          "flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-zinc-700/50 cursor-pointer group transition-all duration-300",
           "border-l-4",
+          runningSession ? 'border-l-cyan-400 bg-cyan-950/20 animate-pulse' :
           node.status === 'DONE' ? 'border-l-green-500' :
-          node.status === 'COMPLETED_WAITING_QA' ? 'border-l-orange-500' :
+          node.status === 'COMPLETED_WAITING_QA' ? 'border-l-blue-700' :
           node.status === 'IN_PROGRESS' ? 'border-l-yellow-500' :
           node.status === 'IN_REVIEW' ? 'border-l-purple-500' :
           'border-l-zinc-600',
@@ -262,7 +267,7 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
           node.type === 'TASK' ? 'bg-green-900/50 text-green-400' :
           node.type === 'SUBTASK' ? 'bg-zinc-700 text-zinc-400' :
           node.type === 'BUG' ? 'bg-red-900/50 text-red-400' :
-          'bg-amber-900/50 text-amber-400'
+          'bg-blue-900/50 text-blue-400'
         )}>
           {typeConfig.icon} {node.type}
         </span>
@@ -270,9 +275,26 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
         {/* Issue Key */}
         <span className="text-xs font-mono text-zinc-500">{node.key}</span>
 
+        {/* Running indicator + terminal button */}
+        {runningSession && (
+          <>
+            <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+            <button
+              onClick={(e) => { e.stopPropagation(); onRunningTaskClick?.(node.id); }}
+              className="p-1 rounded hover:bg-cyan-900/50 text-cyan-400 hover:text-cyan-300 shrink-0 transition-colors"
+              title="Open live terminal"
+            >
+              <Terminal className="w-4 h-4" />
+            </button>
+          </>
+        )}
+
         {/* Title - Clickable */}
         <span
-          className="flex-1 text-sm font-medium text-zinc-100 truncate hover:text-blue-400"
+          className={cn(
+            "flex-1 text-sm font-medium truncate",
+            runningSession ? "text-cyan-200 hover:text-cyan-100" : "text-zinc-100 hover:text-blue-400"
+          )}
           onClick={() => onNavigate(node)}
         >
           {activeSearchQuery
@@ -358,10 +380,10 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
           <div className="w-20 h-2 bg-zinc-700 rounded-full overflow-hidden">
             <div
               className={cn(
-                "h-full rounded-full transition-all",
+                "h-full rounded-full transition-all duration-500",
                 allDone ? 'bg-green-500' :
-                allWaitingQA ? 'bg-orange-500' :
-                progressPercent === 100 ? 'bg-orange-500' :
+                allWaitingQA ? 'bg-blue-700' :
+                progressPercent === 100 ? 'bg-blue-700' :
                 progressPercent > 50 ? 'bg-blue-500' :
                 progressPercent > 0 ? 'bg-yellow-500' : 'bg-zinc-600'
               )}
@@ -371,7 +393,7 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
           <span className={cn(
             "text-xs w-12 text-right",
             allDone ? 'text-green-400' :
-            allWaitingQA ? 'text-orange-400' :
+            allWaitingQA ? 'text-blue-400' :
             'text-zinc-500'
           )}>
             {completedCount}/{progress.total}
@@ -418,13 +440,15 @@ function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange
               onEpicSearchToggle={onEpicSearchToggle}
               onEpicSearchChange={onEpicSearchChange}
               allDescendantIssues={allDescendantIssues}
+              activeSessionMap={activeSessionMap}
+              onRunningTaskClick={onRunningTaskClick}
             />
           ))}
         </div>
       )}
     </div>
   );
-}
+});
 
 export default function FeatureDetailPage() {
   const params = useParams();
@@ -434,11 +458,18 @@ export default function FeatureDetailPage() {
   // Fetch the feature issue
   const { data: feature, isLoading: featureLoading } = useIssue(featureId);
 
-  // Fetch all issues for the project
+  // Live data from SSE
+  const { activeSessionMap, hasActiveSessions, sseConnected } = useFeatureLiveData(feature?.projectId || null);
+
+  // Fetch all issues for the project — polls every 3s when sessions are active
   const { data: issuesData, isLoading: issuesLoading, refetch } = useIssues(
     feature?.projectId || null,
-    { pageSize: 1000 }
+    { pageSize: 1000, refetchInterval: hasActiveSessions ? 3000 : false }
   );
+
+  // Inline terminal state
+  const [activeTerminalIssueId, setActiveTerminalIssueId] = useState<string | null>(null);
+  const activeTerminalSession = activeTerminalIssueId ? activeSessionMap.get(activeTerminalIssueId) : null;
 
   const updateIssue = useUpdateIssue();
   const deleteIssue = useDeleteIssue();
@@ -465,6 +496,8 @@ export default function FeatureDetailPage() {
 
   // Auto Pilot Panel state
   const [showAutoPilotPanel, setShowAutoPilotPanel] = useState(false);
+  const autoPilot = useAutoPilot();
+  const isAutoPilotRunningForThis = autoPilot.state.isActive && autoPilot.state.featureId === featureId;
 
   // Epic search state - CB-1122
   const [epicSearchFilters, setEpicSearchFilters] = useState<Map<string, EpicSearchFilters>>(new Map());
@@ -817,6 +850,10 @@ export default function FeatureDetailPage() {
     router.push(`/codeboard/issue/${issue.id}`);
   };
 
+  const handleRunningTaskClick = useCallback((issueId: string) => {
+    setActiveTerminalIssueId(prev => prev === issueId ? null : issueId);
+  }, []);
+
   // Get all executable tasks (TASKs and SUBTASKs that are not DONE)
   // If items are selected, only include selected items
   const getExecutableTasks = useMemo(() => {
@@ -1088,10 +1125,21 @@ export default function FeatureDetailPage() {
             </button>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm px-2 py-1 rounded-full font-medium bg-amber-900/50 text-amber-400">
+                <span className="text-sm px-2 py-1 rounded-full font-medium bg-blue-900/50 text-blue-400">
                   🚀 FEATURE
                 </span>
                 <span className="text-sm font-mono text-zinc-400">{feature.key}</span>
+                {/* SSE connection indicator */}
+                <span
+                  className={cn(
+                    "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full",
+                    sseConnected ? "text-green-400 bg-green-900/20" : hasActiveSessions ? "text-yellow-400 bg-yellow-900/20" : "text-zinc-600"
+                  )}
+                  title={sseConnected ? 'Live: SSE connected' : hasActiveSessions ? 'Polling fallback (SSE disconnected)' : 'Idle'}
+                >
+                  {sseConnected ? <Wifi className="w-3 h-3" /> : hasActiveSessions ? <WifiOff className="w-3 h-3" /> : null}
+                  {hasActiveSessions && (sseConnected ? 'LIVE' : 'POLL')}
+                </span>
               </div>
               <h1 className="text-xl font-bold text-zinc-100 mt-1">
                 {feature.title}
@@ -1113,13 +1161,13 @@ export default function FeatureDetailPage() {
               {/* Completed (Waiting QA) Bar */}
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-orange-400">Completed</span>
+                  <span className="text-sm font-medium text-blue-400">Completed</span>
                   <span className="text-sm text-zinc-400">{overallProgress.waitingQA} / {overallProgress.total}</span>
                   <span className="text-xs text-zinc-500">(waiting QA)</span>
                 </div>
                 <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-orange-500 rounded-full transition-all"
+                    className="h-full bg-blue-700 rounded-full transition-all duration-500"
                     style={{ width: `${overallProgress.total > 0 ? (overallProgress.waitingQA / overallProgress.total) * 100 : 0}%` }}
                   />
                 </div>
@@ -1133,14 +1181,14 @@ export default function FeatureDetailPage() {
                 </div>
                 <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-green-500 rounded-full transition-all"
+                    className="h-full bg-green-500 rounded-full transition-all duration-500"
                     style={{ width: `${overallProgress.total > 0 ? (overallProgress.done / overallProgress.total) * 100 : 0}%` }}
                   />
                 </div>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-bold text-orange-400">
+              <div className="text-lg font-bold text-blue-400">
                 {overallProgress.total > 0 ? Math.round((overallProgress.waitingQA / overallProgress.total) * 100) : 0}%
               </div>
               <div className="text-lg font-bold text-green-400">
@@ -1187,14 +1235,23 @@ export default function FeatureDetailPage() {
                 disabled={isExecuting || getExecutableTasks.length === 0}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
-                  isExecuting || getExecutableTasks.length === 0
-                    ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white"
+                  isAutoPilotRunningForThis
+                    ? "bg-blue-800 text-blue-200 ring-2 ring-blue-500/50"
+                    : isExecuting || getExecutableTasks.length === 0
+                      ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white"
                 )}
-                title="Launch Auto Pilot with full control panel"
+                title={isAutoPilotRunningForThis ? "AutoPilot is running — click to view" : "Launch Auto Pilot with full control panel"}
               >
-                <Zap className="w-4 h-4" />
-                Auto Pilot ({getExecutableTasks.length})
+                {isAutoPilotRunningForThis ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                {isAutoPilotRunningForThis
+                  ? `AutoPilot ${autoPilot.state.progress.completed + autoPilot.state.progress.skipped}/${autoPilot.state.progress.total}`
+                  : `Auto Pilot (${getExecutableTasks.length})`
+                }
               </button>
             </div>
           </div>
@@ -1216,11 +1273,11 @@ export default function FeatureDetailPage() {
                   <div className="h-1.5 bg-zinc-600 rounded-full overflow-hidden">
                     <div className="h-full flex">
                       <div className="h-full bg-green-500" style={{ width: `${counts.total > 0 ? (counts.done / counts.total) * 100 : 0}%` }} />
-                      <div className="h-full bg-orange-500" style={{ width: `${counts.total > 0 ? (counts.completed / counts.total) * 100 : 0}%` }} />
+                      <div className="h-full bg-blue-700" style={{ width: `${counts.total > 0 ? (counts.completed / counts.total) * 100 : 0}%` }} />
                     </div>
                   </div>
                   <div className="flex justify-between mt-1 text-[10px]">
-                    <span className="text-orange-400">{counts.completed} waiting</span>
+                    <span className="text-blue-400">{counts.completed} waiting</span>
                     <span className="text-green-400">{counts.done} done</span>
                   </div>
                 </div>
@@ -1355,7 +1412,7 @@ export default function FeatureDetailPage() {
               <div className="flex items-center gap-2 border-l border-zinc-700 pl-4">
                 <button
                   onClick={handleMarkAllWaitingQA}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded bg-orange-600 hover:bg-orange-500 text-white"
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-white"
                 >
                   <ClipboardCheck className="w-3.5 h-3.5" />
                   {selected.size > 0 ? 'Selected → Waiting QA' : 'All → Waiting QA'}
@@ -1378,35 +1435,59 @@ export default function FeatureDetailPage() {
             </div>
           </div>
 
-          {/* Tree View */}
-          <div className="max-w-6xl mx-auto px-6 py-4">
-            <div className="bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden">
-              {filteredTree.length === 0 ? (
-                <div className="p-8 text-center text-zinc-500">
-                  {allDescendantIssues.length === 0
-                    ? 'No issues found under this feature'
-                    : 'No issues match your search criteria'}
+          {/* Tree View + Inline Terminal Split */}
+          <div className={cn(
+            "mx-auto px-6 py-4 transition-all duration-300",
+            activeTerminalSession ? "max-w-[1600px]" : "max-w-6xl"
+          )}>
+            <div className="flex gap-4">
+              {/* Tree panel */}
+              <div className={cn(
+                "transition-all duration-300 min-w-0",
+                activeTerminalSession ? "w-1/2" : "w-full"
+              )}>
+                <div className="bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden">
+                  {filteredTree.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-500">
+                      {allDescendantIssues.length === 0
+                        ? 'No issues found under this feature'
+                        : 'No issues match your search criteria'}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-zinc-700">
+                      {filteredTree.map(node => (
+                        <TreeItem
+                          key={node.id}
+                          node={node}
+                          expanded={expanded}
+                          selected={selected}
+                          onToggle={handleToggle}
+                          onSelect={handleSelect}
+                          onStatusChange={handleStatusChange}
+                          onNavigate={handleNavigate}
+                          searchQuery={searchFilters.query}
+                          epicSearchFilters={epicSearchFilters}
+                          epicSearchVisibleIds={epicSearchVisibleIds}
+                          onEpicSearchToggle={handleEpicSearchToggle}
+                          onEpicSearchChange={handleEpicSearchChange}
+                          allDescendantIssues={allDescendantIssues}
+                          activeSessionMap={activeSessionMap}
+                          onRunningTaskClick={handleRunningTaskClick}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="divide-y divide-zinc-700">
-                  {filteredTree.map(node => (
-                    <TreeItem
-                      key={node.id}
-                      node={node}
-                      expanded={expanded}
-                      selected={selected}
-                      onToggle={handleToggle}
-                      onSelect={handleSelect}
-                      onStatusChange={handleStatusChange}
-                      onNavigate={handleNavigate}
-                      searchQuery={searchFilters.query}
-                      epicSearchFilters={epicSearchFilters}
-                      epicSearchVisibleIds={epicSearchVisibleIds}
-                      onEpicSearchToggle={handleEpicSearchToggle}
-                      onEpicSearchChange={handleEpicSearchChange}
-                      allDescendantIssues={allDescendantIssues}
-                    />
-                  ))}
+              </div>
+
+              {/* Inline terminal panel */}
+              {activeTerminalSession && activeTerminalIssueId && (
+                <div className="w-1/2 h-[calc(100vh-320px)] sticky top-[280px] transition-all duration-300 animate-in slide-in-from-right-4">
+                  <InlineTerminalPanel
+                    session={activeTerminalSession}
+                    issue={issuesData?.items.find(i => i.id === activeTerminalIssueId)}
+                    onClose={() => setActiveTerminalIssueId(null)}
+                  />
                 </div>
               )}
             </div>
@@ -1472,23 +1553,16 @@ export default function FeatureDetailPage() {
         </div>
       )}
 
-      {/* Auto Pilot Panel - Full Feature Execution Panel */}
-      {feature && issuesData?.items && (
+      {/* Auto Pilot Panel — execution runs in AutoPilotContext (providers.tsx) */}
+      {feature && issuesData?.items && showAutoPilotPanel && (
         <FeatureExecutionPanel
           feature={feature}
           allIssues={issuesData.items}
+          projectId={feature.projectId}
           isOpen={showAutoPilotPanel}
           onClose={() => {
             setShowAutoPilotPanel(false);
-            refetch(); // Refresh data after panel closes
-          }}
-          onExecutionStart={(session) => {
-            setActiveExecution(session);
-            // Find the issue that's being executed
-            const executingIssue = issuesData.items.find(i => i.id === session.issue_id);
-            if (executingIssue) {
-              setCurrentExecutionIssue(executingIssue);
-            }
+            refetch();
           }}
           onIssueClick={(issue) => {
             router.push(`/codeboard/issue/${issue.id}`);

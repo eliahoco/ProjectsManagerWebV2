@@ -66,6 +66,7 @@ export { TestPlanCompletionUI } from './TestPlanCompletionUI';
 export type { TestPlanCompletionUIProps } from './TestPlanCompletionUI';
 export { CompletionOptionsPanel } from './CompletionOptionsPanel';
 export type { CompletionOptionsPanelProps } from './CompletionOptionsPanel';
+export { InlineTerminalPanel } from './InlineTerminalPanel';
 
 // Issue Detail Template - reusable page template for issue detail views
 export {

@@ -159,16 +159,81 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
     e.dataTransfer.setData('issueId', issueId);
   };
 
+  // Collect all descendants of Features per column so children appear under their parent Feature
+  // regardless of the child's own status. Claimed children are excluded from other columns.
+  const claimedByFeature = useMemo(() => {
+    const claimed = new Set<string>();
+
+    // Helper: recursively collect all descendant IDs
+    const collectDescendants = (parentId: string, visited: Set<string> = new Set()): string[] => {
+      if (visited.has(parentId)) return [];
+      visited.add(parentId);
+      const result: string[] = [];
+      issues.forEach(issue => {
+        if (issue.parentId === parentId) {
+          result.push(issue.id);
+          result.push(...collectDescendants(issue.id, visited));
+        }
+      });
+      return result;
+    };
+
+    // For each Feature, collect all its descendants
+    issues.filter(i => i.type === 'FEATURE').forEach(feature => {
+      const descendantIds = collectDescendants(feature.id);
+      descendantIds.forEach(id => claimed.add(id));
+    });
+
+    return claimed;
+  }, [issues]);
+
   // Group issues by status, then by Feature → Epic → Story → Task hierarchy
+  // Children are grouped under their parent Feature's column, not their own status column
   const getColumnIssues = (status: IssueStatus) => {
-    const columnIssues = issues.filter(i => i.status === status);
+    // Features in this column
+    const features = sortIssuesInternal(issues.filter(i => i.status === status && i.type === 'FEATURE'));
+    const featureIds = new Set(features.map(f => f.id));
+
+    // For Features in this column, pull ALL their descendants (regardless of child status)
+    const featureDescendantIds = new Set<string>();
+    const collectDescendants = (parentId: string, visited: Set<string> = new Set()) => {
+      if (visited.has(parentId)) return;
+      visited.add(parentId);
+      issues.forEach(issue => {
+        if (issue.parentId === parentId) {
+          featureDescendantIds.add(issue.id);
+          collectDescendants(issue.id, visited);
+        }
+      });
+    };
+    features.forEach(f => collectDescendants(f.id));
+
+    // Non-feature issues in this column that are NOT claimed by a Feature in another column
+    const columnIssues = issues.filter(i =>
+      i.status === status &&
+      i.type !== 'FEATURE' &&
+      !claimedByFeature.has(i.id) // Not a descendant of any Feature
+    );
+
+    // Also include: descendants of this column's Features (regardless of their status)
+    const pulledInIssues = issues.filter(i => featureDescendantIds.has(i.id));
+    const allNonFeatureIssues = [...columnIssues, ...pulledInIssues.filter(i => i.status !== status)];
+
+    // Deduplicate (a descendant might already have this status)
+    const seen = new Set<string>();
+    const uniqueNonFeature: Issue[] = [];
+    [...columnIssues, ...pulledInIssues].forEach(i => {
+      if (!seen.has(i.id)) {
+        seen.add(i.id);
+        uniqueNonFeature.push(i);
+      }
+    });
 
     // Separate by type and apply sorting
-    const features = sortIssuesInternal(columnIssues.filter(i => i.type === 'FEATURE'));
-    const epics = sortIssuesInternal(columnIssues.filter(i => i.type === 'EPIC'));
-    const stories = sortIssuesInternal(columnIssues.filter(i => i.type === 'STORY'));
-    const tasks = sortIssuesInternal(columnIssues.filter(i => i.type === 'TASK' || i.type === 'BUG'));
-    const subtasks = sortIssuesInternal(columnIssues.filter(i => i.type === 'SUBTASK'));
+    const epics = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'EPIC'));
+    const stories = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'STORY'));
+    const tasks = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'TASK' || i.type === 'BUG'));
+    const subtasks = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'SUBTASK'));
 
     // Group Epics by their parent Feature (in this column)
     const epicsByFeature: Record<string, Issue[]> = {};
@@ -176,7 +241,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
 
     epics.forEach(epic => {
       const parent = epic.parentId ? issueMap[epic.parentId] : undefined;
-      if (parent?.type === 'FEATURE' && parent.status === status) {
+      if (parent?.type === 'FEATURE' && featureIds.has(parent.id)) {
         if (!epicsByFeature[parent.id]) epicsByFeature[parent.id] = [];
         epicsByFeature[parent.id].push(epic);
       } else {
@@ -184,13 +249,14 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
       }
     });
 
-    // Group Stories by their parent Epic (in this column)
+    // Group Stories by their parent Epic (present in this column's scope)
+    const epicIdSet = new Set(epics.map(e => e.id));
     const storiesByEpic: Record<string, Issue[]> = {};
     const orphanStories: Issue[] = [];
 
     stories.forEach(story => {
       const parent = story.parentId ? issueMap[story.parentId] : undefined;
-      if (parent?.type === 'EPIC' && parent.status === status) {
+      if (parent?.type === 'EPIC' && epicIdSet.has(parent.id)) {
         if (!storiesByEpic[parent.id]) storiesByEpic[parent.id] = [];
         storiesByEpic[parent.id].push(story);
       } else {
@@ -198,13 +264,14 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
       }
     });
 
-    // Group Tasks by their parent Story (in this column)
+    // Group Tasks by their parent Story (present in this column's scope)
+    const storyIdSet = new Set(stories.map(s => s.id));
     const tasksByStory: Record<string, Issue[]> = {};
     const orphanTasks: Issue[] = [];
 
     tasks.forEach(task => {
       const parent = task.parentId ? issueMap[task.parentId] : undefined;
-      if (parent?.type === 'STORY' && parent.status === status) {
+      if (parent?.type === 'STORY' && storyIdSet.has(parent.id)) {
         if (!tasksByStory[parent.id]) tasksByStory[parent.id] = [];
         tasksByStory[parent.id].push(task);
       } else {
@@ -212,13 +279,14 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
       }
     });
 
-    // Group Subtasks by their parent Task (in this column)
+    // Group Subtasks by their parent Task (present in this column's scope)
+    const taskIdSet = new Set(tasks.map(t => t.id));
     const subtasksByTask: Record<string, Issue[]> = {};
     const orphanSubtasks: Issue[] = [];
 
     subtasks.forEach(subtask => {
       const parent = subtask.parentId ? issueMap[subtask.parentId] : undefined;
-      if (parent?.type === 'TASK' && parent.status === status) {
+      if (parent?.type === 'TASK' && taskIdSet.has(parent.id)) {
         if (!subtasksByTask[parent.id]) subtasksByTask[parent.id] = [];
         subtasksByTask[parent.id].push(subtask);
       } else {
@@ -226,7 +294,10 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
       }
     });
 
-    return { features, epicsByFeature, orphanEpics, epics, storiesByEpic, orphanStories, tasksByStory, orphanTasks, subtasksByTask, orphanSubtasks, total: columnIssues.length };
+    // Total count: features + all unique non-feature items in this column's scope
+    const total = features.length + uniqueNonFeature.length;
+
+    return { features, epicsByFeature, orphanEpics, epics, storiesByEpic, orphanStories, tasksByStory, orphanTasks, subtasksByTask, orphanSubtasks, total };
   };
 
   return (

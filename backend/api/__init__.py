@@ -14,6 +14,7 @@ from api.import_tracker import router as import_router
 from api.execution import router as execution_router
 from api.qa import router as qa_router
 from api.pipeline import router as pipeline_router
+from api.park import router as park_router
 
 router = APIRouter()
 
@@ -35,3 +36,4 @@ router.include_router(import_router, tags=["import"])
 router.include_router(execution_router, tags=["execution"])
 router.include_router(qa_router, tags=["qa"])
 router.include_router(pipeline_router, tags=["pipeline"])
+router.include_router(park_router, tags=["park"])

@@ -11,7 +11,7 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Play,
-  Square,
+  PauseCircle,
   Terminal,
   GitBranch,
   GitCommit,
@@ -29,7 +29,6 @@ import {
   MessageSquare,
   BookOpen,
   RotateCcw,
-  StopCircle,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -47,6 +46,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [statusNote, setStatusNote] = useState('');
   const [serviceActionLoading, setServiceActionLoading] = useState<string | null>(null);
   const [refreshingService, setRefreshingService] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [gitProgress, setGitProgress] = useState<{
     phase: 'idle' | 'staging' | 'committing' | 'pushing' | 'pulling' | 'done' | 'error';
     percent: number;
@@ -84,10 +84,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const handleStop = async () => {
-    setActionLoading('stop');
+  const handlePark = async () => {
+    setActionLoading('park');
     try {
-      await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
+      await fetch(`/api/projects/${id}/park`, { method: 'POST' });
       await fetchProject();
     } finally {
       setActionLoading(null);
@@ -375,19 +375,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchProject}
+            disabled={refreshing}
+            onClick={async () => {
+              setRefreshing(true);
+              try {
+                const res = await fetch(`/api/projects/${id}`, { cache: 'no-store' });
+                const data = await res.json();
+                if (data.success) {
+                  setProject(data.data);
+                  toast.success('Refreshed', 'Project status updated');
+                }
+              } catch (e) {
+                toast.error('Error', 'Failed to refresh status');
+              } finally {
+                setRefreshing(false);
+              }
+            }}
             title="Refresh Status"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
           </Button>
           {project.isRunning ? (
             <Button
-              variant="destructive"
-              onClick={handleStop}
-              loading={actionLoading === 'stop'}
+              variant="default"
+              onClick={handlePark}
+              loading={actionLoading === 'park'}
+              className="bg-amber-600 hover:bg-amber-500 text-white"
             >
-              <Square className="h-4 w-4" />
-              Stop
+              <PauseCircle className="h-4 w-4" />
+              Park
             </Button>
           ) : (
             <Button
@@ -434,6 +450,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </h2>
             </div>
             <div className="p-4">
+              {project.ports.some(p => p.notes?.startsWith('REMOTE:')) && (
+                <div className="mb-4 px-3 py-2 rounded-md bg-purple-900/20 border border-purple-700/40 flex items-center gap-2">
+                  <span className="text-purple-400 text-sm">
+                    <Server className="h-4 w-4 inline mr-1" />
+                    Remote services monitored on <span className="font-mono text-purple-300">{project.ports.find(p => p.notes?.startsWith('REMOTE:'))?.url?.match(/\/\/([^:/]+)/)?.[1] || 'remote host'}</span>
+                  </span>
+                </div>
+              )}
               {project.ports.length > 0 ? (
                 <table className="w-full">
                   <thead>
@@ -452,9 +476,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       const isServiceRunning = serviceStatus?.status === 'running';
                       const isLoading = serviceActionLoading?.startsWith(port.id);
 
+                      const isRemote = port.notes?.startsWith('REMOTE:');
                       return (
                         <tr key={port.id} className="border-t border-zinc-800">
-                          <td className="py-3 text-white">{port.serviceName}</td>
+                          <td className="py-3 text-white">
+                            {port.serviceName}
+                            {isRemote && (
+                              <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-purple-900/50 text-purple-300 border border-purple-700/50">
+                                REMOTE
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3">
                             <span className={cn(
                               'px-2 py-0.5 text-xs rounded-full text-white',
@@ -472,13 +504,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                           <td className="py-3">
                             <span className={cn(
                               'flex items-center gap-1.5 text-xs',
-                              isServiceRunning ? 'text-green-400' : 'text-zinc-500'
+                              isServiceRunning ? 'text-green-400' : 'text-amber-500'
                             )}>
                               <span className={cn(
                                 'w-2 h-2 rounded-full',
-                                isServiceRunning ? 'bg-green-500' : 'bg-zinc-600'
+                                isServiceRunning ? 'bg-green-500' : 'bg-amber-600'
                               )} />
-                              {isServiceRunning ? 'Running' : 'Stopped'}
+                              {isServiceRunning ? 'Running' : 'Parked'}
                             </span>
                           </td>
                           <td className="py-3">
@@ -541,12 +573,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                         ? 'bg-zinc-700 text-zinc-400'
                                         : 'bg-red-600/20 hover:bg-red-600/40 text-red-400'
                                     )}
-                                    title="Stop Service"
+                                    title="Park Service"
                                   >
                                     {isLoading && serviceActionLoading === `${port.id}-stop` ? (
                                       <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                                     ) : (
-                                      <StopCircle className="h-3.5 w-3.5" />
+                                      <PauseCircle className="h-3.5 w-3.5" />
                                     )}
                                   </button>
                                 </>
@@ -661,12 +693,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                         ? 'bg-zinc-700 text-zinc-400'
                                         : 'bg-red-600/20 hover:bg-red-600/40 text-red-400'
                                     )}
-                                    title="Stop Service"
+                                    title="Park Service"
                                   >
                                     {isLoading && serviceActionLoading === `${matchingPort.id}-stop` ? (
                                       <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                                     ) : (
-                                      <StopCircle className="h-3.5 w-3.5" />
+                                      <PauseCircle className="h-3.5 w-3.5" />
                                     )}
                                   </button>
                                 </>

@@ -135,7 +135,7 @@ export const STATUS_COLUMNS: { status: IssueStatus; label: string; color: string
 
 // Issue type configuration
 export const ISSUE_TYPES: { type: IssueType; label: string; color: string; icon: string }[] = [
-  { type: 'FEATURE', label: 'Feature', color: 'text-amber-500', icon: '🚀' },
+  { type: 'FEATURE', label: 'Feature', color: 'text-blue-400', icon: '🚀' },
   { type: 'EPIC', label: 'Epic', color: 'text-purple-500', icon: '⚡' },
   { type: 'STORY', label: 'Story', color: 'text-green-500', icon: '📖' },
   { type: 'TASK', label: 'Task', color: 'text-blue-500', icon: '✓' },
@@ -196,6 +196,9 @@ export const DATE_FILTER_OPTIONS: DateFilterOption[] = [
   { field: 'startedAt', label: 'Started Date' },
   { field: 'completedAt', label: 'Completed Date' },
 ];
+
+// Execution Modes — per-task action for re-run AutoPilot
+export type ExecutionMode = 'implement' | 'audit' | 'rewrite';
 
 // Auto Pilot Execution Types
 export type AutoPilotFailAction =

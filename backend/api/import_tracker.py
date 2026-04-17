@@ -4,6 +4,7 @@ Import API - Import from implementation_tracker.db into CodeBoard
 
 import sqlite3
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -12,6 +13,8 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from models import get_db, Issue, IssueSequence
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import")
 
@@ -120,8 +123,9 @@ async def preview_import(
             },
             "epics": [dict(e) for e in epic_list]
         }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error reading tracker: {str(e)}")
+    except Exception:
+        logger.exception("Error reading import tracker at path: %s", tracker_path)
+        raise HTTPException(status_code=400, detail="Failed to read import tracker")
 
 
 @router.post("/tracker/{project_id}", response_model=ImportResponse)
@@ -306,9 +310,10 @@ async def import_from_tracker(
             project_id=project_id
         )
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+        logger.exception("Import failed for project %s", project_id)
+        raise HTTPException(status_code=500, detail="Import failed")
 
 
 @router.post("/json/{project_id}")
@@ -424,6 +429,7 @@ async def import_from_json(
             project_id=project_id
         )
 
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"JSON import failed: {str(e)}")
+        logger.exception("JSON import failed for project %s", project_id)
+        raise HTTPException(status_code=500, detail="JSON import failed")

@@ -2,6 +2,8 @@
  * AI API functions for CodeBoard
  */
 
+import { apiFetch } from '@/lib/api/api-fetch';
+
 const API_BASE = '/api/codeboard';
 
 export interface BreakdownRequest {
@@ -32,7 +34,7 @@ export interface BreakdownResponse {
  * Break down a feature into epics, stories, and tasks using AI
  */
 export async function breakdownFeature(request: BreakdownRequest): Promise<BreakdownResponse> {
-  const response = await fetch(`${API_BASE}/ai/${request.project_id}/breakdown`, {
+  const response = await apiFetch(`${API_BASE}/ai/${request.project_id}/breakdown`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

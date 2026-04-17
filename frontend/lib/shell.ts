@@ -63,6 +63,62 @@ ${command} > "${logFile}" 2>&1
   }
 }
 
+export interface SpawnResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+/**
+ * Safe command execution using spawn() with argv arrays.
+ * Unlike execCommand (which goes through /bin/sh -c), this does NOT
+ * interpret shell metacharacters. Use this for all commands that include
+ * user- or DB-sourced arguments to prevent shell injection.
+ */
+export async function spawnCommand(
+  cmd: string,
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number } = {}
+): Promise<SpawnResult> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, {
+      cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+      shell: false, // CRITICAL: no shell interpretation
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const timer = options.timeout
+      ? setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          proc.kill('SIGKILL');
+          reject(new Error(`Command timed out after ${options.timeout}ms`));
+        }, options.timeout)
+      : null;
+
+    proc.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    proc.on('close', (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve({ stdout, stderr, exitCode: code ?? 1 });
+    });
+
+    proc.on('error', (err: Error) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
 /**
  * Execute a shell command with timeout
  */
@@ -103,8 +159,9 @@ export async function execCommand(
  * Check if a file exists
  */
 async function fileExists(filePath: string): Promise<boolean> {
-  const result = await execCommand(`test -f "${filePath}" && echo "exists"`, { timeout: 5000 });
-  return result.stdout.trim() === 'exists';
+  // spawnCommand: filePath comes from callers — must not be shell-interpolated
+  const result = await spawnCommand('test', ['-f', filePath], { timeout: 5000 });
+  return result.exitCode === 0;
 }
 
 /**
@@ -113,6 +170,9 @@ async function fileExists(filePath: string): Promise<boolean> {
  * Falls back to launch.sh -a if start.sh doesn't exist
  */
 export async function launchProject(projectPath: string): Promise<CommandResult> {
+  // Ensure Colima (Docker VM) is running — auto-start if needed
+  await ensureColima();
+
   // Validate ports before launching — abort early if conflicts detected
   const portValidation = await validateProjectPorts(projectPath);
   if (!portValidation.valid) {
@@ -173,44 +233,285 @@ export async function launchProject(projectPath: string): Promise<CommandResult>
  * Stop a project using its stop.sh script
  * Passes LAUNCHED_FROM_WEB=1 so stop scripts know to stop everything
  * including Docker infrastructure without prompting
+ *
+ * Delegates to parkProject() for consistent teardown behaviour.
  */
 export async function stopProject(projectPath: string): Promise<CommandResult> {
-  const stopScript = path.join(projectPath, 'stop.sh');
+  const result = await parkProject(projectPath);
+  return {
+    stdout: JSON.stringify(result.steps),
+    stderr: result.success ? '' : 'One or more stop steps failed',
+    exitCode: result.success ? 0 : 1,
+  };
+}
 
-  const hasStopScript = await fileExists(stopScript);
+// ---------------------------------------------------------------------------
+// Park / graceful shutdown helpers
+// ---------------------------------------------------------------------------
 
-  if (hasStopScript) {
-    // Run stop.sh with env flags so it stops everything (including Docker)
-    // The stop script is responsible for stopping all services and infra
-    const result = await execCommand(`bash stop.sh`, {
-      cwd: projectPath,
-      timeout: 60000,
-      env: { ...process.env, LAUNCHED_FROM_WEB: '1', NONINTERACTIVE: '1' },
-    });
-    return result;
+export type RunMode = 'docker' | 'local' | 'hybrid';
+
+/**
+ * Detect whether the project services are running via Docker, local processes,
+ * or a mix of both.
+ *
+ * Strategy:
+ *  - Run `docker ps --format "{{.Ports}}"` and check if any of the project
+ *    ports appear in published container ports.
+ *  - Count how many ports have a matching Docker mapping vs. a plain local PID.
+ */
+export async function detectRunMode(
+  _projectPath: string,
+  ports: Array<{ port: number }>
+): Promise<RunMode> {
+  if (!ports || ports.length === 0) return 'local';
+
+  try {
+    const dockerResult = await execCommand(
+      'docker ps --format "{{.Ports}}"',
+      { timeout: 8000 }
+    );
+
+    if (dockerResult.exitCode !== 0 || !dockerResult.stdout.trim()) {
+      return 'local';
+    }
+
+    const dockerPortLine = dockerResult.stdout;
+    let dockerCount = 0;
+    let localCount = 0;
+
+    for (const { port } of ports) {
+      // Published port pattern: "0.0.0.0:3000->3000/tcp" or ":::3000->3000/tcp"
+      const inDocker = dockerPortLine.includes(`:${port}->`);
+      if (inDocker) {
+        dockerCount++;
+      } else {
+        localCount++;
+      }
+    }
+
+    if (dockerCount > 0 && localCount > 0) return 'hybrid';
+    if (dockerCount > 0) return 'docker';
+    return 'local';
+  } catch {
+    return 'local';
+  }
+}
+
+export interface ParkStep {
+  name: string;
+  port?: number;
+  status: 'done' | 'skipped' | 'failed';
+  detail?: string;
+}
+
+export interface ParkResult {
+  success: boolean;
+  steps: ParkStep[];
+  duration_ms: number;
+}
+
+const SERVICE_STOP_PRIORITY: Record<string, number> = {
+  FRONTEND: 1,
+  BACKEND: 2,
+  CACHE: 3,
+  QUEUE: 4,
+  DATABASE: 5,
+  MONITORING: 6,
+  OTHER: 7,
+};
+
+/**
+ * Park (gracefully shut down) a project.
+ *
+ * If ports are provided the function stops each service individually using
+ * SIGTERM → 3 s grace period → SIGKILL.  It also attempts a
+ * `docker compose stop --time 10 <service>` for any Docker-managed port.
+ *
+ * If no ports are provided it falls back to the project's stop.sh /
+ * docker-compose down scripts (legacy behaviour).
+ */
+export async function parkProject(
+  projectPath: string,
+  ports?: Array<{ port: number; serviceType: string; serviceName: string }>
+): Promise<ParkResult> {
+  const startTime = Date.now();
+  const steps: ParkStep[] = [];
+
+  // ---- Fallback: no port metadata — use stop scripts ----------------------
+  if (!ports || ports.length === 0) {
+    const stopScript = path.join(projectPath, 'stop.sh');
+    const hasStopScript = await fileExists(stopScript);
+
+    if (hasStopScript) {
+      const result = await execCommand('bash stop.sh', {
+        cwd: projectPath,
+        timeout: 60000,
+        env: { ...process.env, LAUNCHED_FROM_WEB: '1', NONINTERACTIVE: '1' },
+      });
+      steps.push({
+        name: 'Run stop.sh',
+        status: result.exitCode === 0 ? 'done' : 'failed',
+        detail: result.stderr || result.stdout || undefined,
+      });
+      return { success: result.exitCode === 0, steps, duration_ms: Date.now() - startTime };
+    }
+
+    // Try docker-compose down
+    const composePaths = [
+      path.join(projectPath, 'docker-compose.yml'),
+      path.join(projectPath, 'infrastructure', 'docker', 'docker-compose.yml'),
+    ];
+    for (const composePath of composePaths) {
+      if (await fileExists(composePath)) {
+        const composeDir = path.dirname(composePath);
+        const result = await execCommand('docker compose down', {
+          cwd: composeDir,
+          timeout: 60000,
+        });
+        steps.push({
+          name: 'docker compose down',
+          status: result.exitCode === 0 ? 'done' : 'failed',
+          detail: result.stderr || result.stdout || undefined,
+        });
+        return { success: result.exitCode === 0, steps, duration_ms: Date.now() - startTime };
+      }
+    }
+
+    steps.push({ name: 'No stop mechanism found', status: 'skipped', detail: 'No stop.sh or docker-compose.yml' });
+    return { success: false, steps, duration_ms: Date.now() - startTime };
   }
 
-  // Fallback: try docker-compose down in common locations
-  const composePaths = [
-    path.join(projectPath, 'docker-compose.yml'),
-    path.join(projectPath, 'infrastructure', 'docker', 'docker-compose.yml'),
-  ];
+  // ---- Port-aware teardown ------------------------------------------------
+  const sortedPorts = [...ports].sort(
+    (a, b) =>
+      (SERVICE_STOP_PRIORITY[a.serviceType] ?? 99) -
+      (SERVICE_STOP_PRIORITY[b.serviceType] ?? 99)
+  );
 
-  for (const composePath of composePaths) {
-    if (await fileExists(composePath)) {
-      const composeDir = path.dirname(composePath);
-      return execCommand(`docker compose down`, {
-        cwd: composeDir,
-        timeout: 60000,
+  let overallSuccess = true;
+
+  for (const portRecord of sortedPorts) {
+    const { port, serviceName, serviceType } = portRecord;
+    const stepName = `Stop ${serviceName} (${serviceType} :${port})`;
+
+    // Validate port is a safe integer
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      steps.push({ name: stepName, port, status: 'skipped', detail: 'Invalid port number' });
+      continue;
+    }
+
+    let stopped = false;
+
+    // 1. Try docker compose stop for this service first
+    try {
+      // Sanitize serviceName for shell — only allow word chars, hyphens, dots
+      const safeServiceName = serviceName.replace(/[^a-zA-Z0-9_.\-]/g, '');
+      if (safeServiceName && safeServiceName === serviceName) {
+        const dockerResult = await execCommand(
+          `docker compose stop --time 10 ${safeServiceName}`,
+          { cwd: projectPath, timeout: 20000 }
+        );
+        if (dockerResult.exitCode === 0) {
+          stopped = true;
+          steps.push({ name: stepName, port, status: 'done', detail: 'docker compose stop' });
+          continue;
+        }
+      }
+    } catch {
+      // Not a Docker service or compose not available — fall through to PID kill
+    }
+
+    // 2. Graceful PID-based stop: SIGTERM → 3 s → SIGKILL
+    try {
+      const lsofResult = await execCommand(`lsof -ti :${port}`, { timeout: 5000 });
+      const rawPids = lsofResult.stdout.trim().split('\n').filter(Boolean);
+
+      // Security: validate every PID is purely numeric
+      const pids = rawPids.filter((p) => /^\d+$/.test(p));
+
+      if (pids.length === 0) {
+        steps.push({ name: stepName, port, status: 'skipped', detail: 'Port already free' });
+        continue;
+      }
+
+      // SIGTERM
+      for (const pid of pids) {
+        await execCommand(`kill -15 ${pid}`, { timeout: 5000 });
+      }
+
+      // 3-second grace period
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Check if still alive, then SIGKILL
+      const checkResult = await execCommand(`lsof -ti :${port}`, { timeout: 5000 });
+      const remainingPids = checkResult.stdout
+        .trim()
+        .split('\n')
+        .filter((p) => /^\d+$/.test(p));
+
+      if (remainingPids.length > 0) {
+        for (const pid of remainingPids) {
+          await execCommand(`kill -9 ${pid}`, { timeout: 5000 });
+        }
+        steps.push({
+          name: stepName,
+          port,
+          status: 'done',
+          detail: `SIGKILL ${remainingPids.join(', ')} after grace period`,
+        });
+      } else {
+        steps.push({
+          name: stepName,
+          port,
+          status: 'done',
+          detail: `SIGTERM ${pids.join(', ')}`,
+        });
+      }
+
+      stopped = true;
+    } catch (err) {
+      steps.push({
+        name: stepName,
+        port,
+        status: 'failed',
+        detail: (err as Error).message,
       });
+      overallSuccess = false;
+    }
+
+    if (!stopped && !steps.find((s) => s.port === port && s.status !== 'skipped')) {
+      steps.push({ name: stepName, port, status: 'skipped', detail: 'Nothing to stop' });
     }
   }
 
-  return {
-    stdout: '',
-    stderr: 'No stop.sh or docker-compose.yml found',
-    exitCode: 1,
-  };
+  return { success: overallSuccess, steps, duration_ms: Date.now() - startTime };
+}
+
+// --- Colima (Docker VM) Auto-Start -------------------------------------------
+
+/**
+ * Ensure Colima is running before launching any project.
+ * If Docker is not available, attempts to start Colima automatically.
+ * Silently succeeds if Docker is already running or Colima starts successfully.
+ */
+async function ensureColima(): Promise<void> {
+  // Check if Docker is already available
+  const dockerCheck = await execCommand('docker info', { timeout: 10000 });
+  if (dockerCheck.exitCode === 0) return;
+
+  // Docker not available — try to start Colima
+  const colimaCheck = await execCommand('command -v colima', { timeout: 5000 });
+  if (colimaCheck.exitCode !== 0) return; // Colima not installed, let launch script handle it
+
+  console.log('[shell] Docker not available — starting Colima...');
+  const startResult = await execCommand('colima start', { timeout: 120000 });
+
+  if (startResult.exitCode === 0) {
+    console.log('[shell] Colima started successfully');
+  } else {
+    console.error('[shell] Colima start failed:', startResult.stderr);
+  }
 }
 
 // --- Port Validation Types ---------------------------------------------------
@@ -257,8 +558,10 @@ export async function validateProjectPorts(projectPath: string): Promise<PortVal
       return emptyResult;
     }
 
-    const result = await execCommand(
-      `bash "${VALIDATE_PORTS_SCRIPT}" --check-only --json "${projectName}"`,
+    // spawnCommand: projectName is path.basename(projectPath) — must not be shell-interpolated
+    const result = await spawnCommand(
+      'bash',
+      [VALIDATE_PORTS_SCRIPT, '--check-only', '--json', projectName],
       { timeout: 15000 }
     );
 
@@ -317,10 +620,10 @@ function mapContainerState(state: string): ServiceStatusType {
  */
 export async function getProjectStatus(
   projectPath: string,
-  knownPorts?: Array<{ port: number; serviceName: string; serviceType?: string }>
+  knownPorts?: Array<{ port: number; serviceName: string; serviceType?: string; url?: string | null; notes?: string | null }>
 ): Promise<{
   running: boolean;
-  services: Array<{ name: string; status: ServiceStatusType; port?: number }>;
+  services: Array<{ name: string; status: ServiceStatusType; port?: number; remote?: boolean }>;
 }> {
   // If we have known ports, use port checking as the ONLY source of truth
   // This is the most reliable method and avoids confusion with docker-compose
@@ -328,12 +631,23 @@ export async function getProjectStatus(
     try {
       const portChecks = await Promise.all(
         knownPorts.map(async (p) => {
-          const inUse = await isPortInUse(p.port);
+          const isRemote = p.notes?.startsWith('REMOTE:') || false;
+          let inUse = false;
+
+          if (isRemote && p.url) {
+            // Remote service — check via HTTP curl instead of local lsof
+            inUse = await isRemoteServiceUp(p.url);
+          } else {
+            // Local service — check via lsof
+            inUse = await isPortInUse(p.port);
+          }
+
           return {
-            name: p.serviceName || `Port ${p.port}`,
+            name: `${p.serviceName || `Port ${p.port}`}${isRemote ? ' (remote)' : ''}`,
             status: (inUse ? 'running' : 'stopped') as ServiceStatusType,
             port: p.port,
             inUse,
+            remote: isRemote,
           };
         })
       );
@@ -341,7 +655,7 @@ export async function getProjectStatus(
       const runningServices = portChecks.filter((s) => s.inUse);
       return {
         running: runningServices.length > 0,
-        services: portChecks.map(({ name, status, port }) => ({ name, status, port })),
+        services: portChecks.map(({ name, status, port, remote }) => ({ name, status, port, remote })),
       };
     } catch (error) {
       // If port checking fails, return all as stopped
@@ -432,6 +746,25 @@ export async function isPortInUse(port: number): Promise<boolean> {
 }
 
 /**
+ * Check if a remote service is reachable via HTTP
+ * Used for services running on remote machines (e.g., PC at 192.168.1.209)
+ */
+export async function isRemoteServiceUp(url: string): Promise<boolean> {
+  try {
+    // spawnCommand: url comes from DB Port.url field — must not be shell-interpolated
+    const result = await spawnCommand(
+      'curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '3', url],
+      { timeout: 5000 }
+    );
+    const statusCode = parseInt(result.stdout.trim(), 10);
+    return statusCode > 0 && statusCode < 500;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get Git status for a project
  */
 export async function getGitStatus(projectPath: string): Promise<{
@@ -468,10 +801,11 @@ export async function syncToGitHub(projectPath: string, message?: string): Promi
   const commitMessage = message || `Update ${path.basename(projectPath)} - ${new Date().toISOString().split('T')[0]}`;
 
   // Add all changes
-  await execCommand('git add -A', { cwd: projectPath });
+  await execCommand('git add -A', { cwd: projectPath }); // SAFE: constant args, no user input
 
   // Commit
-  const commitResult = await execCommand(`git commit -m "${commitMessage}"`, { cwd: projectPath });
+  // spawnCommand: commitMessage comes from caller — must not be shell-interpolated
+  const commitResult = await spawnCommand('git', ['commit', '-m', commitMessage], { cwd: projectPath });
 
   // Push
   if (commitResult.exitCode === 0 || commitResult.stderr.includes('nothing to commit')) {
@@ -491,14 +825,16 @@ export async function configureGitCredentials(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (username) {
-      const nameResult = await execCommand(`git config --global user.name "${username}"`);
+      // spawnCommand: username comes from caller — must not be shell-interpolated
+      const nameResult = await spawnCommand('git', ['config', '--global', 'user.name', username]);
       if (nameResult.exitCode !== 0) {
         return { success: false, error: 'Failed to set git user.name' };
       }
     }
 
     if (email) {
-      const emailResult = await execCommand(`git config --global user.email "${email}"`);
+      // spawnCommand: email comes from caller — must not be shell-interpolated
+      const emailResult = await spawnCommand('git', ['config', '--global', 'user.email', email]);
       if (emailResult.exitCode !== 0) {
         return { success: false, error: 'Failed to set git user.email' };
       }
@@ -507,7 +843,7 @@ export async function configureGitCredentials(
     // If token provided, configure credential helper for HTTPS
     if (token) {
       // Store token in git credential cache for GitHub HTTPS operations
-      await execCommand('git config --global credential.helper cache');
+      await execCommand('git config --global credential.helper cache'); // SAFE: constant args, no user input
     }
 
     return { success: true };
@@ -530,19 +866,24 @@ export async function openClaudeWithContext(
   const projectName = path.basename(projectPath);
 
   // Try WezTerm first
-  const weztermResult = await execCommand('which wezterm', { timeout: 5000 });
+  const weztermResult = await execCommand('which wezterm', { timeout: 5000 }); // SAFE: constant args, no user input
   if (weztermResult.exitCode === 0) {
-    // Spawn the tab and capture the pane_id
-    const spawnResult = await execCommand(`wezterm cli spawn --cwd "${projectPath}" -- claude "${defaultPrompt}"`, {
-      timeout: 10000,
-    });
+    // spawnCommand: projectPath and defaultPrompt come from callers — must not be shell-interpolated
+    const spawnResult = await spawnCommand(
+      'wezterm',
+      ['cli', 'spawn', '--cwd', projectPath, '--', 'claude', defaultPrompt],
+      { timeout: 10000 }
+    );
 
     // Set the tab title to the project name
     if (spawnResult.exitCode === 0 && spawnResult.stdout.trim()) {
       const paneId = spawnResult.stdout.trim();
-      await execCommand(`wezterm cli set-tab-title --pane-id "${paneId}" "${projectName}"`, {
-        timeout: 5000,
-      });
+      // spawnCommand: paneId comes from wezterm output; projectName from path.basename — must not be shell-interpolated
+      await spawnCommand(
+        'wezterm',
+        ['cli', 'set-tab-title', '--pane-id', paneId, projectName],
+        { timeout: 5000 }
+      );
     }
 
     return spawnResult;
@@ -550,10 +891,13 @@ export async function openClaudeWithContext(
 
   // Fallback to Terminal.app on macOS
   if (process.platform === 'darwin') {
-    return execCommand(
-      `osascript -e 'tell application "Terminal" to do script "cd \\"${projectPath}\\" && claude \\"${defaultPrompt}\\""'`,
-      { timeout: 10000 }
-    );
+    // osascript requires a single AppleScript string; we build it safely using JSON.stringify
+    // to escape projectPath and defaultPrompt, preventing shell/AppleScript injection.
+    const script = `tell application "Terminal" to do script ${JSON.stringify(
+      'cd ' + JSON.stringify(projectPath) + ' && claude ' + JSON.stringify(defaultPrompt)
+    )}`;
+    // spawnCommand: the script string is built by JS (not user-interpolated into a shell command)
+    return spawnCommand('osascript', ['-e', script], { timeout: 10000 });
   }
 
   return {

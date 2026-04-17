@@ -9,6 +9,7 @@ from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation
 from models.agent_registry import AgentProfile
 from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
+from models.park import ParkEvent
 from models.schemas import (
     IssueType,
     IssueStatus,
@@ -97,6 +98,8 @@ __all__ = [
     "PipelineExecution",
     "PipelineStage",
     "PipelineConfig",
+    # SQLAlchemy Models - Park
+    "ParkEvent",
     # Enums - Issues
     "IssueType",
     "IssueStatus",

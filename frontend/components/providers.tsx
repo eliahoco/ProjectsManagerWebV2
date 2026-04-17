@@ -12,6 +12,8 @@ import { CommandPalette } from '@/components/command-palette';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { OfflineIndicator } from '@/components/ui/offline-indicator';
 import { getErrorMessage } from '@/hooks/use-mutation-error';
+import { AutoPilotProvider } from '@/contexts/AutoPilotContext';
+import { AutoPilotFloatingBar } from '@/components/codeboard/AutoPilotFloatingBar';
 
 /**
  * Extract error title based on error type
@@ -110,7 +112,10 @@ function QueryClientWrapper({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AutoPilotProvider>
+        {children}
+        <AutoPilotFloatingBar />
+      </AutoPilotProvider>
     </QueryClientProvider>
   );
 }

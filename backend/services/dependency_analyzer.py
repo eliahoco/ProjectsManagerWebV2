@@ -37,7 +37,7 @@ class DependencyAnalyzer:
     """Analyzes issue hierarchy to determine which tasks can run in parallel."""
 
     async def can_execute(
-        self, db: AsyncSession, issue_id: str
+        self, db: AsyncSession, issue_id: str, force: bool = False
     ) -> Tuple[bool, str]:
         """
         Check if an issue can execute right now.
@@ -50,6 +50,7 @@ class DependencyAnalyzer:
           2. Issue must be a leaf type (TASK, SUBTASK, BUG).
           3. Issue must be in a runnable status (BACKLOG, TODO) OR already
              IN_PROGRESS (re-execution / retry).
+             When force=True, skip this check (for audit/rewrite modes).
           4. No incomplete BLOCKS dependencies (issues that block this one).
         """
         # 1. Fetch the issue
@@ -73,14 +74,15 @@ class DependencyAnalyzer:
                 f"Only leaf types ({', '.join(sorted(LEAF_TYPES))}) can execute.",
             )
 
-        # 3. Must be in an actionable status
-        actionable_statuses = RUNNABLE_STATUSES | {"IN_PROGRESS"}
-        if issue_status not in actionable_statuses:
-            return (
-                False,
-                f"{issue_key} has status {issue_status}. "
-                f"Must be one of {', '.join(sorted(actionable_statuses))} to execute.",
-            )
+        # 3. Must be in an actionable status (skipped when force=True for audit/rewrite)
+        if not force:
+            actionable_statuses = RUNNABLE_STATUSES | {"IN_PROGRESS"}
+            if issue_status not in actionable_statuses:
+                return (
+                    False,
+                    f"{issue_key} has status {issue_status}. "
+                    f"Must be one of {', '.join(sorted(actionable_statuses))} to execute.",
+                )
 
         # 4. Check blocking dependencies
         #    A "blocks" link means: fromIssue BLOCKS toIssue

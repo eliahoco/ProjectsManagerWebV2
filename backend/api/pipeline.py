@@ -283,7 +283,7 @@ async def start_pipeline(
         )
     except Exception as exc:
         logger.exception("Failed to start pipeline for issue %s", issue_id)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to start pipeline")
 
     return _execution_orm_to_response(execution)
 
@@ -355,6 +355,21 @@ async def cancel_pipeline(
         )
 
     return {"success": True, "execution_id": execution_id, "status": "CANCELLED"}
+
+
+@router.post("/pipeline/stop-all")
+async def stop_all_pipelines(db: AsyncSession = Depends(get_db)):
+    """Cancel all currently running pipeline executions."""
+    try:
+        cancelled_ids = await pipeline_executor.cancel_all_pipelines(db)
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail=f"Pipeline models not available: {exc}")
+
+    return {
+        "success": True,
+        "cancelled_count": len(cancelled_ids),
+        "cancelled": cancelled_ids,
+    }
 
 
 @router.get(
@@ -437,9 +452,9 @@ async def scan_agents(
         registered = await agent_registry_service.scan_agents_directory(
             db, directory=request.directory
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to scan agents directory")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to scan agents directory")
 
     return [_agent_to_response(a) for a in registered]
 
@@ -464,9 +479,9 @@ async def register_agent(
 
     try:
         agent = await agent_registry_service.register_agent(db, data)
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to register agent %s", request.name)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to register agent")
 
     return _agent_to_response(agent)
 

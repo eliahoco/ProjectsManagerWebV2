@@ -2,17 +2,22 @@
 Execution API - Endpoints for AI task execution
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel
 from datetime import datetime
 import asyncio
 import json
+import logging
 
+logger = logging.getLogger(__name__)
+
+from app.background import create_tracked_task
 from models import get_db, Issue, Project, Comment, Activity
+from models.database import AsyncSessionLocal
 import uuid
 from services.terminal_service import (
     terminal_service,
@@ -24,6 +29,7 @@ from services.terminal_service import (
 from services.context_builder import build_execution_context
 from services.dependency_analyzer import dependency_analyzer
 from services.autopilot_service import autopilot_service
+from services.autopilot_queue_service import autopilot_queue_service
 from services.session_pool import session_pool
 from utils.db_queries import bulk_update_descendant_status, get_all_descendants_with_details, cascade_status_to_parents, cascade_done_to_parents, cascade_in_progress_to_parents
 
@@ -33,6 +39,8 @@ router = APIRouter(prefix="/execute")
 class ExecutionRequest(BaseModel):
     """Request to start execution"""
     provider: str  # "claude_code" or "local_ai"
+    execution_mode: str = "implement"  # "implement" | "audit" | "rewrite"
+    force: bool = False  # bypass status check in dependency analyzer
 
 
 class ExecutionResponse(BaseModel):
@@ -89,7 +97,7 @@ def session_to_response(session: TerminalSession) -> ExecutionResponse:
         status=session.status.value,
         started_at=session.started_at.isoformat() if session.started_at else None,
         completed_at=session.completed_at.isoformat() if session.completed_at else None,
-        output_lines=len(session.output),
+        output_lines=len(session.get_output_snapshot()),
         error=session.error,
         phase=session.phase.value,
         progress_percent=session.progress_percent,
@@ -128,6 +136,18 @@ async def start_execution(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Validate execution_mode
+    valid_modes = {"implement", "audit", "rewrite"}
+    execution_mode = request.execution_mode
+    if execution_mode not in valid_modes:
+        raise HTTPException(status_code=400, detail=f"Invalid execution_mode: {execution_mode}. Must be one of {', '.join(sorted(valid_modes))}")
+
+    # For rewrite mode: reset issue status to TODO so it gets a fresh implementation
+    if execution_mode == "rewrite":
+        issue.status = "TODO"
+        issue.updatedAt = datetime.utcnow()
+        await db.commit()
+
     # Build rich execution context (parent chain + siblings + description)
     rich_prompt = await build_execution_context(
         db=db,
@@ -137,6 +157,19 @@ async def start_execution(
         issue_type=issue.type,
         issue_description=issue.description or "",
     )
+
+    # For audit mode: wrap the prompt with audit instructions
+    if execution_mode == "audit":
+        rich_prompt = (
+            "AUDIT MODE: You are reviewing existing code, NOT implementing from scratch.\n\n"
+            "Review the existing implementation of the following task. "
+            "Check for: correctness, security vulnerabilities, edge cases, "
+            "code quality, and adherence to project conventions.\n\n"
+            "Report your findings clearly. Only modify code if you find critical bugs "
+            "or security vulnerabilities that must be fixed immediately.\n\n"
+            "---\n\n"
+            + rich_prompt
+        )
 
     # Resolve the root feature ID for cache preservation
     from services.context_builder import get_parent_chain
@@ -152,6 +185,10 @@ async def start_execution(
         provider = ExecutionProvider(request.provider)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid provider: {request.provider}")
+
+    # Determine force flag: only audit and rewrite modes bypass status check
+    # The client-provided force flag is ignored to prevent bypassing status guards
+    force = execution_mode in ("audit", "rewrite")
 
     # Cascade IN_PROGRESS status to all parent containers (STORY, EPIC, FEATURE)
     # This ensures parent issues reflect that work is happening under them
@@ -171,6 +208,7 @@ async def start_execution(
         prompt_override=rich_prompt,
         feature_id=feature_id,
         db=db,
+        force=force,
     )
 
     return session_to_response(session)
@@ -220,13 +258,13 @@ async def get_execution_output(
             # Cascade to parent containers
             await cascade_status_to_parents(db, session.issue_id, "COMPLETED_WAITING_QA")
             await db.commit()
-            print(f"[AUTO-COMPLETE] Marked {session.issue_key} as COMPLETED_WAITING_QA after execution")
+            logger.info(f"[AUTO-COMPLETE] Marked {session.issue_key} as COMPLETED_WAITING_QA after execution")
 
     return ExecutionOutputResponse(
         session_id=session_id,
         status=session.status.value,
         output=output,
-        total_lines=len(session.output),
+        total_lines=len(session.get_output_snapshot()),
         exit_code=session.exit_code,
         phase=session.phase.value,
         progress_percent=session.progress_percent,
@@ -278,9 +316,9 @@ async def complete_execution(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Mark execution as complete and update issue status to DONE.
-    Also marks all child issues as DONE (cascading completion).
-    Call this when the user confirms the task is finished.
+    Mark execution as complete and update issue status to COMPLETED_WAITING_QA.
+    Also marks all child issues as COMPLETED_WAITING_QA (cascading completion).
+    Issues should go through QA before being marked DONE.
     """
     session = terminal_service.get_session(session_id)
 
@@ -291,7 +329,7 @@ async def complete_execution(
     if not target_issue_id:
         raise HTTPException(status_code=404, detail="Session not found and no issue_id provided")
 
-    # Update issue status to DONE
+    # Update issue status to COMPLETED_WAITING_QA (not DONE — needs QA first)
     result = await db.execute(
         select(Issue).where(Issue.id == target_issue_id)
     )
@@ -299,18 +337,17 @@ async def complete_execution(
 
     children_updated = 0
     if issue:
-        issue.status = "DONE"
-        issue.completedAt = datetime.utcnow()
+        issue.status = "COMPLETED_WAITING_QA"
+        issue.updatedAt = datetime.utcnow()
         issue_key = issue.key
 
-        # Cascade: Mark all children as DONE using optimized bulk update
-        # This uses a single CTE query + bulk UPDATE instead of N recursive queries
+        # Cascade: Mark all children as COMPLETED_WAITING_QA
         children_updated = await bulk_update_descendant_status(
-            db, target_issue_id, "DONE", datetime.utcnow()
+            db, target_issue_id, "COMPLETED_WAITING_QA", datetime.utcnow()
         )
 
-        # Also cascade DONE status upward to parent containers
-        await cascade_done_to_parents(db, target_issue_id)
+        # Cascade status upward to parent containers
+        await cascade_status_to_parents(db, target_issue_id, "COMPLETED_WAITING_QA")
 
         await db.commit()
 
@@ -324,13 +361,13 @@ async def complete_execution(
         "success": True,
         "issue_id": target_issue_id,
         "issue_key": issue_key,
-        "status": "DONE",
+        "status": "COMPLETED_WAITING_QA",
         "children_updated": children_updated
     }
 
 
 @router.get("/sessions/stream")
-async def stream_execution_sessions():
+async def stream_execution_sessions(request: Request):
     """SSE endpoint for real-time execution session updates.
 
     Streams execution session data every 500ms as Server-Sent Events.
@@ -340,6 +377,9 @@ async def stream_execution_sessions():
     async def event_generator():
         last_data = None
         while True:
+            if await request.is_disconnected():
+                logger.debug("SSE client disconnected from stream_execution_sessions")
+                break
             try:
                 sessions = terminal_service.get_all_sessions()
                 data = json.dumps([{
@@ -369,9 +409,11 @@ async def stream_execution_sessions():
                     # Send a heartbeat comment to keep connection alive
                     yield ": heartbeat\n\n"
 
-            except Exception as e:
-                # Send error event but keep connection open
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            except Exception:
+                logger.exception("SSE stream_execution_sessions error")
+                # Send generic error to client — details logged server-side only
+                yield f"event: error\ndata: {json.dumps({'error': 'internal_error'})}\n\n"
+                break  # Exit on error — don't loop forever on a broken state
 
             # Check every 500ms for updates (much faster than 2s polling)
             await asyncio.sleep(0.5)
@@ -385,6 +427,37 @@ async def stream_execution_sessions():
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@router.get("/sessions/active")
+async def get_active_sessions():
+    """List all currently running execution sessions."""
+    running = terminal_service.get_running_sessions()
+    return {
+        "success": True,
+        "sessions": [
+            {
+                "session_id": s.id,
+                "issue_id": s.issue_id,
+                "issue_key": s.issue_key,
+                "status": s.status.value,
+                "started_at": s.started_at.isoformat() if s.started_at else None,
+            }
+            for s in running
+        ],
+    }
+
+
+@router.post("/sessions/stop-all")
+async def stop_all_sessions():
+    """Stop all currently running execution sessions."""
+    running = terminal_service.get_running_sessions()
+    stopped = []
+    for session in running:
+        success = await terminal_service.stop_execution(session.id)
+        if success:
+            stopped.append({"session_id": session.id, "issue_key": session.issue_key})
+    return {"success": True, "stopped_count": len(stopped), "stopped": stopped}
 
 
 @router.get("/sessions", response_model=List[ExecutionResponse])
@@ -772,3 +845,333 @@ async def check_can_execute(
 async def get_pool_status():
     """Get the current session pool status (capacity, active sessions)."""
     return session_pool.get_pool_status()
+
+
+# ===========================================================================
+# Backend-Driven AutoPilot Queue (CB-1667)
+# ===========================================================================
+
+class QueueTaskInput(BaseModel):
+    """A single task to add to the queue."""
+    issue_id: str
+    issue_key: str
+    issue_title: str
+    execution_mode: Literal["implement", "audit", "rewrite", "skip"] = "implement"
+    force: bool = False
+
+
+class CreateQueueRequest(BaseModel):
+    """Request to create and start a backend-driven autopilot queue."""
+    feature_id: str
+    feature_key: str
+    project_id: str
+    tasks: List[QueueTaskInput]
+    config: Optional[dict] = None  # {on_success, on_fail, max_retries}
+    provider: str = "claude_code"
+    model: Optional[str] = None
+    auto_start: bool = True
+
+
+class AbortQueueRequest(BaseModel):
+    """Request to abort a queue with action for remaining tasks."""
+    action: Literal["leave", "mark_failed", "mark_skipped", "reset_todo"] = "leave"
+
+
+class SwitchModelRequest(BaseModel):
+    """Request to switch the execution provider/model."""
+    provider: str
+    model: Optional[str] = None
+
+
+class WaitForResetRequest(BaseModel):
+    """Request to auto-resume after token reset."""
+    reset_time: Optional[str] = None  # e.g. "3:00 PM"
+
+
+@router.post("/queue")
+async def create_queue(
+    request: CreateQueueRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a backend-driven autopilot queue and optionally start it.
+
+    The queue executes tasks sequentially in the backend, independent of
+    the frontend browser state.  The frontend tracks progress via SSE or polling.
+    """
+    # Check for existing active queue
+    active = autopilot_queue_service.get_active_queue()
+    if active and active.status in ("running", "paused", "waiting_reset"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Queue {active.id} is already active ({active.status.value}). "
+                   "Abort it first before starting a new one.",
+        )
+
+    # Validate project exists and get path
+    project_result = await db.execute(
+        select(Project).where(Project.id == request.project_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Validate feature exists
+    feature_result = await db.execute(
+        select(Issue).where(Issue.id == request.feature_id)
+    )
+    feature = feature_result.scalar_one_or_none()
+    if not feature:
+        raise HTTPException(status_code=404, detail="Feature issue not found")
+
+    # Validate task count
+    MAX_QUEUE_TASKS = 200
+    if len(request.tasks) == 0:
+        raise HTTPException(status_code=400, detail="At least one task is required")
+    if len(request.tasks) > MAX_QUEUE_TASKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many tasks ({len(request.tasks)}). Maximum is {MAX_QUEUE_TASKS}",
+        )
+
+    # Create the queue (convert Pydantic models to dicts for service)
+    tasks_data = [t.model_dump() for t in request.tasks]
+    queue = autopilot_queue_service.create_queue(
+        feature_id=request.feature_id,
+        feature_key=request.feature_key,
+        project_id=request.project_id,
+        project_path=project.path,
+        tasks=tasks_data,
+        config=request.config,
+        provider=request.provider,
+        model=request.model,
+    )
+
+    # Auto-start if requested
+    if request.auto_start:
+        queue._task = create_tracked_task(
+            autopilot_queue_service.run_queue(queue.id),
+            name=f"autopilot-queue-{queue.id}",
+        )
+
+    return autopilot_queue_service.get_queue_status(queue.id)
+
+
+@router.get("/queue/active")
+async def get_active_queue():
+    """Get the currently active autopilot queue status."""
+    active = autopilot_queue_service.get_active_queue()
+    if not active:
+        return {"active": False, "queue": None}
+    return {
+        "active": True,
+        "queue": autopilot_queue_service.get_queue_status(active.id),
+    }
+
+
+@router.get("/queue/available-models")
+async def get_available_models():
+    """Get available execution providers and models."""
+    models = [
+        {
+            "provider": "claude_code",
+            "label": "Claude Code CLI",
+            "description": "Uses Claude Code CLI with user subscription auth",
+            "models": [],  # CLI uses subscription, no model selection
+        },
+    ]
+
+    # Check if local AI (Ollama) is available
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get("http://localhost:11434/api/tags")
+            if resp.status_code == 200:
+                ollama_data = resp.json()
+                ollama_models = [
+                    m["name"] for m in ollama_data.get("models", [])
+                ]
+                models.append({
+                    "provider": "local_ai",
+                    "label": "Ollama (Local AI)",
+                    "description": "Local AI via Ollama",
+                    "models": ollama_models,
+                })
+    except Exception:
+        pass  # Ollama not available
+
+    return {"providers": models}
+
+
+@router.get("/queue/{queue_id}")
+async def get_queue_status(queue_id: str):
+    """Get full status for a specific autopilot queue."""
+    status = autopilot_queue_service.get_queue_status(queue_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Queue not found")
+    return status
+
+
+@router.post("/queue/{queue_id}/pause")
+async def pause_queue(queue_id: str):
+    """Pause the queue.  The current task finishes, then the queue waits."""
+    success = autopilot_queue_service.pause_queue(queue_id)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot pause — queue is not running or does not exist",
+        )
+    return {"success": True, "status": "paused"}
+
+
+@router.post("/queue/{queue_id}/resume")
+async def resume_queue(queue_id: str):
+    """Resume a paused or waiting queue."""
+    success = autopilot_queue_service.resume_queue(queue_id)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot resume — queue is not paused or does not exist",
+        )
+    return {"success": True, "status": "resumed"}
+
+
+@router.post("/queue/{queue_id}/skip")
+async def skip_current_task(queue_id: str):
+    """Skip the currently executing task and move to the next one."""
+    success = autopilot_queue_service.skip_current(queue_id)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot skip — queue is not running or does not exist",
+        )
+    return {"success": True}
+
+
+@router.post("/queue/{queue_id}/abort")
+async def abort_queue(queue_id: str, request: AbortQueueRequest):
+    """
+    Abort the queue entirely.
+
+    Actions for remaining tasks:
+    - "leave": keep current status as-is
+    - "mark_failed": mark all pending tasks as FAILED
+    - "mark_skipped": mark all pending tasks as SKIPPED
+    - "reset_todo": PATCH all pending tasks back to TODO in the database
+    """
+    # Handle reset_todo action: reset pending issues in DB, then abort with "leave"
+    abort_action = request.action
+    if request.action == "reset_todo":
+        queue = autopilot_queue_service.get_queue(queue_id)
+        if queue:
+            async with AsyncSessionLocal() as session_db:
+                for task in queue.tasks:
+                    if task.status.value == "pending":
+                        result = await session_db.execute(
+                            select(Issue).where(Issue.id == task.issue_id)
+                        )
+                        issue = result.scalar_one_or_none()
+                        if issue and issue.status != "TODO":
+                            issue.status = "TODO"
+                            issue.updatedAt = datetime.utcnow()
+                await session_db.commit()
+        abort_action = "leave"
+
+    success = await autopilot_queue_service.abort_queue(queue_id, abort_action)
+    if not success:
+        raise HTTPException(status_code=404, detail="Queue not found")
+    return {"success": True, "status": "aborted", "action": request.action}
+
+
+@router.post("/queue/{queue_id}/wait-for-reset")
+async def wait_for_token_reset(
+    queue_id: str,
+    request: WaitForResetRequest,
+):
+    """
+    Schedule an automatic resume when tokens reset.
+
+    If reset_time is provided (e.g. "3:00 PM"), the service will sleep
+    until that time.  Otherwise it defaults to 60 minutes.
+    """
+    queue = autopilot_queue_service.get_queue(queue_id)
+    if not queue:
+        raise HTTPException(status_code=404, detail="Queue not found")
+
+    # Fire and forget — the wait happens in the background, tracked to prevent GC
+    create_tracked_task(
+        autopilot_queue_service.wait_for_reset(queue_id, request.reset_time),
+        name=f"wait-reset-{queue_id}",
+    )
+    return {
+        "success": True,
+        "message": f"Auto-resume scheduled (reset_time={request.reset_time or 'default 60min'})",
+    }
+
+
+@router.post("/queue/{queue_id}/switch-model")
+async def switch_queue_model(
+    queue_id: str,
+    request: SwitchModelRequest,
+):
+    """Switch the execution provider/model and resume the queue."""
+    success = autopilot_queue_service.switch_model(
+        queue_id, request.provider, request.model
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Queue not found")
+    return {
+        "success": True,
+        "provider": request.provider,
+        "model": request.model,
+    }
+
+
+@router.get("/queue/{queue_id}/stream")
+async def stream_queue_status(queue_id: str, request: Request):
+    """SSE endpoint for real-time autopilot queue status updates.
+
+    Streams the full queue state every 2 seconds.
+    """
+    async def event_generator():
+        last_data = None
+        while True:
+            if await request.is_disconnected():
+                logger.debug("SSE client disconnected from stream_queue_status (queue=%s)", queue_id)
+                break
+            try:
+                status = autopilot_queue_service.get_queue_status(queue_id)
+                if not status:
+                    yield f"event: error\ndata: {json.dumps({'error': 'Queue not found'})}\n\n"
+                    break
+
+                data = json.dumps(status)
+
+                # Only send if data changed
+                if data != last_data:
+                    yield f"data: {data}\n\n"
+                    last_data = data
+                else:
+                    yield ": heartbeat\n\n"
+
+                # If queue is done, send final status and close
+                if status["status"] in ("completed", "aborted"):
+                    yield f"event: done\ndata: {data}\n\n"
+                    break
+
+            except Exception:
+                logger.exception("Error in queue SSE stream for %s", queue_id)
+                yield f"event: error\ndata: {json.dumps({'error': 'internal_error'})}\n\n"
+                break  # Exit on error — don't loop forever on a broken state
+
+            await asyncio.sleep(2.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )

@@ -21,12 +21,13 @@ import type {
   StreamingExecutionCallbacks,
   ProjectQASummary,
 } from '@/types/qaboard';
+import { apiFetch as apiFetchHttp } from '@/lib/api/api-fetch';
 
 const API_BASE = '/api/codeboard/qa';
 
 // Helper function for API calls
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await apiFetchHttp(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -871,7 +872,7 @@ export function useStreamingExecution() {
     // Also request abort on the server if we have an execution ID
     if (state.executionId) {
       try {
-        await fetch(`${API_BASE}/execute/${state.executionId}/abort`, {
+        await apiFetchHttp(`${API_BASE}/execute/${state.executionId}/abort`, {
           method: 'POST',
         });
       } catch (error) {

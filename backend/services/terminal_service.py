@@ -12,6 +12,7 @@ import pty
 import select
 import fcntl
 import errno
+import logging
 from typing import Dict, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -25,6 +26,8 @@ import struct
 import termios
 
 from services.session_pool import session_pool
+
+logger = logging.getLogger(__name__)
 
 
 class PathValidationError(Exception):
@@ -136,6 +139,24 @@ class TerminalSession:
     commands_run: int = 0
     # Completion callback
     on_complete: Optional[CompletionCallback] = None
+    # Project filesystem path (used for cache/worktree cleanup)
+    project_path: Optional[str] = None
+    # Thread safety for output list
+    _output_lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    def _append_output(self, line: str) -> None:
+        """Thread-safe append to output with 5000-line cap."""
+        with self._output_lock:
+            self.output.append(line)
+            # Cap at 5000 lines to prevent unbounded memory growth
+            if len(self.output) > 5000:
+                dropped = len(self.output) - 5000 + 1
+                self.output = [f"[... {dropped} lines truncated ...]"] + self.output[-4999:]
+
+    def get_output_snapshot(self, since_line: int = 0) -> List[str]:
+        """Thread-safe snapshot of output lines from a given offset."""
+        with self._output_lock:
+            return list(self.output[since_line:])
 
 
 class TerminalService:
@@ -147,25 +168,31 @@ class TerminalService:
         self._pending_completions: Dict[str, bool] = {}  # session_id -> needs_status_update
         # Cache preservation: track which feature's cache is loaded per project
         self._active_feature_by_project: Dict[str, str] = {}  # project_path -> feature_issue_id
+        # Protects all four dicts above from concurrent mutation
+        self._sessions_lock = threading.Lock()
 
     def get_session(self, session_id: str) -> Optional[TerminalSession]:
         """Get a session by ID"""
-        return self._sessions.get(session_id)
+        with self._sessions_lock:
+            return self._sessions.get(session_id)
 
     def get_session_by_issue(self, issue_id: str) -> Optional[TerminalSession]:
         """Get active session for an issue"""
-        session_id = self._sessions_by_issue.get(issue_id)
-        if session_id:
-            return self._sessions.get(session_id)
-        return None
+        with self._sessions_lock:
+            session_id = self._sessions_by_issue.get(issue_id)
+            if session_id:
+                return self._sessions.get(session_id)
+            return None
 
     def get_all_sessions(self) -> List[TerminalSession]:
-        """Get all sessions"""
-        return list(self._sessions.values())
+        """Get all sessions — returns a snapshot copy, safe to iterate outside the lock"""
+        with self._sessions_lock:
+            return list(self._sessions.values())
 
     def get_running_sessions(self) -> List[TerminalSession]:
         """Get all currently running sessions"""
-        return [s for s in self._sessions.values() if s.status == ExecutionStatus.RUNNING]
+        with self._sessions_lock:
+            return [s for s in self._sessions.values() if s.status == ExecutionStatus.RUNNING]
 
     def get_running_count(self) -> int:
         """Get the number of currently running sessions"""
@@ -222,7 +249,8 @@ class TerminalService:
 
     def _run_claude_async(self, session_id: str, cmd: List[str], cwd: str, env: dict):
         """Run Claude CLI with PTY and stream-json for real-time output"""
-        session = self._sessions.get(session_id)
+        with self._sessions_lock:
+            session = self._sessions.get(session_id)
         if not session:
             return
 
@@ -246,9 +274,11 @@ class TerminalService:
                 stdout=slave_fd,
                 stderr=slave_fd,
                 close_fds=True,
+                start_new_session=True,  # process group for clean SIGTERM
             )
 
             os.close(slave_fd)
+            session.process = process   # make reachable from stop_execution
 
             # Set non-blocking
             flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
@@ -269,7 +299,7 @@ class TerminalService:
                     process.kill()
                     session.status = ExecutionStatus.FAILED
                     session.error = "Execution timed out after 30 minutes"
-                    session.output.append("[ERROR] Execution timed out after 30 minutes")
+                    session._append_output("[ERROR] Execution timed out after 30 minutes")
                     session.phase = ExecutionPhase.COMPLETED
                     break
 
@@ -320,13 +350,14 @@ class TerminalService:
                 session.phase = ExecutionPhase.COMPLETED
                 session.progress_percent = 100
                 session.current_action = "Completed successfully"
-                self._pending_completions[session_id] = True
+                with self._sessions_lock:
+                    self._pending_completions[session_id] = True
                 # Call completion callback if registered
                 if session.on_complete:
                     try:
                         session.on_complete(session_id, session.issue_id, True)
                     except Exception as cb_error:
-                        session.output.append(f"[WARN] Completion callback error: {cb_error}")
+                        session._append_output(f"[WARN] Completion callback error: {cb_error}")
             else:
                 session.status = ExecutionStatus.FAILED
                 session.error = f"Process exited with code {session.exit_code}"
@@ -336,26 +367,26 @@ class TerminalService:
                     try:
                         session.on_complete(session_id, session.issue_id, False)
                     except Exception as cb_error:
-                        session.output.append(f"[WARN] Completion callback error: {cb_error}")
+                        session._append_output(f"[WARN] Completion callback error: {cb_error}")
 
         except Exception as e:
             session.status = ExecutionStatus.FAILED
             session.error = str(e)
-            session.output.append(f"[ERROR] {str(e)}")
+            session._append_output(f"[ERROR] {str(e)}")
             session.current_action = f"Error: {str(e)[:50]}"
         finally:
             # Cleanup
             if master_fd is not None:
                 try:
                     os.close(master_fd)
-                except:
-                    pass
+                except OSError as e:
+                    logger.debug(f"PTY close error (expected on shutdown): {e}")
             if process is not None and process.poll() is None:
                 try:
                     process.kill()
                     process.wait()
-                except:
-                    pass
+                except (OSError, subprocess.TimeoutExpired) as e:
+                    logger.warning(f"Process cleanup error: {e}")
             session.completed_at = datetime.utcnow()
 
             # Release the pool slot (cleans up worktree if one was created)
@@ -371,7 +402,7 @@ class TerminalService:
             event_type = event.get('type', '')
 
             if event_type == 'system':
-                session.output.append("[START] Claude Code initialized")
+                session._append_output("[START] Claude Code initialized")
                 session.phase = ExecutionPhase.INITIALIZING
                 session.progress_percent = 10
 
@@ -393,7 +424,7 @@ class TerminalService:
                             file_path = tool_input.get('file_path', tool_input.get('pattern', ''))
                             short_path = file_path.split('/')[-1] if file_path else ''
                             session.current_action = f"Reading: {short_path}"
-                            session.output.append(f"[READ] {short_path or 'files'}")
+                            session._append_output(f"[READ] {short_path or 'files'}")
                             session.progress_percent = min(20 + session.files_read * 5, 50)
 
                         elif tool_name in ['Edit', 'Write']:
@@ -402,7 +433,7 @@ class TerminalService:
                             file_path = tool_input.get('file_path', '')
                             short_path = file_path.split('/')[-1] if file_path else ''
                             session.current_action = f"Writing: {short_path}"
-                            session.output.append(f"[WRITE] {short_path or 'file'}")
+                            session._append_output(f"[WRITE] {short_path or 'file'}")
                             session.progress_percent = min(50 + session.files_written * 10, 80)
 
                         elif tool_name == 'Bash':
@@ -410,16 +441,16 @@ class TerminalService:
                             session.phase = ExecutionPhase.RUNNING_COMMANDS
                             cmd = tool_input.get('command', '')[:50]
                             session.current_action = f"Running: {cmd}"
-                            session.output.append(f"[BASH] {cmd}")
+                            session._append_output(f"[BASH] {cmd}")
                             session.progress_percent = min(session.progress_percent + 5, 85)
 
                         elif tool_name == 'TodoWrite':
                             session.phase = ExecutionPhase.PLANNING
                             session.current_action = "Planning tasks..."
-                            session.output.append("[PLAN] Updating task list")
+                            session._append_output("[PLAN] Updating task list")
 
                         else:
-                            session.output.append(f"[TOOL] {tool_name}")
+                            session._append_output(f"[TOOL] {tool_name}")
 
                     elif block_type == 'text':
                         text_content = block.get('text', '')
@@ -428,7 +459,7 @@ class TerminalService:
                             for text_line in text_content.split('\n'):
                                 text_line = text_line.strip()
                                 if text_line:
-                                    session.output.append(text_line)
+                                    session._append_output(text_line)
                             session.phase = ExecutionPhase.FINALIZING
                             session.progress_percent = 90
                             session.current_action = "Generating response..."
@@ -440,7 +471,7 @@ class TerminalService:
 
             elif event_type == 'error':
                 error_msg = event.get('error', {}).get('message', 'Unknown error')
-                session.output.append(f"[ERROR] {error_msg}")
+                session._append_output(f"[ERROR] {error_msg}")
 
         except json.JSONDecodeError:
             # Not JSON - might be plain text or ANSI codes
@@ -449,7 +480,7 @@ class TerminalService:
             clean = re.sub(r'\x1b\][^\x07]*\x07', '', clean)
             clean = clean.strip()
             if clean and not clean.startswith('['):
-                session.output.append(clean)
+                session._append_output(clean)
                 self._parse_progress(session, clean)
 
     async def start_execution(
@@ -467,6 +498,7 @@ class TerminalService:
         feature_id: Optional[str] = None,
         on_complete: Optional[CompletionCallback] = None,
         db: Optional[object] = None,
+        force: bool = False,
     ) -> TerminalSession:
         """Start a new terminal session for executing a task.
 
@@ -475,6 +507,8 @@ class TerminalService:
                 the dependency_analyzer verifies this task's blocking
                 constraints before allowing execution. When None, dependency
                 checks are skipped (backward-compatible).
+            force: When True, bypass the status check in dependency_analyzer
+                (for audit/rewrite execution modes on completed tasks).
         """
 
         # Validate the project path for security
@@ -495,8 +529,9 @@ class TerminalService:
                 completed_at=datetime.utcnow(),
                 error=f"Path validation failed: {e}",
             )
-            session.output.append(f"[ERROR] Path validation failed: {e}")
-            self._sessions[session_id] = session
+            session._append_output(f"[ERROR] Path validation failed: {e}")
+            with self._sessions_lock:
+                self._sessions[session_id] = session
             return session
 
         # Use the validated path
@@ -513,7 +548,7 @@ class TerminalService:
         # respecting BLOCKS/IS_BLOCKED_BY link constraints.
         if db is not None:
             from services.dependency_analyzer import dependency_analyzer
-            can_run, reason = await dependency_analyzer.can_execute(db, issue_id)
+            can_run, reason = await dependency_analyzer.can_execute(db, issue_id, force=force)
             if not can_run:
                 session_id = str(uuid.uuid4())
                 session = TerminalSession(
@@ -528,8 +563,9 @@ class TerminalService:
                     completed_at=datetime.utcnow(),
                     error=f"Dependency check failed: {reason}",
                 )
-                session.output.append(f"[BLOCKED] {reason}")
-                self._sessions[session_id] = session
+                session._append_output(f"[BLOCKED] {reason}")
+                with self._sessions_lock:
+                    self._sessions[session_id] = session
                 return session
 
         # POOL CONCURRENCY CHECK: Use session pool to manage concurrent slots
@@ -550,9 +586,10 @@ class TerminalService:
                 completed_at=datetime.utcnow(),
                 error=f"Session pool is full ({session_pool.max_sessions} max). Active: {', '.join(active_keys)}",
             )
-            session.output.append(f"[BLOCKED] Session pool full - {', '.join(active_keys)} are running")
-            session.output.append(f"[INFO] Wait for a task to complete before starting another")
-            self._sessions[session_id] = session
+            session._append_output(f"[BLOCKED] Session pool full - {', '.join(active_keys)} are running")
+            session._append_output(f"[INFO] Wait for a task to complete before starting another")
+            with self._sessions_lock:
+                self._sessions[session_id] = session
             return session
 
         session_id = str(uuid.uuid4())
@@ -593,10 +630,12 @@ class TerminalService:
             status=ExecutionStatus.RUNNING,
             started_at=datetime.utcnow(),
             on_complete=on_complete,
+            project_path=project_path,
         )
 
-        self._sessions[session_id] = session
-        self._sessions_by_issue[issue_id] = session_id
+        with self._sessions_lock:
+            self._sessions[session_id] = session
+            self._sessions_by_issue[issue_id] = session_id
 
         # Acquire a pool slot for concurrency tracking
         try:
@@ -606,20 +645,20 @@ class TerminalService:
             session.status = ExecutionStatus.FAILED
             session.error = str(e)
             session.completed_at = datetime.utcnow()
-            session.output.append(f"[BLOCKED] {e}")
+            session._append_output(f"[BLOCKED] {e}")
             return session
 
         # Create isolated worktree if multiple sessions are active
         working_dir = session_pool.create_worktree(session_id, project_path)
 
         # Add initial status message
-        session.output.append(f"[INFO] Starting {provider.value} execution...")
-        session.output.append(f"[INFO] Task: {issue_key} - {issue_title}")
-        session.output.append(f"[INFO] Working directory: {working_dir}")
+        session._append_output(f"[INFO] Starting {provider.value} execution...")
+        session._append_output(f"[INFO] Task: {issue_key} - {issue_title}")
+        session._append_output(f"[INFO] Working directory: {working_dir}")
         if working_dir != project_path:
-            session.output.append(f"[INFO] Isolated worktree: {pool_slot.branch_name}")
-        session.output.append(f"[INFO] Pool: {session_pool.active_count}/{session_pool.max_sessions} slots used")
-        session.output.append("")
+            session._append_output(f"[INFO] Isolated worktree: {pool_slot.branch_name}")
+        session._append_output(f"[INFO] Pool: {session_pool.active_count}/{session_pool.max_sessions} slots used")
+        session._append_output("")
 
         try:
             if provider == ExecutionProvider.CLAUDE_CODE:
@@ -644,11 +683,11 @@ class TerminalService:
                     import shutil
                     try:
                         shutil.rmtree(project_cache_path)
-                        session.output.append("[INFO] Cleared project cache (new feature context)")
+                        session._append_output("[INFO] Cleared project cache (new feature context)")
                     except Exception as e:
-                        session.output.append(f"[WARN] Could not clear cache: {e}")
+                        session._append_output(f"[WARN] Could not clear cache: {e}")
                 elif same_feature:
-                    session.output.append("[INFO] Keeping cache (same feature context)")
+                    session._append_output("[INFO] Keeping cache (same feature context)")
 
                 # Track the active feature for this project
                 if feature_id:
@@ -671,6 +710,10 @@ class TerminalService:
                 env['PATH'] = f"{home_dir}/.local/bin:{env.get('PATH', '')}"
                 env.pop('CLAUDECODE', None)
                 env.pop('CLAUDE_CODE_ENTRYPOINT', None)
+                # Remove ANTHROPIC_API_KEY so Claude Code CLI uses the user's
+                # subscription auth instead of API key auth (which may have
+                # insufficient credits on the API billing side)
+                env.pop('ANTHROPIC_API_KEY', None)
 
                 # Run in background thread (use working_dir for worktree isolation)
                 thread = threading.Thread(
@@ -697,13 +740,13 @@ class TerminalService:
         except FileNotFoundError as e:
             session.status = ExecutionStatus.FAILED
             session.error = f"Command not found: {str(e)}"
-            session.output.append(f"[ERROR] Command not found: {str(e)}")
+            session._append_output(f"[ERROR] Command not found: {str(e)}")
             session.completed_at = datetime.utcnow()
             session_pool.release(session_id)
         except Exception as e:
             session.status = ExecutionStatus.FAILED
             session.error = str(e)
-            session.output.append(f"[ERROR] Failed to start: {str(e)}")
+            session._append_output(f"[ERROR] Failed to start: {str(e)}")
             session.completed_at = datetime.utcnow()
             session_pool.release(session_id)
 
@@ -711,24 +754,45 @@ class TerminalService:
 
     async def send_input(self, session_id: str, text: str) -> bool:
         """Send input to a running session - not supported in simple mode"""
-        session = self._sessions.get(session_id)
+        with self._sessions_lock:
+            session = self._sessions.get(session_id)
         if not session:
             return False
 
         # In simple mode, we can't send input - just log it
-        session.output.append(f"[INPUT] {text}")
+        session._append_output(f"[INPUT] {text}")
         return True
 
     async def stop_execution(self, session_id: str) -> bool:
         """Stop a running session"""
-        session = self._sessions.get(session_id)
+        with self._sessions_lock:
+            session = self._sessions.get(session_id)
         if not session:
             return False
 
-        # Mark as cancelled
         session.status = ExecutionStatus.CANCELLED
         session.completed_at = datetime.utcnow()
-        session.output.append("[INFO] Execution cancelled by user")
+        session._append_output("[INFO] Execution cancelled by user")
+
+        # Kill the subprocess group if still running
+        if session.process and session.process.poll() is None:
+            try:
+                os.killpg(os.getpgid(session.process.pid), signal.SIGTERM)
+                # Wait up to 2s for graceful exit
+                for _ in range(20):
+                    if session.process.poll() is not None:
+                        break
+                    await asyncio.sleep(0.1)
+                # SIGKILL if still alive
+                if session.process.poll() is None:
+                    logger.warning(f"Session {session_id} didn't respond to SIGTERM, sending SIGKILL")
+                    os.killpg(os.getpgid(session.process.pid), signal.SIGKILL)
+                    try:
+                        session.process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        logger.error(f"Session {session_id} subprocess failed to die after SIGKILL")
+            except (ProcessLookupError, OSError) as e:
+                logger.debug(f"Process already gone for session {session_id}: {e}")
 
         # Release pool slot (the async runner's finally block may also call this,
         # but release() is idempotent - second call is a no-op)
@@ -737,31 +801,45 @@ class TerminalService:
 
     def get_output(self, session_id: str, since_line: int = 0) -> List[str]:
         """Get output lines from a session"""
-        session = self._sessions.get(session_id)
+        with self._sessions_lock:
+            session = self._sessions.get(session_id)
         if not session:
             return []
 
-        return session.output[since_line:]
+        return session.get_output_snapshot(since_line)
 
     def cleanup_session(self, session_id: str):
         """Clean up a completed session"""
-        session = self._sessions.get(session_id)
-        if session:
+        with self._sessions_lock:
+            session = self._sessions.pop(session_id, None)
+            if not session:
+                return
             if session.issue_id in self._sessions_by_issue:
                 del self._sessions_by_issue[session.issue_id]
-            del self._sessions[session_id]
             # Also clean up pending completion flag
             self._pending_completions.pop(session_id, None)
-            # Defensive: release pool slot if still held (normally released in _run_claude_async)
-            session_pool.release(session_id)
+
+            # Prune project→feature map if no other sessions reference this project path
+            if session.project_path:
+                has_other = any(
+                    s.project_path == session.project_path
+                    for s in self._sessions.values()
+                )
+                if not has_other:
+                    self._active_feature_by_project.pop(session.project_path, None)
+
+        # Defensive: release pool slot if still held (normally released in _run_claude_async)
+        session_pool.release(session_id)
 
     def check_pending_completion(self, session_id: str) -> bool:
         """Check if a session has pending auto-completion (and consume the flag)"""
-        return self._pending_completions.pop(session_id, False)
+        with self._sessions_lock:
+            return self._pending_completions.pop(session_id, False)
 
     def get_all_pending_completions(self) -> List[str]:
-        """Get all session IDs with pending completions"""
-        return list(self._pending_completions.keys())
+        """Get all session IDs with pending completions — returns a snapshot copy"""
+        with self._sessions_lock:
+            return list(self._pending_completions.keys())
 
 
 # Singleton instance
