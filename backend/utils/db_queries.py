@@ -148,6 +148,50 @@ async def bulk_update_descendant_status(
     return result.rowcount
 
 
+async def bulk_update_descendant_status_detailed(
+    db: AsyncSession,
+    parent_id: str,
+    new_status: str,
+    completed_at: datetime = None
+) -> List[dict]:
+    """
+    Same as bulk_update_descendant_status but returns transitioned rows.
+
+    Used by callers that need to emit per-issue side effects (e.g. fire
+    trigger_qa_generation for each descendant newly moved to
+    COMPLETED_WAITING_QA). Returns descendants whose status CHANGED only.
+
+    Returns:
+        List of dicts with keys: id, key, projectId — one per transitioned issue.
+    """
+    from models import Issue
+
+    descendant_ids = await get_all_descendant_ids(db, parent_id)
+    if not descendant_ids:
+        return []
+
+    # Snapshot which descendants are actually going to transition
+    before = await db.execute(
+        select(Issue.id, Issue.key, Issue.projectId)
+        .where(and_(Issue.id.in_(descendant_ids), Issue.status != new_status))
+    )
+    transitions = [{"id": r[0], "key": r[1], "projectId": r[2]} for r in before.fetchall()]
+    if not transitions:
+        return []
+
+    update_values = {"status": new_status, "updatedAt": datetime.utcnow()}
+    if completed_at:
+        update_values["completedAt"] = completed_at
+
+    stmt = (
+        update(Issue)
+        .where(and_(Issue.id.in_([t["id"] for t in transitions])))
+        .values(**update_values)
+    )
+    await db.execute(stmt)
+    return transitions
+
+
 async def batch_get_issues_by_keys(
     db: AsyncSession,
     keys: List[str]
@@ -622,6 +666,64 @@ async def cascade_status_to_parents(
             break
 
     return updated_parents
+
+
+async def cascade_status_to_parents_detailed(
+    db: AsyncSession,
+    issue_id: str,
+    target_status: str = "COMPLETED_WAITING_QA"
+) -> List[dict]:
+    """
+    Same as cascade_status_to_parents but returns transitioned rows.
+
+    Returns list of dicts with keys: id, key, projectId — one per ancestor
+    whose status was actually changed to target_status. Used by callers that
+    need to emit per-issue side effects (e.g. QA trigger) for each transition.
+    """
+    from models import Issue
+
+    transitions: List[dict] = []
+    current_id = issue_id
+
+    while True:
+        result = await db.execute(
+            select(Issue.parentId).where(Issue.id == current_id)
+        )
+        row = result.first()
+        if not row or not row[0]:
+            break
+
+        parent_id = row[0]
+        parent_result = await db.execute(
+            select(Issue).where(Issue.id == parent_id)
+        )
+        parent = parent_result.scalar_one_or_none()
+        if not parent:
+            break
+        if parent.type not in ("FEATURE", "EPIC", "STORY"):
+            break
+
+        children_result = await db.execute(
+            select(Issue.id, Issue.status).where(Issue.parentId == parent_id)
+        )
+        children = children_result.fetchall()
+        if not children:
+            break
+
+        all_completed = all(
+            child_status in (target_status, "DONE")
+            for _, child_status in children
+        )
+
+        if all_completed and parent.status != target_status and parent.status != "DONE":
+            parent.status = target_status
+            parent.updatedAt = datetime.utcnow()
+            transitions.append({"id": parent.id, "key": parent.key, "projectId": parent.projectId})
+            current_id = parent_id
+        else:
+            break
+
+    return transitions
 
 
 async def cascade_in_progress_to_parents(

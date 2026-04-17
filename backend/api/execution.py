@@ -28,6 +28,11 @@ from services.terminal_service import (
 )
 from services.context_builder import build_execution_context
 from services.dependency_analyzer import dependency_analyzer
+from utils.db_queries import (
+    bulk_update_descendant_status_detailed,
+    cascade_status_to_parents_detailed,
+)
+from api.issues import trigger_qa_generation
 from services.autopilot_service import autopilot_service
 from services.autopilot_queue_service import autopilot_queue_service
 from services.session_pool import session_pool
@@ -255,10 +260,19 @@ async def get_execution_output(
         if issue and issue.status not in ("COMPLETED_WAITING_QA", "DONE"):
             issue.status = "COMPLETED_WAITING_QA"
             issue.updatedAt = datetime.utcnow()
-            # Cascade to parent containers
-            await cascade_status_to_parents(db, session.issue_id, "COMPLETED_WAITING_QA")
+            qa_targets = [{"id": issue.id, "key": issue.key, "projectId": issue.projectId}]
+            # Cascade to parent containers (detailed — returns transitioned ancestors)
+            qa_targets += await cascade_status_to_parents_detailed(
+                db, session.issue_id, "COMPLETED_WAITING_QA"
+            )
             await db.commit()
             logger.info(f"[AUTO-COMPLETE] Marked {session.issue_key} as COMPLETED_WAITING_QA after execution")
+            # Fire QA generation hook for each newly-transitioned issue
+            for t in qa_targets:
+                create_tracked_task(
+                    trigger_qa_generation(t["id"], t["key"], t["projectId"]),
+                    name=f"qa-gen-{t['key']}",
+                )
 
     return ExecutionOutputResponse(
         session_id=session_id,
@@ -336,20 +350,33 @@ async def complete_execution(
     issue = result.scalar_one_or_none()
 
     children_updated = 0
+    qa_targets: list[dict] = []
     if issue:
         issue.status = "COMPLETED_WAITING_QA"
         issue.updatedAt = datetime.utcnow()
         issue_key = issue.key
+        qa_targets.append({"id": issue.id, "key": issue.key, "projectId": issue.projectId})
 
-        # Cascade: Mark all children as COMPLETED_WAITING_QA
-        children_updated = await bulk_update_descendant_status(
+        # Cascade: Mark all descendants as COMPLETED_WAITING_QA (detailed — returns transitions)
+        descendant_transitions = await bulk_update_descendant_status_detailed(
             db, target_issue_id, "COMPLETED_WAITING_QA", datetime.utcnow()
         )
+        qa_targets += descendant_transitions
+        children_updated = len(descendant_transitions)
 
-        # Cascade status upward to parent containers
-        await cascade_status_to_parents(db, target_issue_id, "COMPLETED_WAITING_QA")
+        # Cascade status upward to parent containers (detailed)
+        qa_targets += await cascade_status_to_parents_detailed(
+            db, target_issue_id, "COMPLETED_WAITING_QA"
+        )
 
         await db.commit()
+
+        # Fire QA generation hook for every newly-transitioned issue
+        for t in qa_targets:
+            create_tracked_task(
+                trigger_qa_generation(t["id"], t["key"], t["projectId"]),
+                name=f"qa-gen-{t['key']}",
+            )
 
     # Mark session as completed and clean up if it exists
     if session:

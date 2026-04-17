@@ -108,57 +108,22 @@ async def trigger_qa_generation(issue_id: str, issue_key: str, project_id: str):
                 logger.info(f"No QA tasks generated for issue {issue_key}")
                 return
 
-            # Create QA tasks in the database
-            created_keys = []
-            for suggestion in qa_suggestions:
-                # Get next QA task key — atomic increment to prevent duplicates
-                qa_result = await db.execute(
-                    text(
-                        'UPDATE "QASequence" '
-                        'SET "lastNumber" = "lastNumber" + 1 '
-                        'WHERE "projectId" = :pid '
-                        'RETURNING "lastNumber", "prefix"'
-                    ),
-                    {"pid": project_id},
+            # Reserve a contiguous block of QA keys atomically (race-safe even
+            # under concurrent background QA generations sharing the DB).
+            from api.qa import reserve_qa_key_block
+
+            try:
+                prefix, start_seq, _end_seq = await reserve_qa_key_block(
+                    db, project_id, len(qa_suggestions)
                 )
-                qa_row = qa_result.first()
-                if qa_row:
-                    qa_seq_number = qa_row[0]
-                    qa_key = f"{qa_row[1]}-{qa_seq_number}"
-                else:
-                    # First QA task for this project — INSERT the sequence row
-                    qa_seq_number = None
-                    for _attempt in range(5):
-                        try:
-                            await db.execute(
-                                text(
-                                    'INSERT INTO "QASequence" ("id", "projectId", "prefix", "lastNumber") '
-                                    'VALUES (:id, :pid, :prefix, 1)'
-                                ),
-                                {"id": str(uuid.uuid4()), "pid": project_id, "prefix": "QA"},
-                            )
-                            qa_seq_number = 1
-                            qa_key = "QA-1"
-                            break
-                        except IntegrityError:
-                            await db.rollback()
-                            qa_result = await db.execute(
-                                text(
-                                    'UPDATE "QASequence" '
-                                    'SET "lastNumber" = "lastNumber" + 1 '
-                                    'WHERE "projectId" = :pid '
-                                    'RETURNING "lastNumber", "prefix"'
-                                ),
-                                {"pid": project_id},
-                            )
-                            qa_row = qa_result.first()
-                            if qa_row:
-                                qa_seq_number = qa_row[0]
-                                qa_key = f"{qa_row[1]}-{qa_seq_number}"
-                                break
-                    else:
-                        logger.error(f"Failed to generate QA key for project {project_id} after 5 retries")
-                        continue
+            except Exception as e:
+                logger.error(f"Failed to reserve QA key block for {issue_key}: {e}")
+                return
+
+            created_keys = []
+            for offset, suggestion in enumerate(qa_suggestions):
+                qa_seq_number = start_seq + offset
+                qa_key = f"{prefix}-{qa_seq_number}"
 
                 # Handle scenario as list or string
                 scenario = suggestion.get('scenario', '')

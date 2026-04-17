@@ -5,7 +5,7 @@ QA Board API Routes
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
 from datetime import datetime
@@ -47,28 +47,76 @@ router = APIRouter(prefix="/qa", tags=["qa"])
 
 # ==================== Helper Functions ====================
 
-async def get_next_qa_key(db: AsyncSession, project_id: str) -> tuple[str, int]:
-    """Get the next QA task key for a project"""
+async def reserve_qa_key_block(
+    db: AsyncSession, project_id: str, count: int
+) -> tuple[str, int, int]:
+    """Atomically reserve `count` sequential QA keys for a project.
+
+    Handles both drift (`QASequence.lastNumber` below max(QATask.sequence))
+    and concurrent writers by performing a single atomic UPDATE that
+    reconciles against max(QATask.sequence) and bumps lastNumber by `count`.
+    SQLite serializes writes, so two racing callers get non-overlapping
+    blocks. Does NOT commit — the caller commits with the QATask rows.
+
+    Returns:
+        (prefix, start_sequence, end_sequence) — reserved range is
+        [start_sequence, end_sequence] inclusive.
+    """
+    if count <= 0:
+        raise ValueError("count must be >= 1")
+
+    # Ensure a sequence row exists so the UPDATE has something to hit.
     result = await db.execute(
         select(QASequence).where(QASequence.projectId == project_id)
     )
     sequence = result.scalar_one_or_none()
-
     if not sequence:
+        max_existing = await db.execute(
+            select(func.coalesce(func.max(QATask.sequence), 0))
+            .where(QATask.projectId == project_id)
+        )
+        max_seq = int(max_existing.scalar_one() or 0)
         sequence = QASequence(
             id=str(uuid.uuid4()),
             projectId=project_id,
             prefix="QA",
-            lastNumber=0,
+            lastNumber=max_seq,
         )
         db.add(sequence)
+        await db.flush()
 
-    sequence.lastNumber += 1
-    next_number = sequence.lastNumber
-    key = f"{sequence.prefix}-{next_number}"
-
+    # Atomic reconcile-and-advance. Single UPDATE → SQLite serializes.
+    result = await db.execute(
+        text(
+            'UPDATE "QASequence" '
+            'SET "lastNumber" = '
+            '  MAX("lastNumber", COALESCE((SELECT MAX(sequence) FROM "QATask" WHERE "projectId" = :pid), 0)) + :n '
+            'WHERE "projectId" = :pid '
+            'RETURNING "lastNumber", "prefix"'
+        ),
+        {"pid": project_id, "n": count},
+    )
+    row = result.first()
+    if not row:
+        raise RuntimeError(f"Failed to reserve QA key block for project {project_id}")
+    end_seq = int(row[0])
+    prefix = row[1]
+    start_seq = end_seq - count + 1
+    # Commit immediately so concurrent QA generations see the advanced counter.
+    # Without this, the write lock is held until the caller commits task rows,
+    # and other sessions reserve against a stale lastNumber → duplicate keys.
     await db.commit()
-    return key, next_number
+    return prefix, start_seq, end_seq
+
+
+async def get_next_qa_key(db: AsyncSession, project_id: str) -> tuple[str, int]:
+    """Get the next QA task key for a project.
+
+    Thin wrapper over `reserve_qa_key_block(..., 1)`. Atomic, drift-proof,
+    race-safe. Does NOT commit — the caller commits with the QATask row.
+    """
+    prefix, start, _ = await reserve_qa_key_block(db, project_id, 1)
+    return f"{prefix}-{start}", start
 
 
 async def get_or_create_settings(db: AsyncSession, project_id: str) -> QASettings:
@@ -1471,6 +1519,78 @@ async def get_qa_kanban_data(
             "passThreshold": settings.passThreshold,
             "autoCreateBugs": settings.autoCreateBugs,
         },
+    }
+
+
+# ==================== Backfill ====================
+
+BACKFILL_MAX_PER_CALL = 50  # Cap Claude API fan-out per call
+
+
+@router.post("/projects/{project_id}/backfill")
+async def backfill_qa_plans(
+    project_id: str,
+    limit: int = Query(BACKFILL_MAX_PER_CALL, ge=1, le=BACKFILL_MAX_PER_CALL),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fire QA plan generation for issues stuck in COMPLETED_WAITING_QA with no QATasks.
+
+    Reconciles the state where a cascade transitioned issues to
+    COMPLETED_WAITING_QA but no QA tasks were ever generated (e.g. because the
+    cascade helper skipped the trigger hook). Idempotent: safe to re-run.
+
+    Caps at `limit` (default/max 50) to bound Claude API fan-out. If more
+    eligible issues exist, re-run until `deferred` reaches 0.
+    """
+    from app.background import create_tracked_task
+    from api.issues import trigger_qa_generation
+
+    # Count total eligible
+    linked_subq = select(QATaskIssueLink.issueId).distinct().subquery()
+    count_result = await db.execute(
+        select(func.count(Issue.id)).where(
+            and_(
+                Issue.projectId == project_id,
+                Issue.status == "COMPLETED_WAITING_QA",
+                ~Issue.id.in_(select(linked_subq.c.issueId)),
+            )
+        )
+    )
+    total_eligible = int(count_result.scalar_one() or 0)
+
+    result = await db.execute(
+        select(Issue.id, Issue.key, Issue.projectId)
+        .where(
+            and_(
+                Issue.projectId == project_id,
+                Issue.status == "COMPLETED_WAITING_QA",
+                ~Issue.id.in_(select(linked_subq.c.issueId)),
+            )
+        )
+        .order_by(Issue.createdAt.asc())
+        .limit(limit)
+    )
+    targets = result.fetchall()
+
+    scheduled: list[str] = []
+    for row in targets:
+        create_tracked_task(
+            trigger_qa_generation(row[0], row[1], row[2]),
+            name=f"qa-backfill-{row[1]}",
+        )
+        scheduled.append(row[1])
+
+    deferred = max(total_eligible - len(scheduled), 0)
+    logger.info(
+        f"Backfill scheduled {len(scheduled)} QA generations for project {project_id} "
+        f"(deferred={deferred}, total_eligible={total_eligible})"
+    )
+    return {
+        "projectId": project_id,
+        "totalEligible": total_eligible,
+        "scheduled": len(scheduled),
+        "deferred": deferred,
+        "issueKeys": scheduled,
     }
 
 
