@@ -455,6 +455,27 @@ export default function FeatureDetailPage() {
   const router = useRouter();
   const featureId = params.id as string;
 
+  // Back-to-board navigation. Prefer browser history (preserves CodeBoard
+  // state — project/view/filters/scroll). Fall back to /codeboard root only
+  // when the user landed on this page directly (no in-app referrer).
+  const navigateBackToBoard = useCallback(() => {
+    const sameOriginReferrer =
+      typeof document !== 'undefined' &&
+      document.referrer &&
+      (() => {
+        try {
+          return new URL(document.referrer).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      })();
+    if (sameOriginReferrer || (typeof window !== 'undefined' && window.history.length > 1)) {
+      router.back();
+    } else {
+      router.push('/codeboard');
+    }
+  }, [router]);
+
   // Fetch the feature issue
   const { data: feature, isLoading: featureLoading } = useIssue(featureId);
 
@@ -1050,7 +1071,7 @@ export default function FeatureDetailPage() {
     // Delete the feature itself
     try {
       await deleteIssue.mutateAsync(featureId);
-      router.push('/codeboard');
+      navigateBackToBoard();
     } catch (e) {
       console.error('Failed to delete feature:', e);
       alert('Failed to delete feature');
@@ -1101,7 +1122,7 @@ export default function FeatureDetailPage() {
         <div className="max-w-6xl mx-auto text-center py-12">
           <h1 className="text-2xl font-bold text-zinc-100">Feature not found</h1>
           <button
-            onClick={() => router.push('/codeboard')}
+            onClick={navigateBackToBoard}
             className="mt-4 text-blue-400 hover:text-blue-300"
           >
             Back to CodeBoard
@@ -1118,7 +1139,7 @@ export default function FeatureDetailPage() {
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4 mb-4">
             <button
-              onClick={() => router.push('/codeboard')}
+              onClick={navigateBackToBoard}
               className="p-2 rounded-lg hover:bg-zinc-700 text-zinc-300"
             >
               <ArrowLeft className="w-5 h-5" />

@@ -20,23 +20,33 @@ import { SkeletonKanbanBoard, SkeletonListView } from '@/components/ui/skeleton'
 import { InlineError } from '@/components/ui/error-boundary';
 import { cn } from '@/lib/utils';
 import { useKeyboardShortcuts, SHORTCUTS, formatShortcut, type ShortcutHandler } from '@/hooks/use-keyboard-shortcuts';
+import { useCodeboardState, useScrollRestoration, type ViewMode } from '@/hooks/use-codeboard-state';
 import { useToast } from '@/components/ui/toast';
-
-type ViewMode = 'board' | 'swimlanes' | 'list';
 
 export default function CodeBoardPage() {
   // Router for navigation
   const router = useRouter();
 
-  // State
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('swimlanes'); // Default to swimlanes
-  const [search, setSearch] = useState('');
-  const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [selectedPriority, setSelectedPriority] = useState<string | null>(null);
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<SortField>('sequence');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  // URL-backed board state — survives navigation, refresh, and back/forward.
+  // Filter/view/project state lives in the URL (?project=&view=&q=&type=&...).
+  const {
+    selectedProjectId, setSelectedProjectId,
+    viewMode, setViewMode,
+    search, setSearch,
+    selectedType, setSelectedType,
+    selectedPriority, setSelectedPriority,
+    selectedLabel, setSelectedLabel,
+    sortField, setSortField,
+    sortOrder, setSortOrder,
+    dateFilterField, setDateFilterField,
+    dateRange, setDateRange,
+  } = useCodeboardState();
+
+  // Restore scrollY when returning to this page (keyed by project so
+  // each project keeps its own scroll position).
+  useScrollRestoration(`/codeboard:${selectedProjectId ?? 'none'}`);
+
+  // Ephemeral UI state (modals, focus, etc.) — intentionally not in URL.
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<IssueStatus>('BACKLOG');
   const [createDefaultParentId, setCreateDefaultParentId] = useState<string | undefined>();
@@ -51,8 +61,6 @@ export default function CodeBoardPage() {
   const [isSemanticSearchOpen, setIsSemanticSearchOpen] = useState(false);
   const [featureExecutionIssue, setFeatureExecutionIssue] = useState<Issue | null>(null);
   const [isFeatureSelectorOpen, setIsFeatureSelectorOpen] = useState(false);
-  const [dateFilterField, setDateFilterField] = useState<DateFilterField | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -155,13 +163,14 @@ export default function CodeBoardPage() {
   // Apply sorting to issues
   const issues = useMemo(() => sortIssues(rawIssues), [rawIssues, sortIssues]);
 
-  // Auto-select ProjectsManagerWebV2 or first project
+  // Auto-select ProjectsManagerWebV2 or first project — only when no project is in the URL.
+  // This preserves the user's previous project on back/forward navigation.
   useEffect(() => {
     if (projects?.length && !selectedProjectId) {
       const pmv2 = projects.find(p => p.name === 'ProjectsManagerWebV2');
       setSelectedProjectId(pmv2?.id || projects[0].id);
     }
-  }, [projects, selectedProjectId]);
+  }, [projects, selectedProjectId, setSelectedProjectId]);
 
   // Keyboard shortcuts
   const boardShortcuts = useMemo<ShortcutHandler[]>(() => [
