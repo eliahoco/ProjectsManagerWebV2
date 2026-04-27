@@ -16,6 +16,7 @@
 import { useState, useMemo, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useUrlState, optionalStringParam } from '@/hooks/use-url-state';
 import {
   FlaskConical,
   ArrowLeft,
@@ -101,19 +102,21 @@ function ExtensiveQAPageContent() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
-  // Get project/issue from URL params
-  const initialProjectId = searchParams.get('project');
-  const initialIssueId = searchParams.get('issue');
+  // URL-backed project + issue selection — survives back/refresh.
+  const [urlState, setUrlState] = useUrlState({
+    project: optionalStringParam('project'),
+    issue: optionalStringParam('issue'),
+  });
 
   // Project state
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const selectedProjectId = urlState.project;
 
   // Effective project ID
   const effectiveProjectId = selectedProjectId ?? projects?.[0]?.id ?? null;
 
   // Issue filter (optional)
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(initialIssueId);
+  const selectedIssueId = urlState.issue;
   const { data: issuesData } = useIssues(effectiveProjectId, { pageSize: 100 });
 
   // Load QA tasks
@@ -158,22 +161,14 @@ function ExtensiveQAPageContent() {
     });
   }, []);
 
-  // Handle project change
+  // Handle project change — URL sync is automatic via useUrlState.
   const handleProjectChange = (projectId: string | null) => {
-    setSelectedProjectId(projectId);
-    setSelectedIssueId(null);
-    const params = new URLSearchParams();
-    if (projectId) params.set('project', projectId);
-    router.replace(`/codeboard/qa/extensive?${params.toString()}`);
+    setUrlState({ project: projectId, issue: null });
   };
 
   // Handle issue filter change
   const handleIssueChange = (issueId: string | null) => {
-    setSelectedIssueId(issueId);
-    const params = new URLSearchParams();
-    if (effectiveProjectId) params.set('project', effectiveProjectId);
-    if (issueId) params.set('issue', issueId);
-    router.replace(`/codeboard/qa/extensive?${params.toString()}`);
+    setUrlState({ issue: issueId });
   };
 
   // Execute all pending tasks

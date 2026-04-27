@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useUrlState, stringSetParam, enumParam, useNavigateBack } from '@/hooks/use-url-state';
 import Link from 'next/link';
 import { Zap, FlaskConical, BarChart3, Trophy } from 'lucide-react';
 import { useIssue, useIssues } from '@/hooks/useCodeBoard';
@@ -392,9 +393,22 @@ export default function QADetailPage() {
   const router = useRouter();
   const issueId = params.id as string;
 
-  const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set());
-  const [selectedQATasks, setSelectedQATasks] = useState<Set<string>>(new Set());
-  const [executionMode, setExecutionMode] = useState<'sequential' | 'parallel'>('sequential');
+  // URL-backed selection + execution mode — survives back navigation / refresh.
+  const [urlSel, setUrlSel] = useUrlState({
+    issues: stringSetParam('issues'),
+    tasks: stringSetParam('tasks'),
+    mode: enumParam('mode', ['sequential', 'parallel'] as const, 'sequential'),
+  });
+  const selectedIssues = urlSel.issues;
+  const selectedQATasks = urlSel.tasks;
+  const executionMode = urlSel.mode;
+  const setSelectedIssues = (
+    next: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => setUrlSel({ issues: typeof next === 'function' ? next(selectedIssues) : next });
+  const setSelectedQATasks = (
+    next: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => setUrlSel({ tasks: typeof next === 'function' ? next(selectedQATasks) : next });
+  const setExecutionMode = (next: 'sequential' | 'parallel') => setUrlSel({ mode: next });
   const [detailTask, setDetailTask] = useState<QATask | null>(null);
   const [executionStartTime, setExecutionStartTime] = useState<Date | null>(null);
   const [showEvaluation, setShowEvaluation] = useState(false);

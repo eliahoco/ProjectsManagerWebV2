@@ -27,6 +27,7 @@ import { useQuickQAExecution } from '@/hooks/useQuickQAExecution';
 import { useToast } from '@/components/ui/toast';
 import { FastQAPanel } from '@/components/codeboard/FastQAPanel';
 import { FloatingQuickExecuteButton } from '@/components/codeboard/QuickExecuteButton';
+import { useUrlState, optionalStringParam } from '@/hooks/use-url-state';
 
 // Loading fallback for Suspense boundary
 function FastQAPageLoading() {
@@ -58,19 +59,21 @@ function FastQAPageContent() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
-  // Get project/issue from URL params
-  const initialProjectId = searchParams.get('project');
-  const initialIssueId = searchParams.get('issue');
+  // URL-backed project + issue selection — survives back/refresh.
+  const [urlState, setUrlState] = useUrlState({
+    project: optionalStringParam('project'),
+    issue: optionalStringParam('issue'),
+  });
 
   // Project state
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const selectedProjectId = urlState.project;
 
   // Effective project ID - use selected or first available
   const effectiveProjectId = selectedProjectId ?? projects?.[0]?.id ?? null;
 
   // Issue filter (optional)
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(initialIssueId);
+  const selectedIssueId = urlState.issue;
   const { data: issuesData } = useIssues(effectiveProjectId, { pageSize: 100 });
 
   // Quick QA execution hook
@@ -105,24 +108,14 @@ function FastQAPageContent() {
     }));
   }, [issuesData]);
 
-  // Handle project change
+  // Handle project change — URL sync is automatic via useUrlState.
   const handleProjectChange = (projectId: string | null) => {
-    setSelectedProjectId(projectId);
-    setSelectedIssueId(null); // Reset issue filter
-    // Update URL
-    const params = new URLSearchParams();
-    if (projectId) params.set('project', projectId);
-    router.replace(`/codeboard/qa/fast?${params.toString()}`);
+    setUrlState({ project: projectId, issue: null });
   };
 
   // Handle issue filter change
   const handleIssueChange = (issueId: string | null) => {
-    setSelectedIssueId(issueId);
-    // Update URL
-    const params = new URLSearchParams();
-    if (effectiveProjectId) params.set('project', effectiveProjectId);
-    if (issueId) params.set('issue', issueId);
-    router.replace(`/codeboard/qa/fast?${params.toString()}`);
+    setUrlState({ issue: issueId });
   };
 
   return (

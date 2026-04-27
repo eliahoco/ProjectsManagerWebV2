@@ -10,6 +10,7 @@ import { Play, PauseCircle, Terminal, GitBranch, ExternalLink, RefreshCw, Search
 import { Button } from '@/components/ui/button';
 import { ImportButton } from '@/components/codeboard/ImportButton';
 import { cn, getServiceTypeColor } from '@/lib/utils';
+import { useUrlState, stringParam } from '@/hooks/use-url-state';
 import type { ProjectWithStatus } from '@/types';
 
 interface PortConflictInfo {
@@ -21,7 +22,9 @@ interface PortConflictInfo {
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  // URL-backed search — persists across navigation/refresh
+  const [{ q: searchQuery }, setUrlState] = useUrlState({ q: stringParam('q', '') });
+  const setSearchQuery = (v: string) => setUrlState({ q: v });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
   const [portConflicts, setPortConflicts] = useState<{ id: string; conflicts: PortConflictInfo[] } | null>(null);

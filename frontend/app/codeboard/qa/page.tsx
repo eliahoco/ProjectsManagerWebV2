@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useUrlState, optionalStringParam } from '@/hooks/use-url-state';
 import { Zap, FlaskConical } from 'lucide-react';
 import { useProjects, useIssues } from '@/hooks/useCodeBoard';
 import { useQAKanban, useUpdateQASettings } from '@/hooks/useQABoard';
@@ -156,9 +157,11 @@ export default function QABoardPage() {
   const router = useRouter();
   const { data: projects } = useProjects();
 
-  // Compute effective project ID - use selected or fall back to first project
-  const [manuallySelectedProjectId, setManuallySelectedProjectId] = useState<string | null>(null);
-  const effectiveProjectId = manuallySelectedProjectId ?? projects?.[0]?.id ?? null;
+  // URL-backed project selection — survives back/refresh.
+  const [urlState, setUrlState] = useUrlState({
+    project: optionalStringParam('project'),
+  });
+  const effectiveProjectId = urlState.project ?? projects?.[0]?.id ?? null;
 
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -170,7 +173,7 @@ export default function QABoardPage() {
 
   // Handler for manual project selection
   const handleProjectSelect = (projectId: string | null) => {
-    setManuallySelectedProjectId(projectId);
+    setUrlState({ project: projectId });
   };
 
   const handleUpdateSettings = async (settings: Partial<Omit<QASettings, 'projectId'>>) => {
