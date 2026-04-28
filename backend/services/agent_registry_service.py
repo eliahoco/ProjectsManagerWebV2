@@ -164,6 +164,7 @@ class AgentRegistryService:
             projectPatterns=json.dumps(data.get("projectPatterns", [])) if isinstance(data.get("projectPatterns"), list) else data.get("projectPatterns"),
             isActive=data.get("isActive", True),
             priority=data.get("priority", 50),
+            source=data.get("source", "standalone"),
         )
         db.add(agent)
         await db.commit()
@@ -262,56 +263,135 @@ class AgentRegistryService:
         db: AsyncSession,
         directory: Optional[str] = None,
     ) -> List[AgentProfile]:
-        """Scan a directory for agent folders (each containing an AGENT.md) and
-        auto-register them in the database.
+        """Scan for agent AGENT.md files and auto-register them in the database.
+
+        Walks two source roots:
+
+        1. *Standalone agents* — the supplied *directory* (defaults to
+           ``~/.claude/agents``).  Each sub-directory that contains an
+           ``AGENT.md`` becomes an agent with ``source="standalone"``.
+
+        2. *Plugin-bundled agents* — ``~/.claude/plugins/cache/<plugin>/…/agents/*.md``
+           (both non-versioned and versioned layouts).  These receive
+           ``source="plugin:<plugin-name>"``.
+
+        The *directory* parameter only controls the standalone root; plugin
+        scanning always walks ``~/.claude/plugins/cache/``.
 
         Returns the list of agents that were created or updated.
         """
-        if directory is None:
-            directory = os.path.expanduser("~/.claude/agents")
-
-        agents_dir = Path(directory)
-        if not agents_dir.is_dir():
-            logger.warning(f"Agents directory does not exist: {agents_dir}")
-            return []
-
+        standalone_dir = os.path.expanduser("~/.claude/agents") if directory is None else directory
         registered: List[AgentProfile] = []
 
-        for entry in sorted(agents_dir.iterdir()):
-            if not entry.is_dir():
-                continue
+        # --- 1. Standalone agents ---
+        agents_dir = Path(standalone_dir)
+        if agents_dir.is_dir():
+            for entry in sorted(agents_dir.iterdir()):
+                if not entry.is_dir():
+                    continue
+                agent_md = entry / "AGENT.md"
+                if not agent_md.is_file():
+                    continue
+                agent = await self._register_agent_from_file(db, agent_md, source="standalone")
+                if agent:
+                    registered.append(agent)
+        else:
+            logger.warning("Agents directory does not exist: %s", agents_dir)
 
-            agent_md = entry / "AGENT.md"
-            if not agent_md.is_file():
-                continue
+        # --- 2. Plugin-bundled agents (any depth under cache) ---
+        # Real layouts seen in the wild:
+        #   cache/<marketplace>/<plugin>/<version>/agents/<name>.md
+        #   cache/<marketplace>/<plugin>/<version>/claude-plugin/<plugin>/agents/<name>.md
+        # Strategy: walk all */agents/*.md under cache and derive the plugin
+        # name from the FIRST path segment under cache/.
+        plugins_cache = Path(os.path.expanduser("~/.claude/plugins/cache"))
+        if plugins_cache.is_dir():
+            seen_paths: set = set()
+            for agent_md in plugins_cache.rglob("*.md"):
+                # Only files inside an "agents" directory at any depth
+                if "agents" not in agent_md.parts:
+                    continue
+                # Skip non-leaf .md files (agents dir should contain leaf files)
+                if not agent_md.is_file():
+                    continue
+                # Dedupe via realpath (handles symlinks)
+                resolved = agent_md.resolve()
+                if resolved in seen_paths:
+                    continue
+                seen_paths.add(resolved)
 
-            agent_name = entry.name
-            try:
-                content = agent_md.read_text(encoding="utf-8")
-            except Exception as e:
-                logger.warning(f"Could not read {agent_md}: {e}")
-                continue
+                try:
+                    # Defense-in-depth: agent_md must remain within plugins_cache
+                    # after resolving symlinks (catches malicious link-out)
+                    if not resolved.is_relative_to(plugins_cache.resolve()):
+                        logger.warning("Skipping symlink escape: %s -> %s", agent_md, resolved)
+                        continue
+                    rel = agent_md.relative_to(plugins_cache)
+                    plugin_name = rel.parts[0] if rel.parts else "unknown"
+                    if plugin_name.startswith("_"):
+                        continue
+                    source = f"plugin:{plugin_name}"
+                except (ValueError, OSError):
+                    continue
 
-            frontmatter = _parse_agent_frontmatter(content)
-
-            # Build registration data from frontmatter + defaults
-            data: Dict[str, Any] = {
-                "name": frontmatter.get("name", agent_name),
-                "displayName": _name_to_display_name(frontmatter.get("name", agent_name)),
-                "description": frontmatter.get("description", ""),
-                "agentPath": str(agent_md),
-                "capabilities": DEFAULT_CAPABILITIES.get(agent_name, []),
-                "issueTypeAffinity": DEFAULT_ISSUE_TYPE_AFFINITY.get(agent_name, ["TASK", "STORY", "BUG"]),
-                "projectPatterns": DEFAULT_PROJECT_PATTERNS.get(agent_name, []),
-                "isActive": True,
-                "priority": 50,
-            }
-
-            agent = await self.register_agent(db, data)
-            registered.append(agent)
-            logger.info(f"Registered agent: {agent.name} ({agent.displayName})")
+                agent = await self._register_agent_from_file(db, agent_md, source=source)
+                if agent:
+                    registered.append(agent)
 
         return registered
+
+    async def _register_agent_from_file(
+        self,
+        db: AsyncSession,
+        agent_md: Path,
+        source: str,
+    ) -> Optional[AgentProfile]:
+        """Parse a single AGENT.md file and upsert it into the registry.
+
+        Args:
+            db: Async SQLAlchemy session.
+            agent_md: Path to the AGENT.md file.
+            source: Value to store in the ``source`` column.
+
+        Returns:
+            The upserted AgentProfile, or None if the file could not be read.
+        """
+        # Derive a default name from the parent directory or filename (no extension)
+        if agent_md.name.upper() == "AGENT.MD":
+            default_name = agent_md.parent.name
+        else:
+            default_name = agent_md.stem  # e.g. "python-pro" from "python-pro.md"
+
+        try:
+            content = agent_md.read_text(encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Could not read %s: %s", agent_md, exc)
+            return None
+
+        frontmatter = _parse_agent_frontmatter(content)
+        agent_name = frontmatter.get("name", default_name)
+
+        data: Dict[str, Any] = {
+            "name": agent_name,
+            "displayName": _name_to_display_name(agent_name),
+            "description": frontmatter.get("description", ""),
+            "agentPath": str(agent_md),
+            "capabilities": DEFAULT_CAPABILITIES.get(agent_name, []),
+            "issueTypeAffinity": DEFAULT_ISSUE_TYPE_AFFINITY.get(agent_name, ["TASK", "STORY", "BUG"]),
+            "projectPatterns": DEFAULT_PROJECT_PATTERNS.get(default_name, []),
+            "isActive": True,
+            "priority": 50,
+            "source": source,
+        }
+
+        agent = await self.register_agent(db, data)
+        logger.info(
+            "Registered agent: %s (%s) source=%s",
+            agent.name,
+            agent.displayName,
+            source,
+        )
+        return agent
 
 
 # ------------------------------------------------------------------

@@ -408,11 +408,41 @@ model AgentProfile {
   projectPatterns  String?  // JSON array
   isActive         Boolean  @default(true)
   priority         Int      @default(50)
+  // "standalone" = ~/.claude/agents; "plugin:<name>" = from plugin cache
+  source           String   @default("standalone")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  @@index([name])
   @@index([isActive])
+  @@index([source])
+}
+
+// ============================================
+// Skill Profiles
+// ============================================
+
+model SkillProfile {
+  id          String   @id @default(cuid())
+  name        String   @unique  // e.g. "jonny", "atlas", "skill-creator"
+  displayName String            // e.g. "Jonny", "Atlas"
+  description String?           // From frontmatter `description:` field
+  skillPath   String            // Absolute path to SKILL.md
+
+  capabilities String?  // JSON array — from frontmatter `capabilities:`
+  contextFork  Boolean  @default(false)  // true if frontmatter has `context: fork`
+  agentRef     String?  // Value of `agent:` key if present, e.g. "atlas-indexer"
+
+  // "standalone" = ~/.claude/skills; "plugin:<name>" = from plugin cache
+  source    String  @default("standalone")
+
+  isActive  Boolean  @default(true)
+  priority  Int      @default(50)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([source])
 }
 
 // ============================================

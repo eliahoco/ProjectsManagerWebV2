@@ -27,6 +27,9 @@ httpx==0.28.0
 # Security
 slowapi==0.1.9
 
+# YAML for SKILL.md / AGENT.md frontmatter parsing (skill_registry, agent_registry)
+pyyaml>=6.0
+
 # Testing
 pytest==8.3.0
 pytest-asyncio==0.24.0

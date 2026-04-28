@@ -51,6 +51,8 @@ export interface AgentProfile {
   capabilities: string[] | null;
   issueTypeAffinity: string[] | null;
   projectPatterns: string[] | null;
+  /** "standalone" | "plugin:<name>" */
+  source: string;
   isActive: boolean;
   priority: number;
   createdAt: string | null;

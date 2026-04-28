@@ -5,7 +5,7 @@
  * Manage registered AI agents - view, scan, toggle active/inactive
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Bot,
   Scan,
@@ -26,16 +26,43 @@ import { cn } from '@/lib/utils';
 import { useAgents, useScanAgents, useToggleAgent } from '@/hooks/useAgents';
 import type { AgentProfile } from '@/hooks/useAgents';
 
+// ============================================
+// Source filter helpers
+// ============================================
+
+type SourceFilter = 'all' | 'standalone' | 'plugin';
+
+function getSourceFilterLabel(filter: SourceFilter): string {
+  switch (filter) {
+    case 'all': return 'All Sources';
+    case 'standalone': return 'Standalone';
+    case 'plugin': return 'Plugins';
+  }
+}
+
+function matchesSourceFilter(agent: AgentProfile, filter: SourceFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'standalone') return agent.source === 'standalone';
+  if (filter === 'plugin') return agent.source.startsWith('plugin:');
+  return true;
+}
+
 export default function AgentProfilesPage() {
   const toast = useToast();
   const { data: agents, isLoading, error } = useAgents();
   const scanAgents = useScanAgents();
   const toggleAgent = useToggleAgent();
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+
+  const filteredAgents = useMemo(() => {
+    if (!agents) return [];
+    return agents.filter((a) => matchesSourceFilter(a, sourceFilter));
+  }, [agents, sourceFilter]);
 
   const handleScan = async () => {
     try {
-      const result = await scanAgents.mutateAsync();
+      const result = await scanAgents.mutateAsync(undefined);
       toast.success(
         'Agent Scan Complete',
         `Found ${result.length} agent${result.length !== 1 ? 's' : ''}`
@@ -135,29 +162,90 @@ export default function AgentProfilesPage() {
         <>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-zinc-400">
-              {agents.length} agent{agents.length !== 1 ? 's' : ''} registered
+              {filteredAgents.length} agent{filteredAgents.length !== 1 ? 's' : ''}
+              {sourceFilter !== 'all' && (
+                <span className="text-zinc-600"> (filtered from {agents.length})</span>
+              )}
               <span className="text-zinc-600 mx-1.5">&middot;</span>
               {agents.filter((a) => a.isActive).length} active
             </p>
+
+            {/* Source filter dropdown */}
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+              className="text-sm bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+            >
+              {(['all', 'standalone', 'plugin'] as SourceFilter[]).map((f) => (
+                <option key={f} value={f}>
+                  {getSourceFilterLabel(f)}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-            {agents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                expanded={expandedAgent === agent.id}
-                onToggleExpand={() =>
-                  setExpandedAgent(expandedAgent === agent.id ? null : agent.id)
-                }
-                onToggleActive={() => handleToggle(agent.id)}
-                isToggling={toggleAgent.isPending}
-              />
-            ))}
-          </div>
+          {/* Filtered empty state */}
+          {filteredAgents.length === 0 && (
+            <div className="text-center py-12 bg-zinc-900 border border-zinc-800 rounded-lg">
+              <FolderSearch className="h-10 w-10 text-zinc-600 mx-auto mb-3" />
+              <p className="text-zinc-400">No agents match the current filter</p>
+              <button
+                onClick={() => setSourceFilter('all')}
+                className="text-cyan-400 hover:text-cyan-300 text-sm mt-2 transition-colors"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
+
+          {filteredAgents.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+              {filteredAgents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  expanded={expandedAgent === agent.id}
+                  onToggleExpand={() =>
+                    setExpandedAgent(expandedAgent === agent.id ? null : agent.id)
+                  }
+                  onToggleActive={() => handleToggle(agent.id)}
+                  isToggling={toggleAgent.isPending}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+// ============================================
+// Source Badge
+// ============================================
+
+function SourceBadge({ source }: { source: string }) {
+  if (!source || source === 'standalone') {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-zinc-600 text-zinc-400">
+        standalone
+      </Badge>
+    );
+  }
+
+  if (source.startsWith('plugin:')) {
+    const pluginName = source.slice('plugin:'.length);
+    return (
+      <Badge variant="purple" className="text-[10px] px-1.5 py-0">
+        plugin · {pluginName}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+      {source}
+    </Badge>
   );
 }
 
@@ -277,14 +365,17 @@ function AgentCard({
           </div>
         )}
 
-        {/* Status badge */}
+        {/* Status badge + source badge */}
         <div className="flex items-center justify-between mt-3">
-          <Badge
-            variant={agent.isActive ? 'success' : 'secondary'}
-            className="text-[10px]"
-          >
-            {agent.isActive ? 'Active' : 'Inactive'}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant={agent.isActive ? 'success' : 'secondary'}
+              className="text-[10px]"
+            >
+              {agent.isActive ? 'Active' : 'Inactive'}
+            </Badge>
+            <SourceBadge source={agent.source} />
+          </div>
 
           <button
             onClick={onToggleExpand}

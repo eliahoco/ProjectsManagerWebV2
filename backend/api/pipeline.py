@@ -82,6 +82,7 @@ class AgentResponse(BaseModel):
     projectPatterns: Optional[List[str]] = None
     isActive: bool = True
     priority: int = 50
+    source: Optional[str] = "standalone"
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
 
@@ -165,6 +166,7 @@ def _agent_to_response(agent: AgentProfile) -> AgentResponse:
         projectPatterns=_parse_json_field(agent.projectPatterns),
         isActive=agent.isActive,
         priority=agent.priority,
+        source=getattr(agent, "source", None) or "standalone",
         createdAt=agent.createdAt.isoformat() if agent.createdAt else None,
         updatedAt=agent.updatedAt.isoformat() if agent.updatedAt else None,
     )

@@ -55,6 +55,11 @@ class AgentProfile(Base):
     issueTypeAffinity = Column(JsonList, nullable=True)  # e.g., ["TASK", "BUG"]
     projectPatterns = Column(JsonList, nullable=True)  # e.g., ["*.py", "backend/**"]
 
+    # Source tracking
+    # "standalone"            — from ~/.claude/agents/*/AGENT.md
+    # "plugin:<plugin-name>"  — from ~/.claude/plugins/cache/<plugin-name>/…/agents/*.md
+    source = Column(String, default="standalone", nullable=True)
+
     # Status and ranking
     isActive = Column(Boolean, default=True, nullable=False)
     priority = Column(Integer, default=50, nullable=False)  # Higher = preferred when multiple agents match
@@ -67,4 +72,5 @@ class AgentProfile(Base):
         Index("AgentProfile_name_idx", "name"),
         Index("AgentProfile_isActive_idx", "isActive"),
         Index("AgentProfile_priority_idx", "priority"),
+        Index("AgentProfile_source_idx", "source"),
     )

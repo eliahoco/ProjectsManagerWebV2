@@ -8,6 +8,7 @@ from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation
 from models.agent_registry import AgentProfile
+from models.skill_registry import SkillProfile
 from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
 from models.park import ParkEvent
 from models.schemas import (
@@ -94,6 +95,8 @@ __all__ = [
     "FeatureDocumentation",
     # SQLAlchemy Models - Agent Registry
     "AgentProfile",
+    # SQLAlchemy Models - Skill Registry
+    "SkillProfile",
     # SQLAlchemy Models - Pipeline
     "PipelineExecution",
     "PipelineStage",
