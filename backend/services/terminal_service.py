@@ -595,10 +595,23 @@ class TerminalService:
 
         session_id = str(uuid.uuid4())
 
+        # Jonny invocation prefix — guarantees the global ~/.claude/skills/jonny
+        # SKILL.md auto-fires in spawned subprocesses by including its trigger
+        # phrases (Bible, VP R&D, CodeBoard, feature plan, audit, regression test).
+        # Without this, PMv2-spawned Claude Code sessions skip the bible discipline
+        # and dive straight into implementation, violating Rule 4 + Rule 23.
+        # See JM-F1 (Jonny-Methodology) — JM-T7.5.3.2 / JM-T6.4.x.
+        JONNY_PREFIX = (
+            "/jonny — engage VP-R&D bible. Plan and implement this feature using "
+            "your CodeBoard-first discipline and the pre/post checklist. Apply the "
+            "audit gates (code review + security audit + regression test) before "
+            "marking the work COMPLETED_WAITING_QA.\n\n"
+        )
+
         # Build the prompt for Claude Code
         if prompt_override:
             # Use the rich context prompt from context_builder
-            prompt = prompt_override
+            prompt = JONNY_PREFIX + prompt_override
         else:
             # Fallback: basic prompt (for backward compatibility)
             prompt_parts = [
@@ -618,7 +631,7 @@ class TerminalService:
                 prompt_parts.append("")
 
             prompt_parts.append("Please implement this task. When you're done, summarize what you did.")
-            prompt = "\n".join(prompt_parts)
+            prompt = JONNY_PREFIX + "\n".join(prompt_parts)
 
         # Create session
         session = TerminalSession(
