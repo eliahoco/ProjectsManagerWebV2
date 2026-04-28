@@ -2,6 +2,7 @@
 Git Service - Repository operations and status
 """
 
+import asyncio
 import os
 import re
 import subprocess
@@ -99,49 +100,57 @@ class GitService:
     def __init__(self):
         pass
 
-    def _run_git(
+    async def _run_git(
         self,
         args: List[str],
         cwd: str,
         timeout: int = 30,
     ) -> tuple[bool, str, str]:
         """
-        Run a git command and return (success, stdout, stderr).
+        Run a git command asynchronously and return (success, stdout, stderr).
         """
         try:
-            result = subprocess.run(
-                ['git'] + args,
+            proc = await asyncio.create_subprocess_exec(
+                'git', *args,
                 cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            return result.returncode == 0, result.stdout, result.stderr
-        except subprocess.TimeoutExpired:
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+            stdout = stdout_bytes.decode(errors='replace')
+            stderr = stderr_bytes.decode(errors='replace')
+            return proc.returncode == 0, stdout, stderr
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except Exception:
+                pass
             return False, '', 'Command timed out'
         except Exception as e:
             return False, '', str(e)
 
-    def is_git_repo(self, path: str) -> bool:
+    async def is_git_repo(self, path: str) -> bool:
         """Check if path is a git repository"""
         if not os.path.isdir(path):
             return False
-        success, _, _ = self._run_git(['rev-parse', '--is-inside-work-tree'], path)
+        success, _, _ = await self._run_git(['rev-parse', '--is-inside-work-tree'], path)
         return success
 
-    def get_status(self, path: str) -> GitStatus:
+    async def get_status(self, path: str) -> GitStatus:
         """Get repository status"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return GitStatus(is_repo=False)
 
         # Get current branch
-        success, branch, _ = self._run_git(
+        success, branch, _ = await self._run_git(
             ['rev-parse', '--abbrev-ref', 'HEAD'], path
         )
         branch = branch.strip() if success else None
 
         # Get porcelain status
-        success, output, _ = self._run_git(
+        success, output, _ = await self._run_git(
             ['status', '--porcelain=2', '--branch'], path
         )
 
@@ -188,12 +197,12 @@ class GitService:
             behind=behind,
         )
 
-    def get_branches(self, path: str, limit: int = 20) -> List[GitBranch]:
+    async def get_branches(self, path: str, limit: int = 20) -> List[GitBranch]:
         """Get list of branches"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return []
 
-        success, output, _ = self._run_git(
+        success, output, _ = await self._run_git(
             ['branch', '-vv', '--format=%(HEAD) %(refname:short) %(upstream:short) %(upstream:track)'],
             path
         )
@@ -239,14 +248,14 @@ class GitService:
 
         return branches
 
-    def get_commits(
+    async def get_commits(
         self,
         path: str,
         branch: Optional[str] = None,
         limit: int = 20,
     ) -> List[GitCommit]:
         """Get recent commits"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return []
 
         args = [
@@ -257,7 +266,7 @@ class GitService:
         if branch:
             args.append(branch)
 
-        success, output, _ = self._run_git(args, path)
+        success, output, _ = await self._run_git(args, path)
 
         commits = []
         if success:
@@ -278,14 +287,14 @@ class GitService:
 
         return commits
 
-    def get_diff(
+    async def get_diff(
         self,
         path: str,
         staged: bool = False,
         file_path: Optional[str] = None,
     ) -> str:
         """Get diff for changes"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return ''
 
         args = ['diff']
@@ -294,27 +303,27 @@ class GitService:
         if file_path:
             args.extend(['--', file_path])
 
-        success, output, _ = self._run_git(args, path)
+        success, output, _ = await self._run_git(args, path)
         return output if success else ''
 
-    def get_remote_url(self, path: str, remote: str = 'origin') -> Optional[str]:
+    async def get_remote_url(self, path: str, remote: str = 'origin') -> Optional[str]:
         """Get remote URL"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return None
 
-        success, output, _ = self._run_git(
+        success, output, _ = await self._run_git(
             ['remote', 'get-url', remote], path
         )
         return output.strip() if success else None
 
-    def get_commit_for_issue(
+    async def get_commit_for_issue(
         self,
         path: str,
         issue_key: str,
         limit: int = 10,
     ) -> List[GitCommit]:
         """Find commits that reference an issue key"""
-        if not self.is_git_repo(path):
+        if not await self.is_git_repo(path):
             return []
 
         args = [
@@ -324,7 +333,7 @@ class GitService:
             '--format=%H|%h|%an|%ae|%at|%s',
         ]
 
-        success, output, _ = self._run_git(args, path)
+        success, output, _ = await self._run_git(args, path)
 
         commits = []
         if success:
@@ -344,15 +353,15 @@ class GitService:
 
         return commits
 
-    def repo_summary(self, path: str) -> Dict[str, Any]:
+    async def repo_summary(self, path: str) -> Dict[str, Any]:
         """Get a summary of repository state"""
-        status = self.get_status(path)
+        status = await self.get_status(path)
         if not status.is_repo:
             return {'is_repo': False}
 
-        branches = self.get_branches(path, limit=5)
-        recent_commits = self.get_commits(path, limit=5)
-        remote_url = self.get_remote_url(path)
+        branches = await self.get_branches(path, limit=5)
+        recent_commits = await self.get_commits(path, limit=5)
+        remote_url = await self.get_remote_url(path)
 
         return {
             'is_repo': True,

@@ -141,7 +141,7 @@ async def get_project_git_status(
 ):
     """Get git status for a project"""
     path = await get_project_path(project_id, db)
-    status = git_service.get_status(path)
+    status = await git_service.get_status(path)
     return GitStatusResponse(
         is_repo=status.is_repo,
         branch=status.branch,
@@ -162,7 +162,7 @@ async def get_project_branches(
 ):
     """Get git branches for a project"""
     path = await get_project_path(project_id, db)
-    branches = git_service.get_branches(path, limit=limit)
+    branches = await git_service.get_branches(path, limit=limit)
     return [
         GitBranchResponse(
             name=b.name,
@@ -184,7 +184,7 @@ async def get_project_commits(
 ):
     """Get git commits for a project"""
     path = await get_project_path(project_id, db)
-    commits = git_service.get_commits(path, branch=branch, limit=limit)
+    commits = await git_service.get_commits(path, branch=branch, limit=limit)
     return [
         GitCommitResponse(
             hash=c.hash,
@@ -206,7 +206,7 @@ async def get_project_repo_summary(
 ):
     """Get repository summary for a project"""
     path = await get_project_path(project_id, db)
-    summary = git_service.repo_summary(path)
+    summary = await git_service.repo_summary(path)
     return RepoSummaryResponse(**summary)
 
 
@@ -219,7 +219,7 @@ async def get_project_diff(
 ):
     """Get diff for project changes"""
     path = await get_project_path(project_id, db)
-    diff = git_service.get_diff(path, staged=staged, file_path=file_path)
+    diff = await git_service.get_diff(path, staged=staged, file_path=file_path)
     return {"diff": diff}
 
 
@@ -232,7 +232,7 @@ async def get_commits_for_issue(
 ):
     """Find commits that reference an issue key"""
     path = await get_project_path(project_id, db)
-    commits = git_service.get_commit_for_issue(path, issue_key, limit=limit)
+    commits = await git_service.get_commit_for_issue(path, issue_key, limit=limit)
     return {
         "issue_key": issue_key,
         "commits": [
@@ -455,7 +455,7 @@ async def github_webhook(
             matched_project = project
             break
         # Check remote URL
-        remote_url = git_service.get_remote_url(project.path)
+        remote_url = await git_service.get_remote_url(project.path)
         if remote_url and repo_full_name.lower() in remote_url.lower():
             matched_project = project
             break

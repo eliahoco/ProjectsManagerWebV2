@@ -2,6 +2,7 @@
 AI Service - Multi-provider AI support (Ollama local, Claude API fallback)
 """
 
+import asyncio
 import httpx
 import logging
 import re
@@ -10,7 +11,7 @@ from typing import List, Optional, Dict, Any
 import json
 
 from app.config import settings
-from services.rag_service import rag_service
+from services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +48,11 @@ class AIService:
             return key[:4] + "..." + key[-4:]
         return key[:10] + "..." + key[-4:]
 
-    def get_ollama_models(self) -> list:
+    async def get_ollama_models(self) -> list:
         """Fetch available models from Ollama."""
         try:
-            response = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=3.0)
             if response.status_code == 200:
                 data = response.json()
                 return [
@@ -74,21 +76,23 @@ class AIService:
         """Get the current Ollama model name."""
         return self._ollama_model
 
-    def is_ollama_available(self) -> bool:
+    async def is_ollama_available(self) -> bool:
         """Check if Ollama is running (without caching)."""
         try:
-            response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
             return response.status_code == 200
         except Exception:
             return False
 
-    def _check_ollama(self) -> bool:
+    async def _check_ollama(self) -> bool:
         """Check if Ollama is running locally"""
         if self._ollama_available is not None:
             return self._ollama_available
 
         try:
-            response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
             if response.status_code == 200:
                 data = response.json()
                 # Get full model names (including tags like :1b, :7b, etc.)
@@ -99,7 +103,6 @@ class AIService:
                 def model_priority(name: str) -> int:
                     """Higher number = better. Prefer larger models."""
                     # Extract size from model name (e.g., "llama3.2:3b" -> 3)
-                    import re
                     match = re.search(r':(\d+)b', name)
                     if match:
                         return int(match.group(1))
@@ -133,13 +136,13 @@ class AIService:
             self._ollama_available = False
             return False
 
-    def is_available(self) -> bool:
+    async def is_available(self) -> bool:
         """Check if any AI service is available (Ollama or Claude)"""
-        return self._check_ollama() or self.anthropic_client is not None
+        return await self._check_ollama() or self.anthropic_client is not None
 
-    def get_provider(self) -> str:
+    async def get_provider(self) -> str:
         """Get current AI provider"""
-        if self._check_ollama():
+        if await self._check_ollama():
             return f"ollama/{self._ollama_model}"
         elif self.anthropic_client:
             return "claude-sonnet-4-6"
@@ -180,11 +183,13 @@ class AIService:
         return None
 
     async def _call_claude(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
-        """Call Claude API"""
+        """Call Claude API (offloaded to thread to avoid blocking the event loop)."""
         if not self.anthropic_client:
             return None
         try:
-            response = self.anthropic_client.messages.create(
+            client = self.anthropic_client
+            response = await asyncio.to_thread(
+                client.messages.create,
                 model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
@@ -199,7 +204,7 @@ class AIService:
         logger.debug(f"_generate called, prompt length: {len(prompt)}")
 
         # Try Ollama first (local, free)
-        if self._check_ollama():
+        if await self._check_ollama():
             logger.info("Trying Ollama...")
             result = await self._call_ollama(prompt, max_tokens)
             if result:
@@ -376,18 +381,26 @@ class AIService:
         title: str,
         description: Optional[str] = None,
         parent_type: str = "EPIC",
+        rag: Optional["RAGService"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Break down a feature/epic into smaller issues.
         Returns a list of suggested child issues.
+
+        Args:
+            project_id: The project identifier.
+            title: Feature title.
+            description: Optional feature description.
+            parent_type: The parent issue type.
+            rag: RAGService instance for context retrieval.
         """
-        if not self.is_available():
+        if not await self.is_available():
             return []
 
         # Get context from existing issues
-        context = await rag_service.get_context_for_ai(
+        context = await rag.get_context_for_ai(
             project_id, f"{title} {description or ''}"
-        )
+        ) if rag else ""
 
         # Determine if this is a detailed specification or a brief description
         has_detailed_spec = description and len(description) > 200
@@ -484,7 +497,7 @@ Return ONLY the JSON array."""
         Suggest a status update based on git activity.
         Returns suggested new status or None.
         """
-        if not self.is_available():
+        if not await self.is_available():
             return None
 
         activity = []
@@ -534,7 +547,7 @@ Common patterns:
         Analyze if the issue description indicates a bug.
         Returns bug analysis with severity.
         """
-        if not self.is_available():
+        if not await self.is_available():
             return {"is_bug": False}
 
         prompt = f"""Analyze if this issue describes a bug or defect.
@@ -566,16 +579,23 @@ Return ONLY the JSON object, no other text."""
         project_id: str,
         feature_title: str,
         feature_description: Optional[str] = None,
+        rag: Optional["RAGService"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate QA/testing tasks for a feature.
+
+        Args:
+            project_id: The project identifier.
+            feature_title: Feature title.
+            feature_description: Optional feature description.
+            rag: RAGService instance for context retrieval.
         """
-        if not self.is_available():
+        if not await self.is_available():
             return []
 
-        context = await rag_service.get_context_for_ai(
+        context = await rag.get_context_for_ai(
             project_id, f"QA testing {feature_title}"
-        )
+        ) if rag else ""
 
         prompt = f"""Generate QA/testing tasks for this feature.
 
@@ -607,6 +627,7 @@ Return ONLY a JSON array of tasks, no other text."""
         project_id: str,
         feature_title: str,
         feature_description: str,
+        rag: Optional["RAGService"] = None,
     ) -> Dict[str, Any]:
         """
         Break down a feature into a hierarchical structure:
@@ -615,14 +636,20 @@ Return ONLY a JSON array of tasks, no other text."""
         Returns a dictionary with:
         - epic: dict with title, description
         - stories: list of stories, each with tasks and subtasks
+
+        Args:
+            project_id: The project identifier.
+            feature_title: Feature title.
+            feature_description: Feature description.
+            rag: RAGService instance for context retrieval.
         """
-        if not self.is_available():
+        if not await self.is_available():
             raise ValueError("AI service is not available")
 
         # Get context from existing issues
-        context = await rag_service.get_context_for_ai(
+        context = await rag.get_context_for_ai(
             project_id, f"{feature_title} {feature_description}"
-        )
+        ) if rag else ""
 
         prompt = f"""Break down this feature into a hierarchical structure for project management.
 

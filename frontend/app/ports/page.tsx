@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { RefreshCw, Search, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn, getServiceTypeColor } from '@/lib/utils';
+import { useUrlState, stringParam } from '@/hooks/use-url-state';
 
 interface PortWithProject {
   id: string;
@@ -25,8 +26,13 @@ interface PortWithProject {
 export default function PortsPage() {
   const [ports, setPorts] = useState<PortWithProject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
+  // URL-backed search + filter — survives back/refresh.
+  const [{ q: searchQuery, type: filterType }, setUrlState] = useUrlState({
+    q: stringParam('q', ''),
+    type: stringParam('type', 'all'),
+  });
+  const setSearchQuery = (v: string) => setUrlState({ q: v });
+  const setFilterType = (v: string) => setUrlState({ type: v });
 
   const fetchPorts = async () => {
     try {

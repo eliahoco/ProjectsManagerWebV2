@@ -931,12 +931,13 @@ export function useExecutionStatus(executionId: string | null) {
 /**
  * List active executions
  */
-export function useActiveExecutions() {
+export function useActiveExecutions({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery<{ executions: ExecutionState[] }>({
     queryKey: ['qa-active-executions'],
     queryFn: async () => {
       return apiFetch<{ executions: ExecutionState[] }>(`${API_BASE}/executions/active`);
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
   });
 }

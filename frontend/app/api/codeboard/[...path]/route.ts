@@ -44,6 +44,8 @@ async function forwardWithBody(
   method: 'POST' | 'PUT' | 'PATCH',
 ): Promise<Response> {
   const url = await buildUrl(request, params);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     let body: string | undefined;
     try {
@@ -57,6 +59,7 @@ async function forwardWithBody(
       method,
       headers: { 'Content-Type': 'application/json' },
       ...(body !== undefined && { body }),
+      signal: controller.signal,
     });
 
     if (isEventStream(response)) return streamResponse(response);
@@ -79,11 +82,16 @@ async function forwardWithBody(
       });
     }
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+    }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
       { error: 'Failed to connect to backend' },
       { status: 502 },
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -92,9 +100,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const url = await buildUrl(request, params);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     });
 
     if (isEventStream(response)) return streamResponse(response);
@@ -102,11 +113,16 @@ export async function GET(
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+    }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
       { error: 'Failed to connect to backend' },
       { status: 502 },
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -136,10 +152,13 @@ export async function DELETE(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const url = await buildUrl(request, params);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     });
 
     if (response.status === 204) {
@@ -149,10 +168,15 @@ export async function DELETE(
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+    }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
       { error: 'Failed to connect to backend' },
       { status: 502 },
     );
+  } finally {
+    clearTimeout(timer);
   }
 }

@@ -102,6 +102,21 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database tables verified/created")
 
+    # Initialize ChromaDB client — probe TCP and verify heartbeat before serving requests
+    from services.rag_service import RAGService
+    rag = RAGService()
+    try:
+        await asyncio.to_thread(rag._init_client_blocking)
+        app.state.rag = rag
+        logger.info("ChromaDB client connected successfully")
+    except Exception as chroma_exc:
+        logger.warning(
+            "ChromaDB unreachable, falling back to local PersistentClient: %s",
+            chroma_exc,
+        )
+        rag._fallback_to_persistent()
+        app.state.rag = rag
+
     # Start background task for processing pending completions
     completion_task = asyncio.create_task(process_pending_completions())
     logger.info("Started background task for auto-completion processing")
@@ -143,6 +158,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 setup_exception_handlers(app)
 
 # CORS Configuration - restricted to specific methods and headers for security
+# Guard: wildcard origin + allow_credentials=True would let any site read credentialed
+# responses — reject this misconfiguration loudly at startup rather than silently.
+assert "*" not in settings.CORS_ORIGINS, (
+    "Wildcard '*' in CORS_ORIGINS is forbidden when allow_credentials=True. "
+    "Set CORS_ORIGINS to explicit origins."
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -171,13 +192,20 @@ ALLOWED_ORIGINS = {
 
 @app.middleware("http")
 async def validate_origin(request: Request, call_next):
-    """Reject state-changing requests from unexpected origins.
+    """Reject requests from unexpected origins for ALL credentialed methods.
 
-    Only enforces on POST/PUT/PATCH/DELETE — GET and OPTIONS (CORS preflight)
-    are left to the CORS middleware. Server-to-server calls (curl, internal
-    services) typically send no Origin header and are allowed through.
+    Enforces on POST/PUT/PATCH/DELETE (state-changing) AND GET (credentialed
+    reads — CORS alone does not block a cross-origin GET from being sent, only
+    from being read, but defence-in-depth blocks it at the server too).
+    OPTIONS (CORS preflight) is left to the CORSMiddleware.
+    Server-to-server calls (curl, internal services) carry no Origin header
+    and are allowed through unchanged.
+
+    Rationale: allow_credentials=True means cookies/tokens are forwarded; an
+    attacker on a non-allow-listed origin must never receive a credentialed
+    response body, even for read endpoints.
     """
-    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+    if request.method in ("GET", "POST", "PUT", "PATCH", "DELETE"):
         origin = request.headers.get("origin")
         if origin and origin not in ALLOWED_ORIGINS:
             logger.warning(

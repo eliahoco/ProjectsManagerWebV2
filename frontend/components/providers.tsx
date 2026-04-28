@@ -52,6 +52,7 @@ function createQueryClient(showToast: (title: string, message: string) => void) 
       queries: {
         staleTime: 5 * 1000, // 5 seconds
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         retry: (failureCount, error) => {
           // Don't retry on 4xx errors (client errors)
           if (error instanceof Error) {

@@ -2,14 +2,15 @@
 Search API - Semantic search using RAG
 """
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, Request
 from typing import Optional, List
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from services.rag_service import rag_service
+from services.rag_service import RAGService
 from models import get_db, Issue
+from api.deps import get_rag
 
 router = APIRouter(prefix="/search")
 
@@ -38,12 +39,13 @@ async def search_issues(
     n_results: int = Query(10, ge=1, le=50, description="Number of results"),
     type: Optional[str] = Query(None, description="Filter by issue type"),
     status: Optional[str] = Query(None, description="Filter by status"),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Semantic search for issues in a project.
     Uses ChromaDB vector embeddings for similarity search.
     """
-    results = await rag_service.search_issues(
+    results = await rag.search_issues(
         project_id=project_id,
         query=q,
         n_results=n_results,
@@ -64,12 +66,13 @@ async def find_similar_issues(
     title: str = Query(..., description="Issue title"),
     description: Optional[str] = Query(None, description="Issue description"),
     n_results: int = Query(5, ge=1, le=20),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Find issues similar to the given title/description.
     Useful for duplicate detection.
     """
-    results = await rag_service.find_similar_issues(
+    results = await rag.find_similar_issues(
         project_id=project_id,
         title=title,
         description=description,
@@ -93,12 +96,13 @@ async def embed_issue(
     issue_type: str = Query("TASK"),
     status: str = Query("BACKLOG"),
     labels: Optional[str] = Query(None),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Manually embed or re-embed an issue.
     Usually called automatically when issues are created/updated.
     """
-    success = await rag_service.embed_issue(
+    success = await rag.embed_issue(
         project_id=project_id,
         issue_id=issue_id,
         key=key,
@@ -113,9 +117,13 @@ async def embed_issue(
 
 
 @router.delete("/{project_id}/embed/{issue_id}")
-async def delete_embedding(project_id: str, issue_id: str):
+async def delete_embedding(
+    project_id: str,
+    issue_id: str,
+    rag: RAGService = Depends(get_rag),
+):
     """Delete an issue embedding from the vector store."""
-    success = await rag_service.delete_issue_embedding(project_id, issue_id)
+    success = await rag.delete_issue_embedding(project_id, issue_id)
     return {"success": success, "issue_id": issue_id}
 
 
@@ -132,6 +140,7 @@ class BatchEmbedResponse(BaseModel):
 async def embed_all_issues(
     project_id: str,
     db: AsyncSession = Depends(get_db),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Embed all issues for a project into the vector database.
@@ -150,7 +159,7 @@ async def embed_all_issues(
 
     for issue in issues:
         try:
-            success = await rag_service.embed_issue(
+            success = await rag.embed_issue(
                 project_id=project_id,
                 issue_id=issue.id,
                 key=issue.key,
@@ -179,12 +188,15 @@ async def embed_all_issues(
 
 
 @router.get("/{project_id}/stats")
-async def get_index_stats(project_id: str):
+async def get_index_stats(
+    project_id: str,
+    rag: RAGService = Depends(get_rag),
+):
     """
     Get statistics about the vector index for a project.
     """
     try:
-        collection = rag_service.get_collection(project_id)
+        collection = rag.get_collection(project_id)
         count = collection.count()
         return {
             "project_id": project_id,

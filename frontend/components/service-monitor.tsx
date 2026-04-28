@@ -295,7 +295,7 @@ export function ServiceMonitor() {
     }
 
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects/status');
       const data = await res.json();
 
       if (!data.success) return;

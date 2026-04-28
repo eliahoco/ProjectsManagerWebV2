@@ -3,6 +3,7 @@ RAG Service - Semantic Search using ChromaDB
 """
 
 import chromadb
+import socket
 from chromadb.config import Settings
 from typing import List, Optional, Dict, Any
 import hashlib
@@ -22,21 +23,57 @@ class RAGService:
 
     @property
     def client(self):
-        """Lazy initialization of ChromaDB client"""
+        """Return the already-initialized ChromaDB client.
+
+        Must be initialized at startup via _init_client_blocking() /
+        _fallback_to_persistent() before the first request hits.
+        If somehow still None, fall back synchronously (degraded path).
+        """
         if self._client is None:
-            try:
-                # Try to connect to ChromaDB server
-                self._client = chromadb.HttpClient(
-                    host=settings.CHROMA_HOST,
-                    port=settings.CHROMA_PORT,
-                )
-            except Exception:
-                # Fall back to persistent local storage
-                self._client = chromadb.PersistentClient(
-                    path="./data/chroma",
-                    settings=Settings(anonymized_telemetry=False),
-                )
+            logger.warning(
+                "ChromaDB client accessed before startup init; "
+                "falling back to PersistentClient synchronously"
+            )
+            self._fallback_to_persistent()
         return self._client
+
+    def _init_client_blocking(self) -> None:
+        """Blocking: probe TCP, construct HttpClient, verify via heartbeat.
+
+        Raises on any connectivity failure so the caller can fall back.
+        Intended to be called via asyncio.to_thread() from the lifespan.
+        """
+        host = settings.CHROMA_HOST
+        port = settings.CHROMA_PORT
+
+        # Fast TCP probe with 5 s timeout — avoids the 75 s macOS SYN hang
+        try:
+            conn = socket.create_connection((host, port), timeout=5)
+            conn.close()
+        except OSError as exc:
+            raise ConnectionError(
+                f"ChromaDB TCP probe failed ({host}:{port}): {exc}"
+            ) from exc
+
+        client = chromadb.HttpClient(host=host, port=port)
+
+        # Heartbeat confirms the server is actually responding to HTTP
+        try:
+            client.heartbeat()
+        except Exception as exc:
+            raise ConnectionError(
+                f"ChromaDB heartbeat failed ({host}:{port}): {exc}"
+            ) from exc
+
+        self._client = client
+
+    def _fallback_to_persistent(self) -> None:
+        """Switch to a local PersistentClient (no external server needed)."""
+        self._client = chromadb.PersistentClient(
+            path="./data/chroma",
+            settings=Settings(anonymized_telemetry=False),
+        )
+        self._collections = {}
 
     def get_collection(self, project_id: str):
         """Get or create a collection for a project"""
@@ -350,5 +387,4 @@ class RAGService:
         return "\n\n---\n\n".join(parts)
 
 
-# Singleton instance
-rag_service = RAGService()
+# No module-level singleton — instance lives on app.state.rag (see app/main.py lifespan)

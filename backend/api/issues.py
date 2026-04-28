@@ -33,8 +33,9 @@ from models import (
     IssueStatus,
 )
 from models.qa import QATask, QATaskIssueLink, QASequence
-from services.rag_service import rag_service
+from services.rag_service import RAGService
 from services.qa_service import qa_service
+from api.deps import get_rag
 from app.errors import NotFoundError, DatabaseError, ValidationError
 from utils.db_queries import cascade_status_to_parents, cascade_done_to_parents, get_all_descendants_with_details
 
@@ -44,10 +45,10 @@ router = APIRouter()
 
 
 # Helper function to embed issue for RAG
-async def embed_issue_for_rag(issue: Issue):
+async def embed_issue_for_rag(issue: Issue, rag: RAGService):
     """Embed issue into vector store for semantic search"""
     try:
-        await rag_service.embed_issue(
+        await rag.embed_issue(
             project_id=issue.projectId,
             issue_id=issue.id,
             key=issue.key,
@@ -435,6 +436,7 @@ async def create_issue(
     project_id: str,
     issue_data: IssueCreate,
     db: AsyncSession = Depends(get_db),
+    rag: RAGService = Depends(get_rag),
 ):
     """Create a new issue in a project"""
     # Generate issue key
@@ -470,7 +472,7 @@ async def create_issue(
     await db.refresh(issue)
 
     # Embed for RAG search
-    await embed_issue_for_rag(issue)
+    await embed_issue_for_rag(issue, rag)
 
     return IssueResponse.model_validate(issue)
 
@@ -503,6 +505,7 @@ async def update_issue(
     issue_id: str,
     issue_data: IssueUpdate,
     db: AsyncSession = Depends(get_db),
+    rag: RAGService = Depends(get_rag),
 ):
     """Update an issue"""
     result = await db.execute(select(Issue).where(Issue.id == issue_id))
@@ -572,14 +575,14 @@ async def update_issue(
     await db.refresh(issue)
 
     # Re-embed for RAG search
-    await embed_issue_for_rag(issue)
+    await embed_issue_for_rag(issue, rag)
 
     # Embed aiContext into ChromaDB when the field changes
     if "aiContext" in update_data:
         try:
             new_ai_context = update_data["aiContext"]
             if new_ai_context:
-                await rag_service.embed_ai_context(
+                await rag.embed_ai_context(
                     project_id=issue.projectId,
                     issue_id=issue.id,
                     issue_key=issue.key,
@@ -588,7 +591,7 @@ async def update_issue(
                 )
             else:
                 # aiContext was cleared — remove the embedding
-                await rag_service.delete_ai_context_embedding(
+                await rag.delete_ai_context_embedding(
                     project_id=issue.projectId,
                     issue_id=issue.id,
                 )
@@ -603,6 +606,7 @@ async def update_issue(
 async def delete_issue(
     issue_id: str,
     db: AsyncSession = Depends(get_db),
+    rag: RAGService = Depends(get_rag),
 ):
     """Delete an issue"""
     result = await db.execute(select(Issue).where(Issue.id == issue_id))
@@ -618,8 +622,8 @@ async def delete_issue(
 
     # Remove from RAG store (both issue embedding and aiContext embedding)
     try:
-        await rag_service.delete_issue_embedding(project_id, issue_id)
-        await rag_service.delete_ai_context_embedding(project_id, issue_id)
+        await rag.delete_issue_embedding(project_id, issue_id)
+        await rag.delete_ai_context_embedding(project_id, issue_id)
     except Exception as e:
         logger.warning(f"Failed to delete RAG embedding for issue {issue_id}: {e}")
 

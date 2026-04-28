@@ -127,7 +127,9 @@ else
     # Bind to 127.0.0.1 by default (local dev). Set ALLOW_LAN=true or HOST=0.0.0.0 for LAN access.
     BACKEND_HOST="${HOST:-127.0.0.1}"
     if [ "${ALLOW_LAN:-false}" = "true" ]; then BACKEND_HOST="0.0.0.0"; fi
-    nohup $PYTHON_BIN -m uvicorn app.main:app --host $BACKEND_HOST --port $BACKEND_PORT --reload > ../logs/backend.log 2>&1 &
+    # Override DATABASE_URL to prevent Prisma's "file:./dev.db" from leaking into SQLAlchemy
+    DATABASE_URL="sqlite+aiosqlite:////Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/prisma/dev.db" \
+    nohup $PYTHON_BIN -m uvicorn app.main:app --host $BACKEND_HOST --port $BACKEND_PORT > ../logs/backend.log 2>&1 &
     echo $! > ../logs/backend.pid
     cd ..
 

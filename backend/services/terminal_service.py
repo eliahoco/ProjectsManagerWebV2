@@ -390,7 +390,8 @@ class TerminalService:
             session.completed_at = datetime.utcnow()
 
             # Release the pool slot (cleans up worktree if one was created)
-            session_pool.release(session_id)
+            # _run_claude_async runs in a thread, so use the sync variant
+            session_pool.release_sync(session_id)
 
     def _process_stream_json_event(self, session: TerminalSession, line: str):
         """Process a stream-json event from Claude CLI"""
@@ -649,7 +650,7 @@ class TerminalService:
             return session
 
         # Create isolated worktree if multiple sessions are active
-        working_dir = session_pool.create_worktree(session_id, project_path)
+        working_dir = await session_pool.create_worktree(session_id, project_path)
 
         # Add initial status message
         session._append_output(f"[INFO] Starting {provider.value} execution...")
@@ -742,13 +743,13 @@ class TerminalService:
             session.error = f"Command not found: {str(e)}"
             session._append_output(f"[ERROR] Command not found: {str(e)}")
             session.completed_at = datetime.utcnow()
-            session_pool.release(session_id)
+            await session_pool.release(session_id)
         except Exception as e:
             session.status = ExecutionStatus.FAILED
             session.error = str(e)
             session._append_output(f"[ERROR] Failed to start: {str(e)}")
             session.completed_at = datetime.utcnow()
-            session_pool.release(session_id)
+            await session_pool.release(session_id)
 
         return session
 
@@ -796,7 +797,7 @@ class TerminalService:
 
         # Release pool slot (the async runner's finally block may also call this,
         # but release() is idempotent - second call is a no-op)
-        session_pool.release(session_id)
+        await session_pool.release(session_id)
         return True
 
     def get_output(self, session_id: str, since_line: int = 0) -> List[str]:
@@ -829,7 +830,7 @@ class TerminalService:
                     self._active_feature_by_project.pop(session.project_path, None)
 
         # Defensive: release pool slot if still held (normally released in _run_claude_async)
-        session_pool.release(session_id)
+        session_pool.release_sync(session_id)
 
     def check_pending_completion(self, session_id: str) -> bool:
         """Check if a session has pending auto-completion (and consume the flag)"""

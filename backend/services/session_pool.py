@@ -6,14 +6,41 @@ when multiple sessions run in parallel. Falls back to the main project directory
 when only one session is active (no isolation needed).
 """
 
+import asyncio
 import os
-import subprocess
+import stat
+import tempfile
 import logging
+from pathlib import Path
 from typing import Dict, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Worktree base: prefer env var, fall back to project-local .worktrees dir (not world-writable /tmp)
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+WORKTREE_BASE = os.environ.get("WORKTREE_BASE", str(_REPO_ROOT / ".worktrees"))
+
+
+class SecurityError(RuntimeError):
+    """Raised when a security invariant is violated (e.g. untrusted worktree base dir)."""
+
+
+def _ensure_secure_worktree_base(base: Path) -> None:
+    """Create and verify the worktree base directory is trustworthy.
+
+    Raises SecurityError if the path is a symlink or owned by another user,
+    preventing symlink-race / TOCTOU attacks on the worktree location.
+    """
+    base.mkdir(mode=0o700, exist_ok=True)
+    st = base.lstat()
+    if stat.S_ISLNK(st.st_mode):
+        raise SecurityError(f"Worktree base is a symlink — aborting: {base}")
+    if st.st_uid != os.getuid():
+        raise SecurityError(
+            f"Worktree base owned by uid {st.st_uid}, expected {os.getuid()}: {base}"
+        )
 
 
 @dataclass
@@ -38,7 +65,7 @@ class SessionPool:
     def __init__(self, max_sessions: int = 3):
         self.max_sessions = max_sessions
         self._active: Dict[str, PooledSession] = {}  # session_id -> PooledSession
-        self._worktree_base = "/tmp/codeboard-worktrees"
+        self._worktree_base = Path(WORKTREE_BASE)
 
     @property
     def available_slots(self) -> int:
@@ -89,24 +116,58 @@ class SessionPool:
         )
         return slot
 
-    def release(self, session_id: str):
+    async def release(self, session_id: str):
         """Release a slot and clean up its worktree if one was created.
 
         Safe to call even if the session_id doesn't exist in the pool.
+        Prefer this from async contexts; use release_sync() from threads.
         """
         slot = self._active.pop(session_id, None)
         if not slot:
             return
 
         if slot.worktree_path:
-            self._cleanup_worktree(slot)
+            await self._cleanup_worktree(slot)
 
         logger.info(
             f"Pool slot released for {slot.issue_key} "
             f"({self.active_count}/{self.max_sessions} slots used)"
         )
 
-    def create_worktree(self, session_id: str, project_path: str) -> str:
+    def release_sync(self, session_id: str):
+        """Release a slot from a synchronous (non-async) context.
+
+        Pops the session immediately; schedules any worktree cleanup as a
+        fire-and-forget asyncio task on the running event loop (if one exists).
+        Safe to call from threads or sync methods.
+        """
+        slot = self._active.pop(session_id, None)
+        if not slot:
+            return
+
+        logger.info(
+            f"Pool slot released (sync) for {slot.issue_key} "
+            f"({self.active_count}/{self.max_sessions} slots used)"
+        )
+
+        if slot.worktree_path:
+            try:
+                # Prefer the already-running loop (avoids deprecated get_event_loop()).
+                # If called from a non-async thread, fall back to asyncio.run().
+                try:
+                    loop = asyncio.get_running_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        self._cleanup_worktree(slot), loop
+                    )
+                except RuntimeError:
+                    # No running loop — execute synchronously in this thread.
+                    asyncio.run(self._cleanup_worktree(slot))
+            except Exception as e:
+                logger.warning(
+                    f"Could not schedule worktree cleanup for {slot.issue_key}: {e}"
+                )
+
+    async def create_worktree(self, session_id: str, project_path: str) -> str:
         """Create a git worktree for isolated execution.
 
         Only creates a worktree when multiple sessions are active. If only
@@ -129,46 +190,60 @@ class SessionPool:
             logger.debug(f"Single session active, using main directory for {slot.issue_key}")
             return project_path
 
-        # Create worktree for isolation
+        # Create worktree for isolation.
+        # Use a project-local base dir (not /tmp) with mode 0o700, then atomically
+        # allocate a unique directory via mkdtemp to eliminate symlink-race attacks.
         branch = f"codeboard/{slot.issue_key.lower()}-{session_id[:8]}"
-        worktree_path = os.path.join(self._worktree_base, session_id[:12])
 
         try:
-            os.makedirs(self._worktree_base, exist_ok=True)
-
-            # Create a new branch based on HEAD in a new worktree
-            result = subprocess.run(
-                ["git", "worktree", "add", "-b", branch, worktree_path, "HEAD"],
-                cwd=project_path,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=True,
+            _ensure_secure_worktree_base(self._worktree_base)
+            worktree_path = tempfile.mkdtemp(
+                prefix=f"session-{session_id[:8]}-",
+                dir=str(self._worktree_base),
             )
+
+            # Create a new branch based on HEAD in a new worktree (async subprocess)
+            proc = await asyncio.create_subprocess_exec(
+                "git", "worktree", "add", "-b", branch, worktree_path, "HEAD",
+                cwd=project_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+            if proc.returncode != 0:
+                stderr = stderr_bytes.decode(errors='replace').strip()
+                logger.warning(
+                    f"Failed to create worktree for {slot.issue_key}: {stderr}. "
+                    f"Using main directory."
+                )
+                return project_path
 
             slot.worktree_path = worktree_path
             slot.branch_name = branch
             logger.info(f"Created worktree for {slot.issue_key}: {worktree_path}")
             return worktree_path
 
-        except subprocess.CalledProcessError as e:
-            logger.warning(
-                f"Failed to create worktree for {slot.issue_key}: {e.stderr.strip()}. "
-                f"Using main directory."
-            )
-            return project_path
-        except subprocess.TimeoutExpired:
+        except asyncio.TimeoutError:
             logger.warning(
                 f"Worktree creation timed out for {slot.issue_key}. Using main directory."
             )
             return project_path
+        except SecurityError:
+            # Re-raise — this is a hard security violation, not a soft fallback.
+            raise
         except OSError as e:
             logger.warning(
                 f"OS error creating worktree for {slot.issue_key}: {e}. Using main directory."
             )
             return project_path
+        except Exception as e:
+            logger.warning(
+                f"Unexpected error creating worktree for {slot.issue_key}: {e}. Using main directory."
+            )
+            return project_path
 
-    def _cleanup_worktree(self, slot: PooledSession):
+    async def _cleanup_worktree(self, slot: PooledSession):
         """Clean up a git worktree and its associated branch.
 
         Best-effort cleanup; logs warnings on failure but never raises.
@@ -177,27 +252,31 @@ class SessionPool:
             return
 
         try:
-            # Remove the worktree
-            subprocess.run(
-                ["git", "worktree", "remove", "--force", slot.worktree_path],
-                capture_output=True,
-                text=True,
-                timeout=30,
+            # Remove the worktree (async subprocess)
+            proc = await asyncio.create_subprocess_exec(
+                "git", "worktree", "remove", "--force", slot.worktree_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
+            await asyncio.wait_for(proc.communicate(), timeout=30)
             logger.info(f"Removed worktree for {slot.issue_key}: {slot.worktree_path}")
+        except asyncio.TimeoutError:
+            logger.warning(f"Timed out removing worktree for {slot.issue_key}")
         except Exception as e:
             logger.warning(f"Failed to remove worktree for {slot.issue_key}: {e}")
 
         # Delete the branch (separate try so worktree removal failure doesn't block this)
         if slot.branch_name:
             try:
-                subprocess.run(
-                    ["git", "branch", "-D", slot.branch_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
+                proc = await asyncio.create_subprocess_exec(
+                    "git", "branch", "-D", slot.branch_name,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
+                await asyncio.wait_for(proc.communicate(), timeout=10)
                 logger.debug(f"Deleted branch {slot.branch_name}")
+            except asyncio.TimeoutError:
+                logger.warning(f"Timed out deleting branch {slot.branch_name}")
             except Exception as e:
                 logger.warning(f"Failed to delete branch {slot.branch_name}: {e}")
 

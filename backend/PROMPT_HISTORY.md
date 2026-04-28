@@ -640,3 +640,105 @@ I don't know what this is but it is not my password
 
 ---
 
+## 2026-04-17 23:33:21
+
+בםגקנםשרג ברשדיקג
+
+---
+
+## 2026-04-17 23:33:40
+
+codeboard just crashed
+
+---
+
+## 2026-04-17 23:46:03
+
+sumerize this session i'll open new one
+
+---
+
+## 2026-04-17 23:46:25
+
+<task-notification>
+<task-id>b3y7vlocp</task-id>
+<tool-use-id>toolu_01JaH2hDpdpMg5J9cvDXeKvY</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/8aee5024-5e8a-4df1-8442-03e4a97d4e1c/tasks/b3y7vlocp.output</output-file>
+<status>killed</status>
+<summary>Background command "Monitor app launcher log" was stopped</summary>
+</task-notification>
+Read the output file to retrieve the result: /private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/8aee5024-5e8a-4df1-8442-03e4a97d4e1c/tasks/b3y7vlocp.output
+
+---
+
+## 2026-04-18 00:29:19
+
+<task-notification>
+<task-id>bes86c7m1</task-id>
+<summary>Monitor event: "Backend back + backfill+kanban test passes"</summary>
+<event>port_up</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:36:47
+
+continue
+
+---
+
+## 2026-04-18 00:37:20
+
+<task-notification>
+<task-id>b5h4dvkrz</task-id>
+<summary>Monitor event: "QA generation end-to-end: backend up, backfill fires, QA tasks created"</summary>
+<event>port_up</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:37:35
+
+<task-notification>
+<task-id>b5h4dvkrz</task-id>
+<summary>Monitor event: "QA generation end-to-end: backend up, backfill fires, QA tasks created"</summary>
+<event>api_ready</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:37:37
+
+<task-notification>
+<task-id>b5h4dvkrz</task-id>
+<summary>Monitor event: "QA generation end-to-end: backend up, backfill fires, QA tasks created"</summary>
+<event>{"projectId":"cmkg0ww0200073qn1k4f28zdq","totalEligible":235,"scheduled":2,"deferred":233,"issueKeys":["ADP-1","ADP-2"]}
+--- now streaming log for 150s</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:38:58
+
+something is keep crashing it loses the projects content every few min. Jonny, use you power, books, brain and agents to investigate and come up with final conclution why it running like that and what need to be done to make it lighter and more relible it is crashing evey few mon
+
+---
+
+## 2026-04-25 03:03:08
+
+O
+
+---
+
+## 2026-04-25 03:03:26
+
+I'm not following have you finished that?
+
+---
+
+## 2026-04-25 03:04:30
+
+do what is better more stable and must be done, no shortcuts or workarounds Jonny, remmenber?
+
+---
+

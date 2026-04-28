@@ -6,6 +6,7 @@
 
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useUrlState, enumParam, stringSetParam } from '@/hooks/use-url-state';
 import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search, Loader2, PanelRightClose, Wifi, WifiOff, Terminal } from 'lucide-react';
 import { useIssues, useIssue, useUpdateIssue, useDeleteIssue, useStartExecution, useFeatureLiveData, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { Issue, IssueStatus, IssueType } from '@/types/codeboard';
@@ -499,11 +500,15 @@ export default function FeatureDetailPage() {
   // Search/filter state - CB-1119
   const [searchFilters, setSearchFilters] = useState<FeatureSearchFilters>(DEFAULT_FEATURE_SEARCH_FILTERS);
 
-  // State for active tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'testing'>('overview');
-
-  // State for expanded nodes
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // URL-backed tab + expanded tree — survives back/refresh.
+  const [{ tab: activeTab, expanded }, setUrlState] = useUrlState({
+    tab: enumParam('tab', ['overview', 'testing'] as const, 'overview'),
+    expanded: stringSetParam('expanded'),
+  });
+  const setActiveTab = (v: 'overview' | 'testing') => setUrlState({ tab: v });
+  const setExpanded = (
+    next: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => setUrlState({ expanded: typeof next === 'function' ? next(expanded) : next });
 
   // State for selected nodes (for execution)
   const [selected, setSelected] = useState<Set<string>>(new Set());

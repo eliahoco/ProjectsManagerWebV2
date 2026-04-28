@@ -2473,3 +2473,651 @@ the PC need to reboot so save changes, and park the project before we restort th
 
 ---
 
+## 2026-04-17 22:11:01
+
+can you start the project please
+
+---
+
+## 2026-04-17 22:14:57
+
+I can't load the codeboard, not sure why, check and fix!
+
+---
+
+## 2026-04-17 23:46:50
+
+You are resuming work on the ProjectsManagerWebV2Production project.
+
+FIRST: If a CLAUDE.md file exists in this project, read it now. If it contains a STARTUP PROTOCOL, execute it in full before anything else. CLAUDE.md is the brain of this project.
+
+Then read these additional context files:
+1. PROJECT_DESCRIPTOR.md\n2. ROADMAP.md\n3. PORT_CONFIG.md\n
+## Project Ports (USE ONLY THESE - do not use any other ports):
+Frontend (Next.js): 3601,Backend API (FastAPI): 8401,ChromaDB: 8402
+
+## Session Context:
+
+
+After reading all files, provide:
+1. A brief summary of what this project is
+2. Current status and what was last worked on
+3. What should be done next based on the roadmap
+
+Start by reading CLAUDE.md now.
+
+---
+
+## 2026-04-17 23:51:37
+
+last time you did some changes and broken some stuff on the project manager I would like you to check few things
+in the original planning and the app every feature that moved to Done waiting for QA on the codeboard automatily jon the QA board on the "waiting for QA pannel, but now it doesn't happaned, and also i have erroes on the QA board and when i open a feature and trying to generate the QA planning it just doesn't work
+I need you to go investigate the original arch, the implementation planning , read the code and look on git for the cahnges use every agetn you have that you neeed to do this job on the most pro way, also use your candlekeep books if needed and don't forget Jonnys bbiel instractions and the workflow on how things are being done here
+
+---
+
+## 2026-04-18 00:02:36
+
+you built the bug like a fueature.. am i write? if it's feature improvment its something else but from what i understand its a bug isn't it? in that case you just nned to open a bug on the codeboard wiht the descreption and the rest should be in the descreption and the resloved section in the bug itself
+
+---
+
+## 2026-04-18 00:03:22
+
+open this bug in the codebord and execute the fix
+
+---
+
+## 2026-04-18 00:29:50
+
+<task-notification>
+<task-id>bes86c7m1</task-id>
+<summary>Monitor event: "Backend back + backfill+kanban test passes"</summary>
+<event>api_ready</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:31:35
+
+<task-notification>
+<task-id>bgiiyxxpr</task-id>
+<summary>Monitor event: "Watch backend log for QA generation success/failure on ADP-1/2/3"</summary>
+<event>2026-04-18 00:31:35,163 - services.qa_service - INFO - QA Config: level=standard, tests=8-12, areas=['functional']</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:32:31
+
+<task-notification>
+<task-id>bgiiyxxpr</task-id>
+<summary>Monitor event: "Watch backend log for QA generation success/failure on ADP-1/2/3"</summary>
+<event>2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,029 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,030 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,030 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (sqlite3.IntegrityError) UNIQUE constraint failed: QATask.key
+2026-04-18 00:32:31,030 - api.issues - ERROR - Failed to generate QA key for project cmkg0ww0200073qn1k4f28zdq: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Sess
+...(truncated)</event>
+</task-notification>
+
+---
+
+## 2026-04-18 00:52:36
+
+I was sure that evertyhing is runnig in a docker conteirner, also i am not sure i have enough avileble spac in my Mac Drive
+
+---
+
+## 2026-04-18 00:58:53
+
+I am not sure whay the atch and the instractions were missed if it was suppose to work on docker by bsign
+
+---
+
+## 2026-04-18 01:00:00
+
+we will wait for tomorro wmoning i can't read that much
+
+---
+
+## 2026-04-18 08:43:46
+
+agin this is too much to read, i need short answer, the app now doesnt run on docker?
+
+---
+
+## 2026-04-18 08:44:19
+
+that is really really bad, can we wrap it in docker?
+
+---
+
+## 2026-04-18 08:44:35
+
+can it continue running on the PC?
+
+---
+
+## 2026-04-18 08:44:51
+
+it's not running local right?
+
+---
+
+## 2026-04-18 08:44:59
+
+1
+
+---
+
+## 2026-04-18 08:45:31
+
+no no what the hale.. again i'm asking is it running local?
+
+---
+
+## 2026-04-18 08:46:18
+
+the whole app is running local? so why i'm acceing it through the pc IP, Jonny get yourself together and check before anserwing
+
+---
+
+## 2026-04-18 08:46:36
+
+that is the UI
+
+---
+
+## 2026-04-18 08:46:50
+
+that is the UI http://192.168.1.209:3700/
+
+---
+
+## 2026-04-18 08:47:47
+
+let's make some order here, i'm running in MacPro, i have a PC which is running WSL and is in the netwrok
+
+---
+
+## 2026-04-18 08:50:46
+
+what!!!??? it looks like it is ruunning twice.. i can access it through http://192.168.1.209:3700/ and also through localhost... it looks like it is running in parallel twice.. what the hale is going on? Jony! use all you have all your agents go and do deep investigation on this thing, i want a full descreption on the implementation and the current arch against the designed and planning of the Move to the PC (there is a full planning and arch about that)
+
+---
+
+## 2026-04-18 11:32:49
+
+So you're right. I was mistaken. I looked into a different system. And project manager code was never deployed. To the PC. It's running on my Mac. That's correct. But I want to dockerize it You know what? Not to dockerize it. I want to deploy it on cloud. And I need you to give me and to do a full planning on how to deploy it and where. And what are the steps that needs to be done in order to deploy it on the cloud. Including security and login credentials or whatever is needed. If it's not needed in this at this point, we won't do that. What is needed to do in order to in order to deploy an on the cloud. My Mac doesn't have enough resources, and it's crashing all the time. I want to have it in a place which it will be running in solid, strong, powerful environment so it won't crash. And it needs to have all the elements that it needed in order to be a project management system. Think about everything, connect connecting it to to, I don't know, GitHub or any other system that can have a have it running. It's managing at the end. It's writing code, so it needs to have some kind of connection to storage to manage the files, to manage everything. Manage the projects. So I need full investigation recommendation on how to deploy what is needed, where, and when. And remember that at the end, you need to do everything. So use all you have agents, skills, everything that you can. To look on the code, to look on the implementation, to look at the planning, and give me a full plan of deployment to this thing top to bottom. That covers everything, everything, everything Remove the tasks for find PC migration plan docs. And all these things related to the PC. I was mistaken. It's not related the PC. It's installed on my Mac. And it's just having problems. It's on the external Seagate drive. It's not on the internal drive because there is no space. It needs to be deploying on a server in the cloud.
+
+---
+
+## 2026-04-18 11:46:22
+
+Okay. So the real question is what is this cloud provider? And why did you choose this one? On others? Is it like what is the advantages that this one has? Why not AWS, Azure, Google, I know even Alibaba Cloud, or Oracle. The big ones. Why specifically this one? What is the advantage of this one? What exactly have you tested Again, this one And I think that one of the parameters that needs to be taking under account is the availability zone where this cloud provider is sitting, the response time won't be long. So I trust your recommendation, but I want a deeper, higher more relevant Compare analysis to make sure their recommendation is really accurate. Also, with regard to the specs eight gig of RAM, Not sure how much it's good. It's enough. My Mac has more, and it's not enough. So Let's think about it a little bit more. I want a real deep analysis that we will conclude from this analysis what is the best cloud provider that can be used for this implementation. Look in Candlekeep to see if there's a book that has some recommendations on how to Choose your cloud provider. And if not, we'll search for a book that we can inject to candle keep or a guide YouTube movie, whatever is the available to help us evaluate this thing in more accurate way.
+
+---
+
+## 2026-04-18 12:15:32
+
+Also, you need to check if it's better to dockerize it. And push it to and Deploy it. Or deploy it as is. I think that as a docker, it will be much easier. You just upload the docker file and it's supposed to work. Without any issue. But let's let's think about that and and understand If it's a docker, we need to have a to work on the package to dockerize it and test it. Before we uploaded it. And as a project management, and development QA environment, if it can work inside the docker how it will communicate to the outside world. There there are lots of things here, so it needs to be thought about the architecture here in and how it should be deployed and what should be done before deploying it. There is also a new book in candlekeep and practical guide to cloud deployment technologies. Check that, and I'll search for more books.
+
+---
+
+## 2026-04-18 15:09:29
+
+btw what about firebase? is that a service we can use?
+
+---
+
+## 2026-04-18 15:47:25
+
+There's another interesting book I want you to look at It's a documentation See if you can print it as PDF and save it as a book to the candlekeep https://deepwiki.com/zackautocracy/claude-code
+
+---
+
+## 2026-04-18 15:54:39
+
+go if you think it is relevent
+
+---
+
+## 2026-04-18 15:58:27
+
+What do you recommend? I would say two, do a hardness browser scrapping for that, but do we really need that How it can help us? How we can improve? Our work, Just think about it and let me know what do you think.
+
+---
+
+## 2026-04-18 16:01:16
+
+do what you thinkn is best
+
+---
+
+## 2026-04-18 16:10:50
+
+i don't understnad you cant read this?
+
+---
+
+## 2026-04-18 16:14:23
+
+yes
+
+---
+
+## 2026-04-18 16:15:32
+
+<task-notification>
+<task-id>a3ca767a2501cb62b</task-id>
+<tool-use-id>toolu_019VVb8XxD7RDSJjXZcp2PHt</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a3ca767a2501cb62b.output</output-file>
+<status>completed</status>
+<summary>Agent "Upload Stripe Minions book" completed</summary>
+<result>Upload successful.
+
+**Book ID:** `cmo4d0v8n04eiqp0zm34yjhyr`
+**Title:** Stripe Minions — Unattended Coding Agents at Scale (Parts 1+2)
+**Version:** 1
+**Pages:** 4
+**Source file:** `/tmp/stripe-minions.md`
+
+The book has been created in the CandleKeep library and the full markdown content (232 lines, 28 KB) was uploaded successfully. The document was split into 4 pages based on level-1 headings.</result>
+<usage><total_tokens>18723</total_tokens><tool_uses>3</tool_uses><duration_ms>14958</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-04-19 02:13:37
+
+cool thank you for that, so were were we before i added you those books, please remind me
+
+---
+
+## 2026-04-19 02:28:19
+
+we discssued also on how to I prepare the system to deploy in the cloud as a service, there are missing elementssecurity changes need to be done, i want to upalod it to the cloud, so in parallel to the research i need a plan, i need you to use all the agents skills sets and books you now have to build and design a full planning to push the application to SAAS in the cloud, it would use only to me at the begining until it will be stable but at the end it will be a multi tennet solution for users that will want to work on projects.
+
+---
+
+## 2026-04-19 09:13:16
+
+עםםג צםרמןמע
+
+---
+
+## 2026-04-19 09:13:29
+
+Good morning. So what is the plan? Show me what you worked on.
+
+---
+
+## 2026-04-20 00:30:18
+
+what did i missed here, i don't understand the summery.. what is this cost here and why, i need a better explanation on the conclutions
+
+---
+
+## 2026-04-20 00:31:09
+
+2     │ Weeks   │ Add tenantId NOT NULL, SQLite → Postgres (pgvector replaces Chroma),              │ ~$141       │
+  │       │ 2-4     │ Docker-per-session for Claude CLI, secrets → Infisical. Still just you.           │             │
+  ├───────┼─────────┼─────────────────────────────────────────────────
+
+---
+
+## 2026-04-21 17:27:42
+
+re the following table:  TL;DR — 3 phases, no big-bang
+
+  ┌───────┬─────────┬───────────────────────────────────────────────────────────────────────────────────┬─────────────┐
+  │ Phase │  When   │                                       What                                        │   Cost/mo   │
+  ├───────┼─────────┼───────────────────────────────────────────────────────────────────────────────────┼─────────────┤
+  │ 0     │ 4-6 hrs │ Code hardening on Mac: 10 HIGH/CRITICAL security fixes + add tenantId nullable    │ $0          │
+  │       │         │ everywhere now                                                                    │             │
+  ├───────┼─────────┼───────────────────────────────────────────────────────────────────────────────────┼─────────────┤
+  │ 1     │ Week 1  │ Hetzner CX32 Falkenstein, hybrid (ChromaDB Docker + backend/frontend systemd),    │ ~$18        │
+  │       │         │ Cloudflare Access SSO. Single user = you.                                         │             │
+  ├───────┼─────────┼───────────────────────────────────────────────────────────────────────────────────┼─────────────┤
+  │ 2     │ Weeks   │ Add tenantId NOT NULL, SQLite → Postgres (pgvector replaces Chroma),              │ ~$141       │
+  │       │ 2-4     │ Docker-per-session for Claude CLI, secrets → Infisical. Still just you.           │             │
+  ├───────┼─────────┼───────────────────────────────────────────────────────────────────────────────────┼─────────────┤
+  │ 3     │ Month   │ Multi-tenant live: Paddle billing, BYO Anthropic key, Postgres RLS, Fly Machines  │ $230 @ 100  │
+  │       │ 2+      │ (Firecracker) when scale demands. Open paid signups.                              │ users       │
+  └───────┴─────────┴───────────────────────────────────────────────────────────────────────────────────┴─────── explain and break i tdown to me the services adn pricing, why does tenant needs 141$ ?
+
+---
+
+## 2026-04-21 17:30:01
+
+  │               Stage               │  Monthly burn (you   │                 Why it's this number                  │
+  │                                   │         pay)         │                                                       │
+  ├───────────────────────────────────┼──────────────────────┼───────────────────────────────────────────────────────┤
+  │ Phase 1 (you online)              │ $14                  │ Minimum viable: VM + backup + snapshot + domain +     │
+  │                                   │                      │ free auth does the 14$ includes my own dedicated domain ?
+
+---
+
+## 2026-04-21 17:33:37
+
+re hetzner im not familiar with it. can we use services like vercel. fly.io. render,. railway , digitalocean etc?
+
+---
+
+## 2026-04-21 17:38:09
+
+save the tables plan in md file we will go back to it
+
+---
+
+## 2026-04-21 17:40:27
+
+the prject manager is dockerize or not?
+
+---
+
+## 2026-04-21 17:41:36
+
+chromaDB is vertor DB?
+
+---
+
+## 2026-04-21 17:41:51
+
+and Mongo?
+
+---
+
+## 2026-04-21 17:43:19
+
+what about the new MOngoDB for AI
+
+---
+
+## 2026-04-21 23:40:40
+
+got it
+
+---
+
+## 2026-04-21 23:43:04
+
+OK now we worked on planning turnnig it to a fully cloud service application can you go and look on the planning we did please and show it to me after go through the planning again?
+
+---
+
+## 2026-04-23 21:00:40
+
+local drive was down - it is now up again, and the project manager is down, please check
+
+---
+
+## 2026-04-23 21:31:07
+
+the drive is bacj
+
+---
+
+## 2026-04-23 21:51:13
+
+I think that they watch dog is up.
+
+---
+
+## 2026-04-23 21:53:08
+
+Do what's need to be done. I see the red small window on the bottom right. It said service parked. Which I thought related to the watchdog, but you're saying the watchdog is down. So check it again. And if you need to restart it, just restart it.
+
+---
+
+## 2026-04-23 22:34:05
+
+no leave it, you worked on a plan to make it a service and I would like to get yours and your experts agents observatio if you think that i should invest with turning this to service application or should i continue the development of the AIDevPlatformProduction which was originly built for serivce application, take your time and credits to deeply think what you think will be better and let's do that
+
+---
+
+## 2026-04-24 15:41:05
+
+what did you find?
+
+---
+
+## 2026-04-25 01:22:53
+
+first of all retry the AIDevPlatform audit, not usre why it was blocked, maybe netwrok issue, look on the arch the planning and the UI itself and tell me what you think,
+
+---
+
+## 2026-04-25 02:52:03
+
+no, you are comfusing me, I know that AIDevPlatform is mostly mockup, i didn't touched it as i didn't had time
+the project manager is the system that i'm using and was never built to be a saas solution, so i know i have a lot of work there, my question was if i should invest in that instead of investing in the project manager, and work on that to make it a full saas solution?
+i also didn't understand what you meant by writing :
+If Anthropic bans claude -p subprocess orchestration (they already banned subscription wrappers — the next step is
+  possible), both products die, rebuild on Goose/Amp.
+what did you meant?
+
+---
+
+## 2026-04-25 02:55:40
+
+so what you are actuly saying is take what you have built and use it with the AIDevPlatform UI?
+
+---
+
+## 2026-04-25 02:57:15
+
+I was thinking to migrate some of the components i did for the project manager to the AIDevPlatform at some point but you are saying that is a bad decition
+
+---
+
+## 2026-04-25 03:01:03
+
+yes but what would it take to turn the project manager into a saas? it doesn't have the multi tenent and the managemnet part as it wasn't designed to serve multi customer and be running on cloud enviroment
+
+---
+
+## 2026-04-25 16:24:25
+
+i want you to plan not just the feature addons that need to be developed in order to make it a service but also the arch changes the security steps that need to be taken in order to have a solide stable system and in order to deploy it in the best cost effective way, scalability is not that important, i need to show that to investors and we can plan scaling it once it is solid working and running, more importanaly to have the best state of the art stable system with the best in class UI that everyone will love to use that, different from base44 or any other solutions exisst today in the world for developemnt, this is a full stack application development enviroment and what i Plant. To invest and develop in the AI development system needs to be included here. That system was supposed to be a full development environment for teams that are working together on a project. You can read everything I put in there. It's different from this one this one is more I build for myself. At the end, it needs to be unique, different and super, super professional and good at people who say, woah. That is amazing. So from now, it's, kind of project management. But my vision in the AI development environment was to build something else. So if you're saying that this thing is more likely to be completed more close to what I was planned. We need to take it and plan how we implement all the wonderful things that I was planning to put in that system. The wizard for starting a project The UI over there is amazing. The teams the dashboards, the QA dashboards and QA panels of course, the management. The documentation, everything that I planned for the air development system. Now as I said, we need something for first phase. And to show to investors then we can go to scale and to work on the bigger thing. But for now, I needed to have character. It needs to be Nick. It needs to include my thoughts on how I want the system to be. And that's something that does not include in here today. So how do we make it how do we take the vision and make this system to look as I want it to be. Look
+
+---
+
+## 2026-04-25 16:26:04
+
+I'm not asking. Your assumption is wrong. You just said that you you think that I it's better to work on the Project Manager web too because it's already working and and and I have everything. So what I'm saying is that it needs to include my vision over there. And at the moment, it's just project management that I built for myself. It wasn't my vision for SaaS solution that I want to develop for a start up.
+
+---
+
+## 2026-04-25 16:30:48
+
+wait, i'm glad you got the pic, now i'm asking again just to make sure, do you still think it's smart to use the project manager and not move to work on the DevAI emviroment?
+
+---
+
+## 2026-04-25 16:38:09
+
+OK so with all those concluations that it is very nice show me a full 18 weeks planning of the full scope, including deploying in the claude (that will be done 100% by you)
+it's need to be top to buttom planning (agile) with phases and assignments to agents, cover the smallest smalles details and tasks, plan it and share the full planning architecture, storytelling everything here it is in  a more detailes
+I want you to act as a senior Product Manager, UX Designer, and System Architect.
+
+Design a complete product from end to end.
+
+Include the following layers:
+
+1. Product Overview
+- What is the product
+- Target users
+- Main problem it solves
+
+2. User Personas
+- Who are the users
+- Their goals and pain points
+
+3. User Journey (Story format)
+- Step-by-step story of how a user interacts with the product
+- From first entry to achieving their goal
+
+4. User Flows
+- Detailed flows (step-by-step actions inside the system)
+
+5. UX / UI Structure
+- What screens exist
+- What each screen contains
+- Key actions per screen
+
+6. Wireframe-level description
+- Describe layout of key screens (no need for images, just structure)
+
+7. Features Breakdown
+- Core features
+- Advanced features
+
+8. System Design (High level)
+- Backend components
+- Data flow
+- Integrations (APIs, services)
+
+9. Edge Cases & Errors
+- What happens when things fail
+
+10. MVP vs Full Product
+- What to build first vs later
+
+11. Value Proposition
+- Why users should use this product
+- What makes it better than alternatives
+
+12. Competitive Analysis
+- Existing competitors or solutions
+- Key differentiators
+
+13. Onboarding Experience
+- First-time user experience
+- Time to first value
+- Guidance or tutorials
+
+14. Data Model
+- Main entities (e.g., User, Session, Order, etc.)
+- Relationships between them
+
+15. Roles & Permissions
+- Different user roles
+- Access levels and restrictions
+
+16. Scalability Considerations
+- How the system handles growth (users, data, load)
+
+17. Security & Privacy
+- Authentication and authorization
+- Data protection considerations
+
+18. Analytics & KPIs
+- What should be measured
+- Success metrics
+- Funnel tracking
+
+19. Feedback Loops & Iteration
+- How user feedback is collected
+- How the product improves over time
+- A/B testing or experimentation
+
+20. Go-To-Market Strategy
+- Target audience
+- Launch strategy
+- Acquisition channels
+
+21. Monetization Model
+- How the product makes money (if applicable)
+
+22. Operational Considerations
+- Support, maintenance, and internal workflows
+
+Be structured, detailed, practical, and think step-by-step like you are designing a real production-ready product.
+Avoid being too high-level. Be specific and actionable.
+
+---
+
+## 2026-04-25 23:52:01
+
+Is it really that important? The product name, the domain, What exactly is designer? Yeah. The plot from Vision doc location. You build it. Supposed to be in the project itself. And what exactly is phase zero? Start date today, but what exactly is phase zero? Not sure I understand what you want.
+
+---
+
+## 2026-04-25 23:53:18
+
+One, we're not gonna touch. The project manager of YouTube web. You're going to duplicate that and work on that. You're not gonna touch this thing. This is gold. I'm still working on it. And it needs to be super, super solid and stable. So I'm not touching it.
+
+---
+
+## 2026-04-25 23:56:34
+
+Hold on with it. I'll let you know when to do that.
+
+---
+
+## 2026-04-27 10:15:37
+
+Before doing this thing, park it for one second, and I wanna ask for kind of a bug feature in the system that is very, very disturbing me. So here it is. When I go to the code board and choose my project, and change the view to see a storyboard. And I'm going into a feature, into an feature page I wanna go back. It reset my page and go to the code board to the first projects and reset the view. When I'm going out of a feature, I'm pressing the back button supposed to go exactly to where I was before. Same project same view, and not resetting it every time. It's depressing to set it up every time. If I did some filters or some configuration on the manual order anything and I'm going into an epic one feature and press the button back it's supposed to take me one step back not back to the page. To the same page with the same filters, the same project, exactly where I was before. Please write a feature bug epic story, I don't know but I want it to be fixed now! Johnny, work with your instruction, bible, everything. Make sure when you do that you don't break anything else. Keep the data flow and everything. You have your instruction. I trust you. Go.
+
+---
+
+## 2026-04-27 10:32:25
+
+Approve journey today fast. I want it now. Not quick fix A good fix. It needs to be super professional.Go@
+
+---
+
+## 2026-04-27 11:20:39
+
+Apify is using the srtech Roles in the search and it returns irrelevent jobs, what values are  today rotating in the search list
+
+---
+
+## 2026-04-27 11:21:00
+
+ignor my last message
+
+---
+
+## 2026-04-27 11:48:42
+
+Assumed the fixing the UI. What's the status now? Request before was a mistake. It was for a different Closed session. , and I wrote it to you.
+
+---
+
+## 2026-04-27 13:18:37
+
+<task-notification>
+<task-id>bj969dbmt</task-id>
+<tool-use-id>toolu_01CA8CE4vmuSrPWaQE6H5YnT</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/bj969dbmt.output</output-file>
+<status>completed</status>
+<summary>Background command "Transition CB-1927 + 7 sub-tasks" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-04-27 13:25:22
+
+CB-1927 is still in the backlog, with all it's tasks, if you finish this thing make sure you moved all the features with the child replated issues to CWQ!!
+
+---
+
+## 2026-04-27 13:29:45
+
+one last thing which you messing it every time jony, a feature should have all the epics/stories tasks and subtasks under him as childs, execpt some seperated tasks of bugs,
+
+---
+
+## 2026-04-27 15:17:17
+
+continue
+
+---
+

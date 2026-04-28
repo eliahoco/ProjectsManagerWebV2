@@ -101,6 +101,8 @@ export function useProjects() {
   return useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => apiFetch<Project[]>(`${API_BASE}/projects`),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 }
 
@@ -919,7 +921,7 @@ export function useExecutionOutput(sessionId: string | null, sinceLine = 0) {
       return res.json();
     },
     enabled: !!sessionId,
-    // Poll every 500ms while running, stop polling once completed/failed/cancelled/not_found
+    // Poll every 3000ms while running, stop polling once completed/failed/cancelled/not_found
     refetchInterval: (query) => {
       // Stop polling if there's an error
       if (query.state.error) {
@@ -932,10 +934,10 @@ export function useExecutionOutput(sessionId: string | null, sinceLine = 0) {
       }
       // Continue polling for running/pending states
       if (status === 'running' || status === 'pending') {
-        return 500;
+        return 3000;
       }
       // For unknown status (initial load), poll but slower
-      return 1000;
+      return 3000;
     },
     retry: false, // Don't retry on errors
   });

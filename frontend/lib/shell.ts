@@ -130,7 +130,7 @@ export async function execCommand(
     env?: NodeJS.ProcessEnv;
   } = {}
 ): Promise<CommandResult> {
-  const { cwd, timeout = 30000, env } = options;
+  const { cwd, timeout = 5000, env } = options;
 
   try {
     const result = await execAsync(command, {

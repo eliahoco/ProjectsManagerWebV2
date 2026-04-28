@@ -12,8 +12,9 @@ import uuid
 import logging
 
 from services.ai_service import ai_service
+from services.rag_service import RAGService
 from models import get_db, Issue, IssueSequence, Activity, IssueType, IssueStatus
-from services.rag_service import rag_service
+from api.deps import get_rag
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai")
@@ -105,10 +106,10 @@ async def get_next_issue_key(db: AsyncSession, project_id: str) -> tuple[str, in
     return key, next_number
 
 
-async def embed_issue_for_rag(issue: Issue):
+async def embed_issue_for_rag(issue: Issue, rag: RAGService):
     """Embed issue into vector store for semantic search"""
     try:
-        await rag_service.embed_issue(
+        await rag.embed_issue(
             project_id=issue.projectId,
             issue_id=issue.id,
             key=issue.key,
@@ -184,8 +185,8 @@ async def create_issue_from_breakdown(
 async def ai_status():
     """Check if AI service is available and which provider"""
     return {
-        "available": ai_service.is_available(),
-        "provider": ai_service.get_provider(),
+        "available": await ai_service.is_available(),
+        "provider": await ai_service.get_provider(),
     }
 
 
@@ -201,8 +202,8 @@ async def get_api_key():
     return {
         "configured": bool(masked),
         "masked_key": masked,
-        "provider": ai_service.get_provider(),
-        "available": ai_service.is_available(),
+        "provider": await ai_service.get_provider(),
+        "available": await ai_service.is_available(),
     }
 
 
@@ -245,14 +246,14 @@ async def update_api_key(request: ApiKeyUpdate):
         # Key is still set in memory, just won't survive restart
 
     # Test the key by checking availability
-    available = ai_service.is_available()
+    available = await ai_service.is_available()
 
     return {
         "success": True,
         "configured": True,
         "masked_key": ai_service.get_masked_api_key(),
         "available": available,
-        "provider": ai_service.get_provider(),
+        "provider": await ai_service.get_provider(),
     }
 
 
@@ -284,8 +285,8 @@ async def remove_api_key():
 @router.get("/ollama/models")
 async def list_ollama_models():
     """List available Ollama models"""
-    available = await asyncio.to_thread(ai_service.is_ollama_available)
-    models = await asyncio.to_thread(ai_service.get_ollama_models) if available else []
+    available = await ai_service.is_ollama_available()
+    models = await ai_service.get_ollama_models() if available else []
     return {
         "available": available,
         "models": models,
@@ -322,7 +323,7 @@ async def test_api_key():
         import asyncio
         import concurrent.futures
 
-        provider = ai_service.get_provider()
+        provider = await ai_service.get_provider()
         if provider.startswith("claude"):
             # Run the sync API call in a thread to avoid blocking the event loop
             client = ai_service.anthropic_client
@@ -384,7 +385,11 @@ async def test_api_key():
 
 
 @router.post("/{project_id}/breakdown", response_model=BreakdownResponse)
-async def breakdown_feature(project_id: str, request: BreakdownRequest):
+async def breakdown_feature(
+    project_id: str,
+    request: BreakdownRequest,
+    rag: RAGService = Depends(get_rag),
+):
     """
     Break down a feature/epic into smaller tasks using AI.
     Returns suggested child issues.
@@ -394,7 +399,7 @@ async def breakdown_feature(project_id: str, request: BreakdownRequest):
     if request.description:
         original_input += f"\n\nDescription:\n{request.description}"
 
-    if not ai_service.is_available():
+    if not await ai_service.is_available():
         return BreakdownResponse(
             suggestions=[],
             parent_title=request.title,
@@ -407,6 +412,7 @@ async def breakdown_feature(project_id: str, request: BreakdownRequest):
         title=request.title,
         description=request.description,
         parent_type=request.parent_type,
+        rag=rag,
     )
 
     return BreakdownResponse(
@@ -426,7 +432,7 @@ async def detect_bug(
     Analyze if an issue description indicates a bug.
     Returns bug analysis with severity.
     """
-    if not ai_service.is_available():
+    if not await ai_service.is_available():
         return BugAnalysis(is_bug=False)
 
     result = await ai_service.detect_potential_bug(
@@ -447,7 +453,7 @@ async def suggest_status(
     """
     Suggest a status update based on git activity.
     """
-    if not ai_service.is_available():
+    if not await ai_service.is_available():
         return StatusSuggestion(suggested_status=None)
 
     if not commit_message and not pr_title:
@@ -471,11 +477,12 @@ async def generate_qa_tasks(
     project_id: str,
     feature_title: str = Query(...),
     feature_description: Optional[str] = Query(None),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Generate QA/testing tasks for a feature.
     """
-    if not ai_service.is_available():
+    if not await ai_service.is_available():
         return {
             "tasks": [],
             "feature_title": feature_title,
@@ -486,6 +493,7 @@ async def generate_qa_tasks(
         project_id=project_id,
         feature_title=feature_title,
         feature_description=feature_description,
+        rag=rag,
     )
 
     return {
@@ -499,6 +507,7 @@ async def generate_qa_tasks(
 async def hierarchical_breakdown_feature(
     request: HierarchicalBreakdownRequest,
     db: AsyncSession = Depends(get_db),
+    rag: RAGService = Depends(get_rag),
 ):
     """
     Use AI to break down a feature into epics, stories, tasks, and subtasks.
@@ -517,6 +526,7 @@ async def hierarchical_breakdown_feature(
             project_id=request.project_id,
             feature_title=request.feature_title,
             feature_description=request.feature_description,
+            rag=rag,
         )
     except ValueError:
         logger.exception("Invalid input for hierarchical breakdown")
@@ -593,7 +603,7 @@ async def hierarchical_breakdown_feature(
 
         # Embed all created issues for RAG search
         for issue in created_issues:
-            await embed_issue_for_rag(issue)
+            await embed_issue_for_rag(issue, rag)
 
     return HierarchicalBreakdownResponse(
         epic=breakdown.get("epic"),

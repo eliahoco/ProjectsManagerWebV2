@@ -28,12 +28,14 @@ WATCHDOG_PID_FILE="$LOGS_DIR/backend-watchdog.pid"
 WATCHDOG_LOG="$LOGS_DIR/backend-watchdog.log"
 BACKEND_PORT=8401
 CHECK_INTERVAL=15        # seconds between health checks
-STARTUP_WAIT=30          # seconds to wait after starting backend
+STARTUP_WAIT=90          # seconds to wait after starting backend (SQLAlchemy+Chroma init ~45-75s)
 MAX_RESTARTS_PER_HOUR=10 # circuit breaker
 
 mkdir -p "$LOGS_DIR"
 
 log() {
+    # tee writes to stdout AND the log file — nohup launch must NOT redirect stdout
+    # to this same file, otherwise every line is duplicated.
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$WATCHDOG_LOG"
 }
 
@@ -42,19 +44,36 @@ is_backend_alive() {
 }
 
 is_backend_responding() {
-    curl -sf --max-time 10 "http://localhost:$BACKEND_PORT/health" >/dev/null 2>&1
+    curl -sf --max-time 20 "http://localhost:$BACKEND_PORT/health" >/dev/null 2>&1
 }
 
 kill_backend() {
-    lsof -ti :$BACKEND_PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
-    sleep 2
+    local pids
+    pids=$(lsof -ti :$BACKEND_PORT 2>/dev/null || true)
+    [ -z "$pids" ] && return 0
+    echo "$pids" | xargs kill -TERM 2>/dev/null || true
+    local waited=0
+    while [ $waited -lt 5 ]; do
+        sleep 1
+        waited=$((waited+1))
+        lsof -ti :$BACKEND_PORT >/dev/null 2>&1 || return 0
+    done
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    sleep 1
 }
 
 start_backend() {
     log "Starting backend uvicorn server..."
 
     cd "$BACKEND_DIR"
-    nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port $BACKEND_PORT > "$LOGS_DIR/backend.log" 2>&1 &
+    # Prefer venv python (matches launch.sh). System python3 may lack uvicorn.
+    local PY
+    if [[ -x "$BACKEND_DIR/venv/bin/python" ]]; then
+        PY="$BACKEND_DIR/venv/bin/python"
+    else
+        PY="python3"
+    fi
+    nohup "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port $BACKEND_PORT > "$LOGS_DIR/backend.log" 2>&1 &
     local pid=$!
     echo $pid > "$LOGS_DIR/backend.pid"
     log "Backend started with PID $pid"
@@ -109,19 +128,37 @@ run_watchdog() {
             hour_start=$now
         fi
 
-        # Circuit breaker — back-off sleep instead of exit
+        # Restart-rate alert: exceeded budget — write marker, back off 10 min, resume
         if [ $restart_count -ge $MAX_RESTARTS_PER_HOUR ]; then
-            log "CIRCUIT BREAKER: $restart_count restarts in the last hour. Sleeping 15 min before re-arming."
-            sleep 900
+            local alert_file="$LOGS_DIR/backend-watchdog.alert"
+            echo "$(date '+%Y-%m-%d %H:%M:%S') restarts=$restart_count cause=restart_budget_exceeded" > "$alert_file"
+            log "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            log "ALERT: backend exceeded restart budget ($restart_count restarts this hour) — pausing 10 min"
+            log "Alert marker written: $alert_file"
+            log "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            sleep 600
             restart_count=0
             hour_start=$(date +%s)
-            log "Circuit breaker reset. Resuming monitoring."
+            log "Restart budget reset. Resuming monitoring."
             continue
         fi
 
-        # Health check
-        if is_backend_alive; then
+        # Primary health gate: HTTP /health (authoritative — rules out --reload false-positives)
+        # Secondary gate: lsof (process exists at all)
+        if is_backend_responding; then
             consecutive_failures=0
+        elif is_backend_alive; then
+            # Process exists but HTTP not responding — could be reloading or slow query
+            consecutive_failures=$((consecutive_failures + 1))
+            log "WARNING: backend process alive but HTTP not responding (attempt $consecutive_failures)"
+            if [ $consecutive_failures -lt 3 ]; then
+                continue  # give it more time before acting
+            fi
+            log "CRASH DETECTED (attempt $consecutive_failures) — HTTP unresponsive after grace period"
+            kill_backend
+            restart_count=$((restart_count + 1))
+            log "Restarting backend (restart #$restart_count this hour)..."
+            start_backend || log "Restart failed — will retry in ${CHECK_INTERVAL}s"
         else
             consecutive_failures=$((consecutive_failures + 1))
             log "CRASH DETECTED (attempt $consecutive_failures) — backend not running on port $BACKEND_PORT"
@@ -132,9 +169,7 @@ run_watchdog() {
             # Restart
             restart_count=$((restart_count + 1))
             log "Restarting backend (restart #$restart_count this hour)..."
-            start_backend || {
-                log "Restart failed — will retry in ${CHECK_INTERVAL}s"
-            }
+            start_backend || log "Restart failed — will retry in ${CHECK_INTERVAL}s"
         fi
     done
 }
@@ -151,7 +186,7 @@ case "${1:-}" in
         fi
 
         echo "Starting backend watchdog..."
-        nohup "$SCRIPT_PATH" _run >> "$WATCHDOG_LOG" 2>&1 &
+        nohup "$SCRIPT_PATH" _run 2>&1 &  # no >> redirect — log() tee handles file writing
         disown
         echo "Backend watchdog started (PID $!)"
         echo "Log: $WATCHDOG_LOG"

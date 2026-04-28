@@ -1,12 +1,21 @@
 /**
  * Projects API Route
- * GET /api/projects - List all projects with status
+ * GET /api/projects - List all projects with status (including git data)
+ * For lightweight polling use /api/projects/status instead.
  */
 
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { getProjectStatus, getGitStatus } from '@/lib/shell';
 import type { ProjectWithStatus } from '@/types';
+
+/** Race a promise against a timeout; return fallback on timeout. */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 
 export async function GET() {
   try {
@@ -20,10 +29,9 @@ export async function GET() {
       },
     });
 
-    // Enrich with runtime status
+    // Enrich with runtime status — cap each project at 8 s to prevent thundering herd
     const projectsWithStatus: ProjectWithStatus[] = await Promise.all(
       projects.map(async (project) => {
-        // Get runtime status - pass known ports for reliable detection
         const knownPorts = project.ports.map((p) => ({
           port: p.port,
           serviceName: p.serviceName,
@@ -31,8 +39,35 @@ export async function GET() {
           url: p.url,
           notes: p.notes,
         }));
-        const status = await getProjectStatus(project.path, knownPorts);
-        const gitStatus = await getGitStatus(project.path);
+
+        const fallbackStatus = {
+          running: false,
+          services: knownPorts.map((p) => ({
+            name: p.serviceName || `Port ${p.port}`,
+            status: 'stopped' as const,
+            port: p.port,
+          })),
+        };
+
+        const fallbackGit = {
+          hasGit: false,
+          hasRemote: false,
+          branch: 'unknown',
+          isDirty: false,
+          uncommittedFiles: 0,
+        };
+
+        const work = (async () => {
+          const status = await getProjectStatus(project.path, knownPorts);
+          const gitStatus = await getGitStatus(project.path);
+          return { status, gitStatus };
+        })();
+
+        const { status, gitStatus } = await withTimeout(
+          work,
+          8000,
+          { status: fallbackStatus, gitStatus: fallbackGit },
+        );
 
         return {
           ...project,

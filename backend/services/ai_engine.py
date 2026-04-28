@@ -4,9 +4,11 @@ import anthropic
 from typing import Dict, Any, List
 import json
 
+from typing import Optional
+
 from app.config import settings
 from services.prompts.breakdown import BREAKDOWN_SYSTEM_PROMPT, BREAKDOWN_USER_PROMPT
-from services.rag_service import rag_service
+from services.rag_service import RAGService
 
 
 class AIEngine:
@@ -26,22 +28,29 @@ class AIEngine:
         self,
         project_id: str,
         feature_title: str,
-        feature_description: str
+        feature_description: str,
+        rag: Optional[RAGService] = None,
     ) -> Dict[str, Any]:
         """
         Break down a feature description into epics, stories, tasks, and subtasks.
 
         Uses project context from RAG for better understanding.
+
+        Args:
+            project_id: The project identifier.
+            feature_title: Feature title.
+            feature_description: Feature description.
+            rag: RAGService instance for context retrieval.
         """
         if not self.client:
             raise ValueError("Anthropic API key not configured")
 
         # Get project context from RAG
-        project_context = await rag_service.get_context_for_ai(
+        project_context = await rag.get_context_for_ai(
             project_id=project_id,
             query=feature_title,
-            n_results=5
-        )
+            n_results=5,
+        ) if rag else "No additional context available."
 
         # Build prompt
         user_prompt = BREAKDOWN_USER_PROMPT.format(

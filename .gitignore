@@ -4,9 +4,9 @@ venv/
 __pycache__/
 *.pyc
 
-# Environment
-.env
-.env.local
+# Environment — match all variants (.env, .env.dev, .env.local, .env.production, etc.)
+.env*
+!.env.example
 .ports.env
 
 # Data files

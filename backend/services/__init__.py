@@ -2,7 +2,7 @@
 Services for ProjectsManagerWebV2 Backend
 """
 
-from services.rag_service import rag_service, RAGService
+from services.rag_service import RAGService
 from services.ai_service import ai_service, AIService
 from services.ai_engine import ai_engine, AIEngine
 from services.git_service import (
@@ -16,7 +16,7 @@ from services.dependency_analyzer import dependency_analyzer, DependencyAnalyzer
 from services.autopilot_service import autopilot_service, AutoPilotService
 
 __all__ = [
-    'rag_service', 'RAGService',
+    'RAGService',
     'ai_service', 'AIService',
     'ai_engine', 'AIEngine',
     'git_service', 'GitService',
