@@ -638,6 +638,11 @@ async def cascade_status_to_parents(
         if parent.type not in ("FEATURE", "EPIC", "STORY"):
             break
 
+        # Session uses autoflush=False — flush so the just-mutated child's
+        # new status is visible to the sibling SELECT below. Without this the
+        # query reads pre-mutation DB state and the gate never closes.
+        await db.flush()
+
         # Check if ALL children of this parent are in target_status or DONE
         children_result = await db.execute(
             select(Issue.id, Issue.status).where(Issue.parentId == parent_id)
@@ -702,6 +707,10 @@ async def cascade_status_to_parents_detailed(
             break
         if parent.type not in ("FEATURE", "EPIC", "STORY"):
             break
+
+        # Flush pending child mutations so the sibling SELECT sees the new
+        # status (session is autoflush=False).
+        await db.flush()
 
         children_result = await db.execute(
             select(Issue.id, Issue.status).where(Issue.parentId == parent_id)
@@ -829,6 +838,10 @@ async def cascade_done_to_parents(
 
         if not parent or parent.type not in ("FEATURE", "EPIC", "STORY"):
             break
+
+        # Flush pending child mutations so the sibling SELECT sees the new
+        # status (session is autoflush=False).
+        await db.flush()
 
         # Check if ALL children are DONE
         children_result = await db.execute(
