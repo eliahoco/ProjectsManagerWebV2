@@ -5,6 +5,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import { useUrlState, enumParam, stringSetParam } from '@/hooks/use-url-state';
 import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search, Loader2, PanelRightClose, Wifi, WifiOff, Terminal } from 'lucide-react';
@@ -149,8 +150,25 @@ interface TreeItemProps {
 
 const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate, searchQuery, epicSearchFilters, epicSearchVisibleIds, onEpicSearchToggle, onEpicSearchChange, allDescendantIssues, activeSessionMap, onRunningTaskClick }: TreeItemProps) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [statusDropdownDirection, setStatusDropdownDirection] = useState<'up' | 'down'>('down');
+  const [statusDropdownPos, setStatusDropdownPos] = useState<{top: number; left: number; direction: 'up' | 'down'}>({top: 0, left: 0, direction: 'down'});
   const statusBtnRef = useRef<HTMLButtonElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click. Dropdown renders via Portal into document.body
+  // (CB-1939: nested rendering inside the row's DOM subtree was getting
+  // covered by the page background div due to stacking-context confinement;
+  // portal escapes all parent stacking contexts and renders at root.)
+  useEffect(() => {
+    if (!showStatusDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (statusBtnRef.current?.contains(target)) return;
+      if (statusDropdownRef.current?.contains(target)) return;
+      setShowStatusDropdown(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showStatusDropdown]);
   const isExpanded = expanded.has(node.id);
   const isSelected = selected.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -328,18 +346,22 @@ const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, on
           </button>
         )}
 
-        {/* Status Dropdown — flips upward when trigger is near viewport bottom (CB-1939) */}
+        {/* Status Dropdown — portaled to document.body to escape stacking contexts (CB-1939) */}
         <div className="relative">
           <button
             ref={statusBtnRef}
             onClick={(e) => {
               e.stopPropagation();
-              // Decide direction BEFORE opening: if trigger has less than ~280px below it,
-              // render dropdown above to avoid the FloatingExecutionStatus / GlobalAgentStatusBar.
               const btn = (e.currentTarget as HTMLElement);
               const r = btn.getBoundingClientRect();
               const spaceBelow = window.innerHeight - r.bottom;
-              setStatusDropdownDirection(spaceBelow < 280 ? 'up' : 'down');
+              const direction: 'up' | 'down' = spaceBelow < 280 ? 'up' : 'down';
+              const dropdownH = 264; // approx 7 statuses × 36px + padding
+              setStatusDropdownPos({
+                top: direction === 'up' ? r.top - dropdownH - 4 : r.bottom + 4,
+                left: r.right - 180, // 180 = min-w of dropdown; right-anchored
+                direction,
+              });
               setShowStatusDropdown(!showStatusDropdown);
             }}
             className={cn(
@@ -353,43 +375,39 @@ const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, on
             </span>
             <ChevronDown className="w-3 h-3 ml-auto text-zinc-400" />
           </button>
-
-          {showStatusDropdown && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={(e) => { e.stopPropagation(); setShowStatusDropdown(false); }}
-              />
-              <div className={cn(
-                "absolute right-0 z-50 bg-zinc-800 border border-zinc-600 rounded-lg shadow-xl py-1 min-w-[180px]",
-                statusDropdownDirection === 'up' ? "bottom-full mb-1" : "top-full mt-1"
-              )}>
-                {allStatuses.map(status => {
-                  const config = STATUS_CONFIG[status];
-                  const Icon = config.icon;
-                  return (
-                    <button
-                      key={status}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStatusChange(node.id, status);
-                        setShowStatusDropdown(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-700 text-left",
-                        node.status === status && "bg-zinc-700"
-                      )}
-                    >
-                      <Icon className={cn("w-4 h-4", config.color)} />
-                      <span className={config.color}>{status.replace(/_/g, ' ')}</span>
-                      {node.status === status && <CheckCircle2 className="w-3 h-3 ml-auto text-green-500" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
         </div>
+
+        {showStatusDropdown && typeof document !== 'undefined' && createPortal(
+          <div
+            ref={statusDropdownRef}
+            className="fixed z-[9999] bg-zinc-800 border border-zinc-600 rounded-lg shadow-xl py-1 min-w-[180px]"
+            style={{ top: statusDropdownPos.top, left: statusDropdownPos.left }}
+          >
+            {allStatuses.map(status => {
+              const config = STATUS_CONFIG[status];
+              const Icon = config.icon;
+              return (
+                <button
+                  key={status}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatusChange(node.id, status);
+                    setShowStatusDropdown(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-700 text-left",
+                    node.status === status && "bg-zinc-700"
+                  )}
+                >
+                  <Icon className={cn("w-4 h-4", config.color)} />
+                  <span className={config.color}>{status.replace(/_/g, ' ')}</span>
+                  {node.status === status && <CheckCircle2 className="w-3 h-3 ml-auto text-green-500" />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
 
         {/* Progress */}
         <div className="flex items-center gap-2">
