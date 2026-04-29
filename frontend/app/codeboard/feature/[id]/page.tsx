@@ -4,7 +4,7 @@
  * Feature Detail Page - Shows all issues under a FEATURE with hierarchy
  */
 
-import { useState, useMemo, useCallback, useEffect, memo } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUrlState, enumParam, stringSetParam } from '@/hooks/use-url-state';
 import { ArrowLeft, ChevronRight, ChevronDown, CheckCircle2, Circle, Clock, XCircle, AlertCircle, Rocket, RefreshCw, Square, CheckSquare, MinusSquare, ClipboardCheck, Trash2, FlaskConical, ListTree, Zap, Search, Loader2, PanelRightClose, Wifi, WifiOff, Terminal } from 'lucide-react';
@@ -149,6 +149,8 @@ interface TreeItemProps {
 
 const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, onSelect, onStatusChange, onNavigate, searchQuery, epicSearchFilters, epicSearchVisibleIds, onEpicSearchToggle, onEpicSearchChange, allDescendantIssues, activeSessionMap, onRunningTaskClick }: TreeItemProps) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [statusDropdownDirection, setStatusDropdownDirection] = useState<'up' | 'down'>('down');
+  const statusBtnRef = useRef<HTMLButtonElement>(null);
   const isExpanded = expanded.has(node.id);
   const isSelected = selected.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -326,10 +328,20 @@ const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, on
           </button>
         )}
 
-        {/* Status Dropdown */}
+        {/* Status Dropdown — flips upward when trigger is near viewport bottom (CB-1939) */}
         <div className="relative">
           <button
-            onClick={(e) => { e.stopPropagation(); setShowStatusDropdown(!showStatusDropdown); }}
+            ref={statusBtnRef}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Decide direction BEFORE opening: if trigger has less than ~280px below it,
+              // render dropdown above to avoid the FloatingExecutionStatus / GlobalAgentStatusBar.
+              const btn = (e.currentTarget as HTMLElement);
+              const r = btn.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - r.bottom;
+              setStatusDropdownDirection(spaceBelow < 280 ? 'up' : 'down');
+              setShowStatusDropdown(!showStatusDropdown);
+            }}
             className={cn(
               "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium min-w-[140px]",
               "bg-zinc-700 border border-zinc-600 hover:border-zinc-500"
@@ -345,10 +357,13 @@ const TreeItem = memo(function TreeItem({ node, expanded, selected, onToggle, on
           {showStatusDropdown && (
             <>
               <div
-                className="fixed inset-0 z-10"
+                className="fixed inset-0 z-40"
                 onClick={(e) => { e.stopPropagation(); setShowStatusDropdown(false); }}
               />
-              <div className="absolute right-0 top-full mt-1 z-20 bg-zinc-800 border border-zinc-600 rounded-lg shadow-xl py-1 min-w-[180px]">
+              <div className={cn(
+                "absolute right-0 z-50 bg-zinc-800 border border-zinc-600 rounded-lg shadow-xl py-1 min-w-[180px]",
+                statusDropdownDirection === 'up' ? "bottom-full mb-1" : "top-full mt-1"
+              )}>
                 {allStatuses.map(status => {
                   const config = STATUS_CONFIG[status];
                   const Icon = config.icon;
