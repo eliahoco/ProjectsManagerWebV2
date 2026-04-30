@@ -1453,7 +1453,7 @@ async def get_qa_kanban_data(
                 (feature, waiting_count, len(descendant_ids))
             )
 
-    logger.info(f"QA Kanban: Found {len(features_with_waiting_qa)} FEATUREs with COMPLETED_WAITING_QA items")
+    logger.info(f"QA Kanban: Found {len(features_with_waiting_qa)} item(s) (FEATURE/BUG) with COMPLETED_WAITING_QA")
 
     # Use all features for processing (those with waiting items + those with QA tasks)
     all_issues = features
