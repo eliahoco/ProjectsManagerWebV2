@@ -1393,52 +1393,65 @@ async def get_qa_kanban_data(
 ):
     """Get QA-related issues grouped by QA status for Kanban view.
 
-    Shows FEATUREs that have development work completed:
-    - Waiting for QA: FEATUREs with children in COMPLETED_WAITING_QA status
-    - Pass: FEATUREs where all QA tasks have passed
-    - Failed: FEATUREs with failed QA tasks
+    Shows top-level QA-eligible items:
+    - FEATUREs that have development work completed in the descendant tree
+    - BUGs (CB-1942): standalone QA-able units; show whenever the BUG itself
+      is at COMPLETED_WAITING_QA or has any failed QA tasks
 
-    When clicking on a FEATURE, the detail page shows the full issue tree.
-    QA plans should be generated for each TASK/SUBTASK under the FEATURE.
+    Columns:
+    - Waiting for QA: items with descendants (FEATURE) or self (BUG) in
+      COMPLETED_WAITING_QA status
+    - Pass: items where all QA tasks have passed
+    - Failed: items with failed QA tasks
     """
     from utils.db_queries import get_all_descendant_ids
 
-    # Get all FEATUREs for the project
+    # Get FEATUREs and BUGs for the project. BUGs are top-level QA units in
+    # their own right — they don't typically have descendants but the BUG
+    # itself can be at CWQ and needs a QA pass.
     result = await db.execute(
         select(Issue)
         .where(
             and_(
                 Issue.projectId == project_id,
-                func.upper(Issue.type) == "FEATURE"
+                func.upper(Issue.type).in_(("FEATURE", "BUG")),
             )
         )
         .options(selectinload(Issue.qaTaskLinks))
     )
     features = result.scalars().unique().all()
-    logger.info(f"QA Kanban project {project_id}: Found {len(features)} FEATUREs")
+    logger.info(
+        f"QA Kanban project {project_id}: Found {len(features)} FEATURE/BUG items"
+    )
 
-    # For each FEATURE, check if it has any descendants with COMPLETED_WAITING_QA status
+    # Determine which items have QA work waiting. Two paths:
+    #   - FEATURE: walk descendants for any CWQ child OR feature itself CWQ
+    #   - BUG: standalone — appears whenever the BUG itself is CWQ. If a BUG
+    #     has descendants (rare but possible), evaluate them too.
     features_with_waiting_qa = []
     for feature in features:
-        # Get all descendant IDs
         descendant_ids = await get_all_descendant_ids(db, feature.id)
-        if not descendant_ids:
-            continue
 
-        # Check if any descendants have COMPLETED_WAITING_QA status
-        result = await db.execute(
-            select(func.count(Issue.id))
-            .where(
-                and_(
-                    Issue.id.in_(descendant_ids),
-                    Issue.status == "COMPLETED_WAITING_QA"
+        if descendant_ids:
+            result = await db.execute(
+                select(func.count(Issue.id))
+                .where(
+                    and_(
+                        Issue.id.in_(descendant_ids),
+                        Issue.status == "COMPLETED_WAITING_QA",
+                    )
                 )
             )
-        )
-        waiting_count = result.scalar() or 0
+            waiting_count = result.scalar() or 0
+        else:
+            waiting_count = 0
 
+        # Include the issue if its own status is CWQ (standalone BUG case),
+        # or if any descendant is CWQ (FEATURE case).
         if waiting_count > 0 or feature.status == "COMPLETED_WAITING_QA":
-            features_with_waiting_qa.append((feature, waiting_count, len(descendant_ids)))
+            features_with_waiting_qa.append(
+                (feature, waiting_count, len(descendant_ids))
+            )
 
     logger.info(f"QA Kanban: Found {len(features_with_waiting_qa)} FEATUREs with COMPLETED_WAITING_QA items")
 

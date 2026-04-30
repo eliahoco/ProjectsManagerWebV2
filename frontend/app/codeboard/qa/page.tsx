@@ -61,6 +61,8 @@ function QAKanbanColumn({
                           ? 'bg-green-900/50 text-green-400'
                           : normalizedType === 'TASK'
                           ? 'bg-blue-900/50 text-blue-400'
+                          : normalizedType === 'BUG'
+                          ? 'bg-red-900/50 text-red-400'
                           : 'bg-zinc-700 text-zinc-400'
                       }`}
                     >
