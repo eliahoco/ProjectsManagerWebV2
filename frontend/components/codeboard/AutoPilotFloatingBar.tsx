@@ -42,12 +42,24 @@ export function AutoPilotFloatingBar() {
       .catch(() => {});
   }, [showTokenDialog]);
 
+  // Derived values used below — safe to compute even when not active.
+  const isTokenExhausted = state.isWaitingReset;
+
+  // Auto-show token dialog when waiting_reset.
+  // Must be declared before any conditional return per Rules of Hooks —
+  // moving this below `if (!state.isActive) return null` causes hook-count
+  // mismatches when AutoPilot toggles active/idle between renders.
+  useEffect(() => {
+    if (isTokenExhausted && !showTokenDialog && !showAbortDialog) {
+      setShowTokenDialog(true);
+    }
+  }, [isTokenExhausted, showTokenDialog, showAbortDialog]);
+
   if (!state.isActive) return null;
 
   const currentTask = state.queue[state.currentIndex];
   const { total, completed, failed, skipped, percent } = state.progress;
   const pendingCount = state.queue.filter(q => q.status === 'pending' || q.status === 'running').length;
-  const isTokenExhausted = state.isWaitingReset;
 
   const handleAbort = async (action: AbortAction) => {
     setShowAbortDialog(false);
@@ -63,13 +75,6 @@ export function AutoPilotFloatingBar() {
     setShowTokenDialog(false);
     await switchModel(provider, model);
   };
-
-  // Auto-show token dialog when waiting_reset
-  useEffect(() => {
-    if (isTokenExhausted && !showTokenDialog && !showAbortDialog) {
-      setShowTokenDialog(true);
-    }
-  }, [isTokenExhausted]);
 
   return (
     <div className="fixed bottom-4 right-4 z-[70] w-[420px] bg-zinc-900 border border-amber-600/40 rounded-xl shadow-2xl overflow-hidden">
