@@ -37,7 +37,7 @@ from services.rag_service import RAGService
 from services.qa_service import qa_service
 from api.deps import get_rag
 from app.errors import NotFoundError, DatabaseError, ValidationError
-from utils.db_queries import cascade_status_to_parents, cascade_done_to_parents, get_all_descendants_with_details
+from utils.db_queries import cascade_status_to_parents, cascade_done_to_parents, cascade_revert_to_parents, get_all_descendants_with_details
 
 logger = logging.getLogger(__name__)
 
@@ -555,8 +555,10 @@ async def update_issue(
 
     issue.updatedAt = datetime.utcnow()
 
-    # Cascade status to parent containers if this is a work item
-    # (when TASK/SUBTASK becomes COMPLETED_WAITING_QA or DONE, update parent STORY/EPIC)
+    # Cascade status to parent containers if this is a work item.
+    # Forward path: child reaches CWQ/DONE → roll parents up.
+    # Reverse path (CB-1943): child moves off CWQ/DONE → revert any parent
+    # that had been rolled up, since its completion gate is re-opened.
     if "status" in update_data:
         new_status = update_data["status"]
         if hasattr(new_status, "value"):
@@ -570,6 +572,10 @@ async def update_issue(
             updated_parents = await cascade_done_to_parents(db, issue_id)
             if updated_parents:
                 logger.info(f"Cascaded DONE to {len(updated_parents)} parent(s)")
+        elif new_status in ("BACKLOG", "TODO", "IN_PROGRESS", "IN_REVIEW"):
+            reverted_parents = await cascade_revert_to_parents(db, issue_id)
+            if reverted_parents:
+                logger.info(f"Cascade-reverted {len(reverted_parents)} parent(s) off CWQ/DONE")
 
     await db.commit()
     await db.refresh(issue)

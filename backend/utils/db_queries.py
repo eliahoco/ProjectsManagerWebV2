@@ -735,6 +735,102 @@ async def cascade_status_to_parents_detailed(
     return transitions
 
 
+async def cascade_revert_to_parents(
+    db: AsyncSession,
+    issue_id: str
+) -> List[str]:
+    """
+    Cascade a "revert off completion" upward to parent containers.
+
+    Symmetric counterpart to cascade_status_to_parents. When a child issue moves
+    OFF COMPLETED_WAITING_QA / DONE (back to BACKLOG / TODO / IN_PROGRESS / IN_REVIEW),
+    any parent that was previously rolled up to CWQ should revert to IN_PROGRESS,
+    because its completion gate has been re-opened by the now-incomplete child.
+
+    Stops walking up once an ancestor is encountered that was never at CWQ — its
+    own ancestors are unaffected by this child's revert.
+
+    Args:
+        db: AsyncSession database session
+        issue_id: The ID of the issue that was just moved off CWQ/DONE
+
+    Returns:
+        List of parent issue IDs that were reverted to IN_PROGRESS
+    """
+    from models import Issue
+
+    updated_parents = []
+    current_id = issue_id
+
+    # Walk up the hierarchy
+    while True:
+        # Get the current issue's parent
+        result = await db.execute(
+            select(Issue.parentId).where(Issue.id == current_id)
+        )
+        row = result.first()
+
+        if not row or not row[0]:
+            break
+
+        parent_id = row[0]
+
+        # Get parent
+        parent_result = await db.execute(
+            select(Issue).where(Issue.id == parent_id)
+        )
+        parent = parent_result.scalar_one_or_none()
+
+        if not parent:
+            break
+
+        # Only cascade to container types
+        if parent.type not in ("FEATURE", "EPIC", "STORY"):
+            break
+
+        # If parent was never rolled up to CWQ, the chain stops here.
+        # (Its status reflects work that this child's revert does not invalidate.)
+        if parent.status not in ("COMPLETED_WAITING_QA", "DONE"):
+            break
+
+        # Session uses autoflush=False — flush so the just-mutated child's
+        # new (non-CWQ) status is visible to the sibling SELECT below.
+        await db.flush()
+
+        # Re-evaluate the gate: are ALL of this parent's children still at
+        # CWQ or DONE? If yes, the cascade-up gate is intact (e.g., a sibling
+        # was the cause and is still complete) and we leave the parent alone.
+        children_result = await db.execute(
+            select(Issue.status).where(Issue.parentId == parent_id)
+        )
+        children_statuses = [r[0] for r in children_result.fetchall()]
+
+        if not children_statuses:
+            break
+
+        all_complete = all(
+            s in ("COMPLETED_WAITING_QA", "DONE")
+            for s in children_statuses
+        )
+
+        if all_complete:
+            # Gate still closed (this child must have been re-completed
+            # by a sibling path, or the revert was already cascaded).
+            # Stop walking — nothing to undo.
+            break
+
+        # Gate is open: revert parent off CWQ/DONE back to IN_PROGRESS.
+        parent.status = "IN_PROGRESS"
+        parent.updatedAt = datetime.utcnow()
+        updated_parents.append(parent_id)
+
+        # Continue walking up — the just-reverted parent may itself have
+        # re-opened a gate further up the chain.
+        current_id = parent_id
+
+    return updated_parents
+
+
 async def cascade_in_progress_to_parents(
     db: AsyncSession,
     issue_id: str

@@ -32,6 +32,7 @@ from models.database import Base
 from models.issue import Issue, Project
 from utils.db_queries import (
     cascade_done_to_parents,
+    cascade_revert_to_parents,
     cascade_status_to_parents,
     cascade_status_to_parents_detailed,
 )
@@ -317,6 +318,228 @@ async def test_cascade_walks_full_hierarchy_in_one_call(session_factory):
         assert story.status == "COMPLETED_WAITING_QA"
         assert epic.status == "COMPLETED_WAITING_QA"
         assert feature.status == "COMPLETED_WAITING_QA"
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_walks_full_hierarchy(session_factory):
+    """CB-1943: cascade_revert_to_parents reverses the full chain in one call.
+
+    Pre-state mirrors a fully-completed FEATURE→EPIC→STORY→TASK chain. When the
+    leaf TASK is moved off CWQ in memory, every CWQ ancestor must drop to
+    IN_PROGRESS — STORY first, then EPIC, then FEATURE — in a single call.
+    """
+    async with session_factory() as session:
+        project = _make_project(session)
+        await session.flush()
+
+        feature = _make_issue(
+            session, project_id=project.id, seq=1, title="Feature",
+            issue_type="FEATURE", status="COMPLETED_WAITING_QA",
+        )
+        await session.flush()
+        epic = _make_issue(
+            session, project_id=project.id, seq=2, title="Epic",
+            issue_type="EPIC", status="COMPLETED_WAITING_QA",
+            parent_id=feature.id,
+        )
+        await session.flush()
+        story = _make_issue(
+            session, project_id=project.id, seq=3, title="Story",
+            issue_type="STORY", status="COMPLETED_WAITING_QA",
+            parent_id=epic.id,
+        )
+        await session.flush()
+        task = _make_issue(
+            session, project_id=project.id, seq=4, title="Task",
+            issue_type="TASK", status="COMPLETED_WAITING_QA",
+            parent_id=story.id,
+        )
+        await session.flush()
+
+        # In-memory revert
+        task.status = "BACKLOG"
+        reverted = await cascade_revert_to_parents(session, task.id)
+
+        assert story.id in reverted
+        assert epic.id in reverted
+        assert feature.id in reverted
+        assert story.status == "IN_PROGRESS"
+        assert epic.status == "IN_PROGRESS"
+        assert feature.status == "IN_PROGRESS"
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_propagates_through_sibling_subtrees(session_factory):
+    """A reverted leaf invalidates the gate for its STORY parent and, in
+    consequence, for every CWQ ancestor — even when the EPIC has another
+    fully-complete STORY subtree (`story_b`). The revert reaches story_a's
+    gate first; that revert then re-opens the EPIC's gate; the EPIC reverts;
+    that re-opens the FEATURE's gate; the FEATURE reverts. story_b is
+    untouched because it has no path to the patched leaf.
+    """
+    async with session_factory() as session:
+        project = _make_project(session)
+        await session.flush()
+
+        feature = _make_issue(
+            session, project_id=project.id, seq=1, title="Feature",
+            issue_type="FEATURE", status="COMPLETED_WAITING_QA",
+        )
+        await session.flush()
+        epic = _make_issue(
+            session, project_id=project.id, seq=2, title="Epic",
+            issue_type="EPIC", status="COMPLETED_WAITING_QA",
+            parent_id=feature.id,
+        )
+        await session.flush()
+
+        # Two stories under the epic — both CWQ
+        story_a = _make_issue(
+            session, project_id=project.id, seq=3, title="StoryA",
+            issue_type="STORY", status="COMPLETED_WAITING_QA",
+            parent_id=epic.id,
+        )
+        story_b = _make_issue(
+            session, project_id=project.id, seq=4, title="StoryB",
+            issue_type="STORY", status="COMPLETED_WAITING_QA",
+            parent_id=epic.id,
+        )
+        await session.flush()
+
+        # Story A has two TASK children, both CWQ.
+        task_a1 = _make_issue(
+            session, project_id=project.id, seq=10, title="t-a1",
+            issue_type="TASK", status="COMPLETED_WAITING_QA",
+            parent_id=story_a.id,
+        )
+        task_a2 = _make_issue(
+            session, project_id=project.id, seq=11, title="t-a2",
+            issue_type="TASK", status="COMPLETED_WAITING_QA",
+            parent_id=story_a.id,
+        )
+        await session.flush()
+
+        # Revert one TASK under story_a
+        task_a1.status = "IN_PROGRESS"
+        reverted = await cascade_revert_to_parents(session, task_a1.id)
+
+        # story_a flips off CWQ (it has a non-CWQ child now)
+        assert story_a.id in reverted
+        assert story_a.status == "IN_PROGRESS"
+        # epic also flips, because one of its STORY children (story_a) is no
+        # longer CWQ — even though story_b is still CWQ
+        assert epic.id in reverted
+        # feature also flips, since the epic just reverted
+        assert feature.id in reverted
+
+        # story_b untouched
+        assert story_b.status == "COMPLETED_WAITING_QA"
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_skips_parent_already_below_cwq(session_factory):
+    """If an ancestor is already at IN_PROGRESS or earlier, walking stops.
+
+    The cascade_revert function exits as soon as it encounters an ancestor
+    whose status is not CWQ/DONE — its further ancestors are unaffected by
+    this child's revert.
+    """
+    async with session_factory() as session:
+        project = _make_project(session)
+        await session.flush()
+
+        feature = _make_issue(
+            session, project_id=project.id, seq=1, title="Feature",
+            issue_type="FEATURE", status="IN_PROGRESS",   # already in_progress
+        )
+        await session.flush()
+        epic = _make_issue(
+            session, project_id=project.id, seq=2, title="Epic",
+            issue_type="EPIC", status="IN_PROGRESS",       # already in_progress
+            parent_id=feature.id,
+        )
+        await session.flush()
+        story = _make_issue(
+            session, project_id=project.id, seq=3, title="Story",
+            issue_type="STORY", status="COMPLETED_WAITING_QA",
+            parent_id=epic.id,
+        )
+        await session.flush()
+        task = _make_issue(
+            session, project_id=project.id, seq=4, title="Task",
+            issue_type="TASK", status="COMPLETED_WAITING_QA",
+            parent_id=story.id,
+        )
+        await session.flush()
+
+        task.status = "BACKLOG"
+        reverted = await cascade_revert_to_parents(session, task.id)
+
+        # Story reverts (it was at CWQ, now has a non-CWQ child)
+        assert story.id in reverted
+        assert story.status == "IN_PROGRESS"
+        # Epic was already IN_PROGRESS — function stops walking, no change
+        assert epic.id not in reverted
+        assert feature.id not in reverted
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_noop_when_child_returns_to_cwq_via_round_trip(session_factory):
+    """Round-trip: revert then re-complete should leave parents at CWQ."""
+    async with session_factory() as session:
+        feature, children = await _seed_feature_with_task_children(session, n_children=3)
+        # Force everyone to CWQ first
+        for c in children:
+            c.status = "COMPLETED_WAITING_QA"
+        feature.status = "COMPLETED_WAITING_QA"
+        await session.flush()
+
+        # Revert one child
+        children[0].status = "BACKLOG"
+        reverted = await cascade_revert_to_parents(session, children[0].id)
+        assert feature.id in reverted
+        assert feature.status == "IN_PROGRESS"
+
+        # Re-complete it
+        children[0].status = "COMPLETED_WAITING_QA"
+        updated = await cascade_status_to_parents(
+            session, children[0].id, "COMPLETED_WAITING_QA"
+        )
+        assert feature.id in updated
+        assert feature.status == "COMPLETED_WAITING_QA"
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_fires_when_parent_is_done_not_just_cwq(session_factory):
+    """Function entry condition is `status in (CWQ, DONE)` — exercise the DONE branch."""
+    async with session_factory() as session:
+        feature, children = await _seed_feature_with_task_children(session, n_children=3)
+        for c in children:
+            c.status = "DONE"
+        feature.status = "DONE"
+        await session.flush()
+
+        children[0].status = "IN_PROGRESS"
+        reverted = await cascade_revert_to_parents(session, children[0].id)
+        assert feature.id in reverted
+        assert feature.status == "IN_PROGRESS"
+
+
+@pytest.mark.asyncio
+async def test_cascade_revert_triggered_by_in_review_transition(session_factory):
+    """The dispatcher in update_issue calls cascade_revert for any of
+    BACKLOG / TODO / IN_PROGRESS / IN_REVIEW. Exercise IN_REVIEW path here."""
+    async with session_factory() as session:
+        feature, children = await _seed_feature_with_task_children(session, n_children=2)
+        for c in children:
+            c.status = "COMPLETED_WAITING_QA"
+        feature.status = "COMPLETED_WAITING_QA"
+        await session.flush()
+
+        children[0].status = "IN_REVIEW"
+        reverted = await cascade_revert_to_parents(session, children[0].id)
+        assert feature.id in reverted
+        assert feature.status == "IN_PROGRESS"
 
 
 @pytest.mark.asyncio
