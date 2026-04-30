@@ -880,6 +880,12 @@ async def cascade_in_progress_to_parents(
         if parent.type not in ("FEATURE", "EPIC", "STORY"):
             break
 
+        # Never demote a parent that has reached completion. If we hit a
+        # COMPLETED_WAITING_QA / DONE ancestor, stop walking — sibling activity
+        # under it should not regress its status. (CB-1952)
+        if parent.status in ("COMPLETED_WAITING_QA", "DONE"):
+            break
+
         # Set parent to IN_PROGRESS if it's in BACKLOG or TODO
         if parent.status in ("BACKLOG", "TODO"):
             parent.status = "IN_PROGRESS"

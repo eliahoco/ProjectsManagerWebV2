@@ -38,7 +38,7 @@ from services.terminal_service import (
     ExecutionStatus,
     terminal_service,
 )
-from utils.db_queries import cascade_in_progress_to_parents, cascade_status_to_parents
+from utils.db_queries import cascade_in_progress_to_parents, cascade_revert_to_parents, cascade_status_to_parents
 
 
 # ---------------------------------------------------------------------------
@@ -636,10 +636,15 @@ class AutoPilotQueueService:
                     "Retrying task %s (attempt %d/%d)",
                     task.issue_key, task.retry_count, queue.config.max_retries,
                 )
-                # Reset issue to TODO so it can be re-executed
+                # Reset issue to TODO so it can be re-executed.
+                # Also revert any ancestor that was rolled up to CWQ — leaving
+                # a CWQ container with an incomplete child is a corrupt state
+                # that confuses subsequent cascades. (CB-1952)
                 try:
                     async with AsyncSessionLocal() as db:
                         await self._set_issue_status(db, task.issue_id, "TODO")
+                        await db.flush()
+                        await cascade_revert_to_parents(db, task.issue_id)
                         await db.commit()
                 except Exception:
                     self._logger.exception(
@@ -650,10 +655,14 @@ class AutoPilotQueueService:
                 self._logger.warning(
                     "Max retries exhausted for %s — marking failed", task.issue_key
                 )
-                # Fall through to CONTINUE_MARK_FAILED behavior
+                # Fall through to CONTINUE_MARK_FAILED behavior.
+                # Revert ancestors so CWQ containers don't sit on incomplete
+                # children. (CB-1952)
                 try:
                     async with AsyncSessionLocal() as db:
                         await self._set_issue_status(db, task.issue_id, "TODO")
+                        await db.flush()
+                        await cascade_revert_to_parents(db, task.issue_id)
                         await db.commit()
                 except Exception:
                     self._logger.exception(
@@ -667,10 +676,14 @@ class AutoPilotQueueService:
             return "continue"
 
         # Default: CONTINUE_MARK_FAILED
-        # Reset the issue back to TODO so it is visibly "not done"
+        # Reset the issue back to TODO so it is visibly "not done", and
+        # revert ancestors so we never leave a CWQ container holding an
+        # incomplete child. (CB-1952)
         try:
             async with AsyncSessionLocal() as db:
                 await self._set_issue_status(db, task.issue_id, "TODO")
+                await db.flush()
+                await cascade_revert_to_parents(db, task.issue_id)
                 await db.commit()
         except Exception:
             self._logger.exception(
