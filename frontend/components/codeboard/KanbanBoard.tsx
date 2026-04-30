@@ -159,81 +159,30 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
     e.dataTransfer.setData('issueId', issueId);
   };
 
-  // Collect all descendants of Features per column so children appear under their parent Feature
-  // regardless of the child's own status. Claimed children are excluded from other columns.
-  const claimedByFeature = useMemo(() => {
-    const claimed = new Set<string>();
+  // CB-1944: kanban columns must reflect each issue's OWN status. A descendant
+  // of a FEATURE in column X should NOT be force-claimed into column X if its
+  // own status places it elsewhere — it belongs in the column matching its own
+  // status, falling back to the existing orphan-rendering paths when its
+  // parent isn't visible in the same column.
 
-    // Helper: recursively collect all descendant IDs
-    const collectDescendants = (parentId: string, visited: Set<string> = new Set()): string[] => {
-      if (visited.has(parentId)) return [];
-      visited.add(parentId);
-      const result: string[] = [];
-      issues.forEach(issue => {
-        if (issue.parentId === parentId) {
-          result.push(issue.id);
-          result.push(...collectDescendants(issue.id, visited));
-        }
-      });
-      return result;
-    };
-
-    // For each Feature, collect all its descendants
-    issues.filter(i => i.type === 'FEATURE').forEach(feature => {
-      const descendantIds = collectDescendants(feature.id);
-      descendantIds.forEach(id => claimed.add(id));
-    });
-
-    return claimed;
-  }, [issues]);
-
-  // Group issues by status, then by Feature → Epic → Story → Task hierarchy
-  // Children are grouped under their parent Feature's column, not their own status column
+  // Group issues by status. Each issue lands in the column matching its own
+  // status. Within a column, descendants whose parent is also in this column
+  // render nested under that parent (Feature → Epic → Story → Task → Subtask);
+  // descendants whose parent is in a different column render as orphans with
+  // breadcrumb context.
   const getColumnIssues = (status: IssueStatus) => {
-    // Features in this column
-    const features = sortIssuesInternal(issues.filter(i => i.status === status && i.type === 'FEATURE'));
+    // All issues of this status, by type, sorted
+    const sameStatus = issues.filter(i => i.status === status);
+    const features = sortIssuesInternal(sameStatus.filter(i => i.type === 'FEATURE'));
     const featureIds = new Set(features.map(f => f.id));
 
-    // For Features in this column, pull ALL their descendants (regardless of child status)
-    const featureDescendantIds = new Set<string>();
-    const collectDescendants = (parentId: string, visited: Set<string> = new Set()) => {
-      if (visited.has(parentId)) return;
-      visited.add(parentId);
-      issues.forEach(issue => {
-        if (issue.parentId === parentId) {
-          featureDescendantIds.add(issue.id);
-          collectDescendants(issue.id, visited);
-        }
-      });
-    };
-    features.forEach(f => collectDescendants(f.id));
+    const epics = sortIssuesInternal(sameStatus.filter(i => i.type === 'EPIC'));
+    const stories = sortIssuesInternal(sameStatus.filter(i => i.type === 'STORY'));
+    const tasks = sortIssuesInternal(sameStatus.filter(i => i.type === 'TASK' || i.type === 'BUG'));
+    const subtasks = sortIssuesInternal(sameStatus.filter(i => i.type === 'SUBTASK'));
 
-    // Non-feature issues in this column that are NOT claimed by a Feature in another column
-    const columnIssues = issues.filter(i =>
-      i.status === status &&
-      i.type !== 'FEATURE' &&
-      !claimedByFeature.has(i.id) // Not a descendant of any Feature
-    );
-
-    // Also include: descendants of this column's Features (regardless of their status)
-    const pulledInIssues = issues.filter(i => featureDescendantIds.has(i.id));
-    const allNonFeatureIssues = [...columnIssues, ...pulledInIssues.filter(i => i.status !== status)];
-
-    // Deduplicate (a descendant might already have this status)
-    const seen = new Set<string>();
-    const uniqueNonFeature: Issue[] = [];
-    [...columnIssues, ...pulledInIssues].forEach(i => {
-      if (!seen.has(i.id)) {
-        seen.add(i.id);
-        uniqueNonFeature.push(i);
-      }
-    });
-
-    // Separate by type and apply sorting
-    const epics = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'EPIC'));
-    const stories = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'STORY'));
-    const tasks = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'TASK' || i.type === 'BUG'));
-    const subtasks = sortIssuesInternal(uniqueNonFeature.filter(i => i.type === 'SUBTASK'));
+    // Total count = everything with this own-status, regardless of nesting.
+    const uniqueNonFeature = [...epics, ...stories, ...tasks, ...subtasks];
 
     // Group Epics by their parent Feature (in this column)
     const epicsByFeature: Record<string, Issue[]> = {};
