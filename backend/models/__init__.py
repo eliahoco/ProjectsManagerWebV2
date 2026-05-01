@@ -6,7 +6,7 @@ from models.database import Base, get_db, init_db, AsyncSessionLocal, engine
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
-from models.documentation import ExecutionSummary, FeatureDocumentation
+from models.documentation import ExecutionSummary, FeatureDocumentation, ImplementationNote
 from models.agent_registry import AgentProfile
 from models.skill_registry import SkillProfile
 from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
@@ -54,6 +54,10 @@ from models.schemas import (
     FeatureDocumentationCreate,
     FeatureDocumentationUpdate,
     FeatureDocumentationResponse,
+    NoteCategory,
+    NoteImportance,
+    ImplementationNoteCreate,
+    ImplementationNoteResponse,
 )
 from models.pipeline_schemas import (
     PipelineStatus,
@@ -93,6 +97,7 @@ __all__ = [
     # SQLAlchemy Models - Documentation
     "ExecutionSummary",
     "FeatureDocumentation",
+    "ImplementationNote",
     # SQLAlchemy Models - Agent Registry
     "AgentProfile",
     # SQLAlchemy Models - Skill Registry
@@ -152,6 +157,10 @@ __all__ = [
     "FeatureDocumentationCreate",
     "FeatureDocumentationUpdate",
     "FeatureDocumentationResponse",
+    "NoteCategory",
+    "NoteImportance",
+    "ImplementationNoteCreate",
+    "ImplementationNoteResponse",
     # Pydantic Schemas - Pipeline
     "PipelineExecutionCreate",
     "PipelineExecutionUpdate",

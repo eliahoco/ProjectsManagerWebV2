@@ -2,6 +2,8 @@
 SQLAlchemy models for Documentation & Implementation Notes
 """
 
+from datetime import datetime
+
 from sqlalchemy import (
     Column, String, Integer, Float, DateTime, Text, ForeignKey, Index
 )
@@ -9,6 +11,12 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from models.database import Base
+
+
+# Prisma owns the schema; its NOT NULL columns lack `DEFAULT CURRENT_TIMESTAMP`
+# on `updatedAt`, so we must populate it from Python on INSERT (CB-1953).
+def _utc_now() -> datetime:
+    return datetime.utcnow()
 
 
 class ImplementationNote(Base):
@@ -29,8 +37,14 @@ class ImplementationNote(Base):
     references = Column(Text, nullable=True)  # JSON array of file paths or URLs
     importance = Column(String, default="MEDIUM", nullable=False)  # LOW, MEDIUM, HIGH
 
-    createdAt = Column(DateTime, server_default=func.now(), nullable=False)
-    updatedAt = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    createdAt = Column(DateTime, default=_utc_now, server_default=func.now(), nullable=False)
+    updatedAt = Column(
+        DateTime,
+        default=_utc_now,
+        onupdate=_utc_now,
+        server_default=func.now(),
+        nullable=False,
+    )
 
     # Relationships
     issue = relationship("Issue", back_populates="implementationNotes")
@@ -73,8 +87,14 @@ class ExecutionSummary(Base):
     commitHashes = Column(Text, nullable=True)  # JSON array of commit hashes
     docFilePath = Column(String, nullable=True)  # Path to generated MD file
 
-    createdAt = Column(DateTime, server_default=func.now(), nullable=False)
-    updatedAt = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    createdAt = Column(DateTime, default=_utc_now, server_default=func.now(), nullable=False)
+    updatedAt = Column(
+        DateTime,
+        default=_utc_now,
+        onupdate=_utc_now,
+        server_default=func.now(),
+        nullable=False,
+    )
 
     # Relationships
     issue = relationship("Issue", back_populates="executionSummaries")
@@ -117,8 +137,14 @@ class FeatureDocumentation(Base):
     embeddingId = Column(String, nullable=True)  # ChromaDB document ID
     lastIndexedAt = Column(DateTime, nullable=True)
 
-    createdAt = Column(DateTime, server_default=func.now(), nullable=False)
-    updatedAt = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    createdAt = Column(DateTime, default=_utc_now, server_default=func.now(), nullable=False)
+    updatedAt = Column(
+        DateTime,
+        default=_utc_now,
+        onupdate=_utc_now,
+        server_default=func.now(),
+        nullable=False,
+    )
 
     __table_args__ = (
         Index("FeatureDocumentation_projectId_idx", "projectId"),
