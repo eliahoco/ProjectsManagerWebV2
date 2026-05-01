@@ -26,6 +26,7 @@ import {
   PlayCircle,
   Copy,
   FileCode,
+  BookOpen,
 } from 'lucide-react';
 import {
   Issue,
@@ -416,6 +417,20 @@ export function IssueDetailModal({
             </>
           )}
 
+          {/* Feature Documentation (CB-2065) — always visible for FEATURE issues */}
+          {issue.type === 'FEATURE' && (
+            <Link
+              href={`/codeboard/features/${encodeURIComponent(issue.id)}/documentation`}
+              className="flex items-center gap-2 px-4 py-3 rounded-lg border border-violet-900/40 bg-violet-950/10 hover:bg-violet-950/20 transition-colors"
+            >
+              <BookOpen className="w-4 h-4 text-violet-400 shrink-0" aria-hidden="true" />
+              <span className="text-sm font-medium text-zinc-200 flex-1">
+                Feature Documentation
+              </span>
+              <ChevronRight className="w-4 h-4 text-zinc-500" />
+            </Link>
+          )}
+
           {/* Implementation Summary (CB-1612) — compact view of latest ExecutionSummary */}
           {latestSummary && (
             <div className="border border-zinc-800 rounded-lg overflow-hidden">
@@ -464,13 +479,24 @@ export function IssueDetailModal({
                       </span>
                     )}
                   </div>
-                  <Link
-                    href={`/codeboard/issues/${encodeURIComponent(issue.id)}#implementation`}
-                    className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-                  >
-                    View Full
-                    <ChevronRight className="w-3 h-3" />
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/codeboard/issues/${encodeURIComponent(issue.id)}#implementation`}
+                      className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                      View Full
+                      <ChevronRight className="w-3 h-3" />
+                    </Link>
+                    {issue.type === 'FEATURE' && (
+                      <Link
+                        href={`/codeboard/features/${encodeURIComponent(issue.id)}/documentation`}
+                        className="inline-flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                      >
+                        <BookOpen className="w-3 h-3" aria-hidden="true" />
+                        Documentation
+                      </Link>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

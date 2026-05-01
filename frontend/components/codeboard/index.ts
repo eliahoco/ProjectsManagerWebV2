@@ -68,6 +68,9 @@ export { CompletionOptionsPanel } from './CompletionOptionsPanel';
 export type { CompletionOptionsPanelProps } from './CompletionOptionsPanel';
 export { InlineTerminalPanel } from './InlineTerminalPanel';
 export { ImplementationTab } from './ImplementationTab';
+export { FeatureDocumentationView } from './FeatureDocumentationView';
+export { GenerateFeatureDocButton } from './GenerateFeatureDocButton';
+export { PROSE_CLASSES, SAFE_URL_TRANSFORM, MARKDOWN_LINK_COMPONENTS } from './markdownPresets';
 
 // Issue Detail Template - reusable page template for issue detail views
 export {

@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 import {
   AlertCircle,
   Clock,
@@ -36,41 +36,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import {
+  PROSE_CLASSES,
+  SAFE_URL_TRANSFORM,
+  MARKDOWN_LINK_COMPONENTS,
+} from './markdownPresets';
 
 interface ImplementationTabProps {
   issueId: string | undefined;
   className?: string;
 }
 
-const PROSE_CLASSES =
-  'prose prose-sm prose-invert max-w-none ' +
-  'prose-headings:text-zinc-200 prose-p:text-zinc-300 ' +
-  'prose-a:text-cyan-400 prose-strong:text-zinc-200 ' +
-  'prose-code:text-cyan-400 prose-code:bg-zinc-800 ' +
-  'prose-code:px-1 prose-code:py-0.5 prose-code:rounded ' +
-  'prose-pre:bg-zinc-800 prose-pre:border prose-pre:border-zinc-700 ' +
-  'prose-blockquote:border-l-cyan-500 prose-blockquote:text-zinc-400 ' +
-  'prose-li:text-zinc-300';
-
 // Cap rendered file lists so a malformed/giant payload cannot freeze the tab.
 const MAX_FILES_DISPLAY = 500;
-
-// Locked-in explicit transform so future upgrades cannot widen the URL surface
-// (defaultUrlTransform strips javascript:/vbscript:/data: protocols).
-const SAFE_URL_TRANSFORM = defaultUrlTransform;
-
-const MARKDOWN_LINK_COMPONENTS = {
-  a: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a
-      {...props}
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer nofollow"
-    >
-      {children}
-    </a>
-  ),
-};
 
 function parseJsonStringArray(raw: string | undefined | null): string[] {
   if (!raw) return [];

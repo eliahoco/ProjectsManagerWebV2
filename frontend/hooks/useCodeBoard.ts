@@ -1302,6 +1302,85 @@ export function useCreateImplementationNote() {
   });
 }
 
+// ============================================
+// Feature Documentation (CB-2054)
+// ============================================
+
+/**
+ * T2.1.3 — TypeScript interface mirroring backend FeatureDocumentationResponse.
+ * All optional fields nullable to handle partially-populated rows.
+ */
+export interface FeatureDocumentationData {
+  id: string;
+  projectId: string;
+  featureIssueId: string;
+  featureKey: string;
+  title: string;
+  overview: string;
+  requirements: string;
+  implementation: string;
+  architecture: string;
+  /** JSON-encoded string array, e.g. '["TypeScript","FastAPI"]' */
+  techStack: string;
+  testingStrategy: string;
+  totalTasks: number;
+  completedTasks: number;
+  totalQATasks: number;
+  passedQATasks: number;
+  failedQATasks: number;
+  mdFilePath: string;
+  embeddingId: string | null;
+  lastIndexedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * T2.1.1 — GET feature documentation for a single FEATURE-type issue.
+ * Returns null when the backend responds 404 (not yet generated).
+ * Throws on 400 (issue is not FEATURE type) or other errors.
+ */
+export function useFeatureDocumentation(issueId: string | undefined) {
+  return useQuery<FeatureDocumentationData | null>({
+    queryKey: ['feature-documentation', issueId],
+    queryFn: async () => {
+      if (!issueId) return null;
+      return apiFetch<FeatureDocumentationData | null>(
+        `${API_BASE}/features/${issueId}/documentation`,
+      ).catch((err: unknown) => {
+        // 404 means not generated yet — return null rather than throwing.
+        if (err instanceof APIError && err.statusCode === 404) return null;
+        throw err;
+      });
+    },
+    enabled: !!issueId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * T2.1.2 — POST to generate (or regenerate) feature documentation.
+ * Invalidates the feature-documentation query on success so the view
+ * automatically refreshes.
+ */
+export function useGenerateFeatureDocumentation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ issueId }: { issueId: string }) => {
+      return apiFetch<FeatureDocumentationData>(
+        `${API_BASE}/features/${issueId}/documentation/generate`,
+        { method: 'POST' },
+      );
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['feature-documentation', variables.issueId],
+      });
+    },
+  });
+}
+
 // Generate execution documentation for an Epic/Story
 export function useGenerateDocumentation() {
   const queryClient = useQueryClient();
