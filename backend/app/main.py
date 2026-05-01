@@ -190,25 +190,40 @@ async def process_pending_completions():
 # according to DocSettings.retentionDays + maxPerIssue. Runs every 6 hours.
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
 
+# CB-2124 (H1): short delay before the FIRST retention pass. The 6h cadence
+# is right for steady state but means an aggressive `retentionDays=1` config
+# would not surface for a full window after boot. 60s gives enough time for
+# the app to finish handling startup traffic before scanning the DB.
+_RETENTION_FIRST_PASS_DELAY_SECONDS = 60
+
 
 async def process_doc_retention():
-    """Background task — applies DocSettings retention every 6 hours.
+    """Background task — applies DocSettings retention.
 
-    Failures are logged + swallowed so a transient DB error never kills
-    the loop. The first run happens after one interval, not at startup,
-    so a slow boot never blocks request serving.
+    First pass runs after `_RETENTION_FIRST_PASS_DELAY_SECONDS` (60s) so
+    aggressive configs surface within a session, then settles into the
+    `_RETENTION_INTERVAL_SECONDS` (6h) cadence. Failures are logged +
+    swallowed so a transient DB error never kills the loop.
     """
     from models import AsyncSessionLocal
     from services.doc_settings_service import apply_retention
 
+    delay = _RETENTION_FIRST_PASS_DELAY_SECONDS
+    first_pass = True
     while True:
         try:
-            await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
+            await asyncio.sleep(delay)
             async with AsyncSessionLocal() as db:
                 try:
                     purged_age, purged_cap = await apply_retention(db)
                     await db.commit()
-                    if purged_age or purged_cap:
+                    if first_pass:
+                        logger.info(
+                            "[startup] Doc retention first pass complete: "
+                            "purged_by_age=%d purged_by_cap=%d",
+                            purged_age, purged_cap,
+                        )
+                    elif purged_age or purged_cap:
                         logger.info(
                             "Doc retention pass: purged_by_age=%d purged_by_cap=%d",
                             purged_age, purged_cap,
@@ -216,10 +231,15 @@ async def process_doc_retention():
                 except Exception:
                     logger.exception("Doc retention pass failed — rolling back")
                     await db.rollback()
+            first_pass = False
+            delay = _RETENTION_INTERVAL_SECONDS
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Doc retention loop iteration failed")
+            # Don't tighten the loop on failure — keep the configured cadence.
+            first_pass = False
+            delay = _RETENTION_INTERVAL_SECONDS
 
 
 @asynccontextmanager

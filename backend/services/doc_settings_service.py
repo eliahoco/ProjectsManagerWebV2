@@ -65,27 +65,34 @@ async def apply_retention(db: AsyncSession) -> Tuple[int, int]:
     )
     purged_by_age = int(age_result.rowcount or 0)
 
-    # Phase 2: per-issue cap. Walk distinct issueIds, delete tail beyond
-    # the cap. Uses a windowed query to avoid loading every row in memory.
+    # Phase 2: per-issue cap. Walk distinct issueIds, delete every row older
+    # than the maxPerIssue-th newest. CB-2122 (M1) / CB-2124 (H2): pull the
+    # `executedAt` of the boundary row only, then delete everything strictly
+    # older than that timestamp — uses a single bound parameter instead of
+    # an N-element `NOT IN (...)` list, so we cannot trip
+    # SQLITE_MAX_VARIABLE_NUMBER even when maxPerIssue is at the upper
+    # bound (1000) on legacy SQLite builds (default 999 vars).
     issue_rows = await db.execute(
         select(ExecutionSummary.issueId).distinct()
     )
     issue_ids = [r[0] for r in issue_rows.all() if r[0]]
     purged_by_cap = 0
     for issue_id in issue_ids:
-        survivors = await db.execute(
-            select(ExecutionSummary.id)
+        boundary = await db.execute(
+            select(ExecutionSummary.executedAt)
             .where(ExecutionSummary.issueId == issue_id)
             .order_by(ExecutionSummary.executedAt.desc())
-            .limit(settings.maxPerIssue)
+            .limit(1)
+            .offset(settings.maxPerIssue)
         )
-        keep_ids = {row[0] for row in survivors.all()}
-        if not keep_ids:
+        oldest_keep = boundary.scalar_one_or_none()
+        if oldest_keep is None:
+            # Fewer rows than the cap — nothing to purge for this issue.
             continue
         cap_result = await db.execute(
             delete(ExecutionSummary)
             .where(ExecutionSummary.issueId == issue_id)
-            .where(ExecutionSummary.id.notin_(keep_ids))
+            .where(ExecutionSummary.executedAt <= oldest_keep)
         )
         purged_by_cap += int(cap_result.rowcount or 0)
 
