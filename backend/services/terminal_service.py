@@ -13,7 +13,7 @@ import select
 import fcntl
 import errno
 import logging
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -166,9 +166,14 @@ class TerminalService:
         self._sessions: Dict[str, TerminalSession] = {}
         self._sessions_by_issue: Dict[str, str] = {}  # issue_id -> session_id
         self._pending_completions: Dict[str, bool] = {}  # session_id -> needs_status_update
+        # CB-1585/CB-1586: doc-generation jobs queued by _run_claude_async
+        # (in a thread) for the async lifespan loop to consume. Captured
+        # BEFORE cleanup so the output snapshot, started_at/completed_at
+        # timestamps, and cwd survive even if cleanup_session races ahead.
+        self._pending_doc_jobs: Dict[str, Dict[str, Any]] = {}
         # Cache preservation: track which feature's cache is loaded per project
         self._active_feature_by_project: Dict[str, str] = {}  # project_path -> feature_issue_id
-        # Protects all four dicts above from concurrent mutation
+        # Protects all five dicts above from concurrent mutation
         self._sessions_lock = threading.Lock()
 
     def get_session(self, session_id: str) -> Optional[TerminalSession]:
@@ -350,6 +355,32 @@ class TerminalService:
                 session.phase = ExecutionPhase.COMPLETED
                 session.progress_percent = 100
                 session.current_action = "Completed successfully"
+                # CB-1585/CB-1586: capture snapshot for documentation
+                # generation BEFORE cleanup_session (the eviction loop) can
+                # run. The async completion loop in app/main.py picks this up
+                # and invokes documentation_generator.generate_from_execution.
+                # `completed_at` is stamped BEFORE the snapshot under the same
+                # lock so the doc-gen job carries an authoritative completion
+                # time and so other threads observing the session see a fully
+                # published value. The finally block below only writes
+                # completed_at when still None, preserving this value.
+                try:
+                    output_snapshot = session.get_output_snapshot(0)
+                    with self._sessions_lock:
+                        session.completed_at = datetime.utcnow()
+                        self._pending_doc_jobs[session_id] = {
+                            "output_snapshot": output_snapshot,
+                            "started_at": session.started_at,
+                            "completed_at": session.completed_at,
+                            "project_path": cwd,
+                            "issue_id": session.issue_id,
+                        }
+                except Exception as snap_err:
+                    # Never let snapshot capture break the completion path.
+                    logger.warning(
+                        "Failed to enqueue doc-gen job for session %s: %s",
+                        session_id, snap_err,
+                    )
                 with self._sessions_lock:
                     self._pending_completions[session_id] = True
                 # Call completion callback if registered
@@ -387,7 +418,11 @@ class TerminalService:
                     process.wait()
                 except (OSError, subprocess.TimeoutExpired) as e:
                     logger.warning(f"Process cleanup error: {e}")
-            session.completed_at = datetime.utcnow()
+            # CB-1586: backstop for timeout/error/cancel paths. The success
+            # branch sets completed_at earlier (alongside the doc-gen
+            # snapshot) — don't overwrite that authoritative timestamp.
+            if session.completed_at is None:
+                session.completed_at = datetime.utcnow()
 
             # Release the pool slot (cleans up worktree if one was created)
             # _run_claude_async runs in a thread, so use the sync variant
@@ -832,6 +867,8 @@ class TerminalService:
                 del self._sessions_by_issue[session.issue_id]
             # Also clean up pending completion flag
             self._pending_completions.pop(session_id, None)
+            # CB-1585: drop any unconsumed doc-gen job (best-effort enrichment)
+            self._pending_doc_jobs.pop(session_id, None)
 
             # Prune project→feature map if no other sessions reference this project path
             if session.project_path:
@@ -846,14 +883,54 @@ class TerminalService:
         session_pool.release_sync(session_id)
 
     def check_pending_completion(self, session_id: str) -> bool:
-        """Check if a session has pending auto-completion (and consume the flag)"""
+        """Check if a session has pending auto-completion (and consume the flag).
+
+        DEPRECATED for completion-loop use — pop-on-read makes per-session
+        retries impossible. New callers should use `peek_pending_completion`
+        + `clear_pending_completion` so a transaction can roll back without
+        losing the pending flag (CB-2116 / F1).
+        """
         with self._sessions_lock:
             return self._pending_completions.pop(session_id, False)
+
+    def peek_pending_completion(self, session_id: str) -> bool:
+        """Read pending-completion flag WITHOUT consuming it (CB-2116)."""
+        with self._sessions_lock:
+            return self._pending_completions.get(session_id, False)
+
+    def clear_pending_completion(self, session_id: str) -> None:
+        """Drop the pending-completion flag after a successful commit (CB-2116)."""
+        with self._sessions_lock:
+            self._pending_completions.pop(session_id, None)
 
     def get_all_pending_completions(self) -> List[str]:
         """Get all session IDs with pending completions — returns a snapshot copy"""
         with self._sessions_lock:
             return list(self._pending_completions.keys())
+
+    def consume_pending_doc_job(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Pop the queued documentation-generation job for `session_id`.
+
+        Returns None when the session never produced one (failed runs, or the
+        capture step itself raised). Callers MUST treat this as best-effort
+        enrichment — never raise from a missing/empty job.
+
+        DEPRECATED for completion-loop use — pop-on-read sacrifices the job
+        on transaction rollback. New callers should use `peek_pending_doc_job`
+        + `clear_pending_doc_job` (CB-2116 / F1).
+        """
+        with self._sessions_lock:
+            return self._pending_doc_jobs.pop(session_id, None)
+
+    def peek_pending_doc_job(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Read the queued doc-gen job WITHOUT consuming it (CB-2116)."""
+        with self._sessions_lock:
+            return self._pending_doc_jobs.get(session_id)
+
+    def clear_pending_doc_job(self, session_id: str) -> None:
+        """Drop the queued doc-gen job after a successful commit (CB-2116)."""
+        with self._sessions_lock:
+            self._pending_doc_jobs.pop(session_id, None)
 
 
 # Singleton instance

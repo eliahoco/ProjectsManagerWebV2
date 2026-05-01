@@ -57,34 +57,106 @@ async def evict_stale_sessions():
             await asyncio.sleep(60)
 
 
+async def _process_completion_for_session(db, session_id: str) -> bool:
+    """Process one pending session: status flip + CB-1585 doc-gen hook.
+
+    Returns True if the session was claimed (pending flag consumed), False
+    otherwise. Raises only on programmer errors; downstream failures inside
+    the doc-gen hook are swallowed since documentation is best-effort
+    enrichment, never the primary completion path.
+
+    CB-2116 (F1): caller is responsible for the transaction lifecycle AND
+    for clearing the pending flag + doc-job on success. This function uses
+    `peek_*` (non-destructive) so a rollback by the caller leaves the queue
+    intact for retry on the next loop tick.
+
+    Extracted from `process_pending_completions` so the hook is unit-testable
+    without spinning up the infinite loop.
+    """
+    from services.terminal_service import terminal_service
+    from services.documentation_generator import documentation_generator
+    from models import Issue
+
+    session = terminal_service.get_session(session_id)
+    if not session or not terminal_service.peek_pending_completion(session_id):
+        return False
+
+    result = await db.execute(select(Issue).where(Issue.id == session.issue_id))
+    issue = result.scalar_one_or_none()
+    if issue and issue.status not in ("COMPLETED_WAITING_QA", "DONE"):
+        issue.status = "COMPLETED_WAITING_QA"
+        issue.updatedAt = datetime.utcnow()
+        logger.info(
+            f"[AUTO-COMPLETE] Marked {session.issue_key} as "
+            f"COMPLETED_WAITING_QA after successful execution"
+        )
+
+    # CB-1585: documentation generation hook. Runs after status update,
+    # before commit, so the ExecutionSummary row and issue status land in
+    # the same transaction. Failures swallowed — best-effort enrichment.
+    doc_job = terminal_service.peek_pending_doc_job(session_id)
+    if doc_job and issue:
+        try:
+            await documentation_generator.generate_from_execution(
+                session=session,
+                issue=issue,
+                project_path=doc_job.get("project_path") or session.project_path,
+                db=db,
+            )
+        except Exception:
+            logger.exception(
+                "Documentation generation failed for %s",
+                session.issue_key,
+            )
+    elif doc_job and not issue:
+        # Issue row vanished mid-flight (deleted concurrently). Drop the
+        # captured snapshot rather than silently leaking it.
+        logger.warning(
+            "Discarding pending doc-gen job for %s — issue row not found",
+            session.issue_key,
+        )
+        terminal_service.clear_pending_doc_job(session_id)
+    return True
+
+
 async def process_pending_completions():
-    """Background task to process pending execution completions and update issue statuses"""
+    """Background task to process pending execution completions and update issue statuses.
+
+    CB-2116 (F1): each session gets its OWN transaction so a flush/commit
+    failure on session N does not roll back the work already done for
+    sessions 0..N-1. The pending flag and queued doc-job are only cleared
+    after the per-session commit succeeds — a rollback leaves them in place
+    for the next loop tick to retry.
+    """
     # Import here to avoid circular imports
     from services.terminal_service import terminal_service
-    from models import AsyncSessionLocal, Issue
+    from models import AsyncSessionLocal
 
     while True:
         try:
-            # Get all pending completions
             pending_session_ids = terminal_service.get_all_pending_completions()
-
-            if pending_session_ids:
+            for session_id in pending_session_ids:
                 async with AsyncSessionLocal() as db:
-                    for session_id in pending_session_ids:
-                        session = terminal_service.get_session(session_id)
-                        if session and terminal_service.check_pending_completion(session_id):
-                            # Update issue status to DONE
-                            result = await db.execute(
-                                select(Issue).where(Issue.id == session.issue_id)
-                            )
-                            issue = result.scalar_one_or_none()
-                            if issue and issue.status not in ("COMPLETED_WAITING_QA", "DONE"):
-                                issue.status = "COMPLETED_WAITING_QA"
-                                issue.updatedAt = datetime.utcnow()
-                                logger.info(f"[AUTO-COMPLETE] Marked {session.issue_key} as COMPLETED_WAITING_QA after successful execution")
-
-                    await db.commit()
+                    try:
+                        claimed = await _process_completion_for_session(db, session_id)
+                        if not claimed:
+                            continue
+                        await db.commit()
+                    except Exception:
+                        # Per-session rollback — pending flag + doc-job stay
+                        # in the queue and will be retried on the next tick.
+                        logger.exception(
+                            "Per-session completion failed for %s — will retry",
+                            session_id,
+                        )
+                        await db.rollback()
+                        continue
+                # Commit succeeded → safe to clear queue entries.
+                terminal_service.clear_pending_completion(session_id)
+                terminal_service.clear_pending_doc_job(session_id)
         except Exception as e:
+            # Top-level safety net for failures outside the per-session block
+            # (e.g., AsyncSessionLocal construction errors).
             logger.error(f"Error processing pending completions: {e}")
 
         # Check every 2 seconds
@@ -116,6 +188,19 @@ async def lifespan(app: FastAPI):
         )
         rag._fallback_to_persistent()
         app.state.rag = rag
+
+    # CB-1585: wire RAG into the documentation_generator singleton so the
+    # post-execution hook can index ExecutionSummary embeddings in ChromaDB.
+    # Done AFTER rag init and BEFORE the completion loop starts so the first
+    # completion sees a fully wired generator.
+    from services.documentation_generator import documentation_generator
+    documentation_generator._rag = app.state.rag
+
+    # CB-1600: wire RAG into qa_service so generate_qa_plan can fetch the
+    # latest ExecutionSummary and inject implementation context into the
+    # prompt. Same lifecycle/timing as the documentation_generator wiring.
+    from services.qa_service import qa_service
+    qa_service._rag = app.state.rag
 
     # Start background task for processing pending completions
     completion_task = asyncio.create_task(process_pending_completions())

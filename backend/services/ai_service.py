@@ -199,6 +199,13 @@ class AIService:
             logger.error(f"Claude API error: {e}", exc_info=True)
         return None
 
+    async def generate_text(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
+        """Public wrapper around the multi-provider generation pipeline.
+
+        Prefer this over the underscore-prefixed `_generate` for new callers.
+        """
+        return await self._generate(prompt, max_tokens=max_tokens)
+
     async def _generate(self, prompt: str, max_tokens: int = 2000) -> Optional[str]:
         """Generate response using available AI (Ollama first, then Claude)"""
         logger.debug(f"_generate called, prompt length: {len(prompt)}")

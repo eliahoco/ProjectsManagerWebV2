@@ -6,11 +6,15 @@ import asyncio
 import json
 import re
 import uuid
-from typing import List, Dict, Any, Optional, Callable, AsyncGenerator
+from typing import List, Dict, Any, Optional, Callable, AsyncGenerator, TYPE_CHECKING
 from datetime import datetime
 import logging
 
 from services.ai_service import ai_service
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +60,10 @@ class QAService:
         self.max_history_entries = 10  # Keep last 10 full runs
         # Track active executions for abort capability
         self._active_executions: Dict[str, ExecutionState] = {}
+        # CB-1600: RAG service for fetching implementation context (ExecutionSummary).
+        # Wired in app/main.py lifespan after RAGService initialization. Optional —
+        # if None, generate_qa_plan skips the implementation-details section.
+        self._rag: Optional["RAGService"] = None
 
     def get_execution_state(self, execution_id: str) -> Optional[ExecutionState]:
         """Get the state of an execution by ID"""
@@ -210,6 +218,7 @@ class QAService:
         issue_type: str,
         children: List[Dict],
         custom_instructions: Optional[str] = None,
+        db: Optional["AsyncSession"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate QA test cases for an issue using AI.
@@ -222,6 +231,12 @@ class QAService:
             issue_type: Issue type (FEATURE, EPIC, STORY, TASK, etc.)
             children: List of child issues
             custom_instructions: Optional custom instructions for QA generation
+            db: Optional AsyncSession used to fetch the latest ExecutionSummary
+                for this issue (CB-1600). When provided alongside a wired
+                self._rag, the implementation-details block is injected into
+                the prompt. If omitted (or RAG is unwired) the section is
+                skipped — preserves backwards compatibility with callers that
+                have not yet been updated by CB-1601.
 
         Returns:
             List of QA task suggestions
@@ -229,6 +244,20 @@ class QAService:
         if not ai_service.is_available():
             logger.warning("AI service not available for QA plan generation")
             return []
+
+        # CB-1600: fetch implementation context from latest ExecutionSummary
+        # via RAG so generated tests target what was actually built.
+        impl_context = ""
+        if db is not None and self._rag is not None:
+            try:
+                impl_context = await self._rag.get_implementation_context_for_qa(
+                    db, project_id, issue_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch implementation context for issue {issue_id}: {e}"
+                )
+                impl_context = ""
 
         # Parse QA configuration from custom instructions
         qa_config = self._parse_qa_config(custom_instructions)
@@ -326,6 +355,24 @@ class QAService:
         if qa_config["include_state_management_tests"]:
             specialized_guidance += "\n- Include state management tests: state transitions, persistence across sessions, undo/redo, session handling"
 
+        # CB-1600: implementation-details section, only when context is non-empty.
+        # Placed between the item-to-test block and the testing-configuration
+        # block so the AI grounds tests in what was actually built before
+        # selecting test areas/levels.
+        # Defense-in-depth (CB-1600 sec audit, M-1 + L-1):
+        #   * Neutralize literal close-fence so a crafted ExecutionSummary cannot
+        #     escape the IMPLEMENTATION DETAILS block to inject prompt instructions.
+        #   * Cap length at 8 KB to bound input-token cost from a pathological summary.
+        impl_section = ""
+        if impl_context:
+            safe_context = impl_context.replace(
+                "=== END IMPLEMENTATION DETAILS ===",
+                "=== END IMPL DETAILS (escaped) ===",
+            )
+            if len(safe_context) > 8000:
+                safe_context = safe_context[:8000] + "\n[... truncated ...]"
+            impl_section = f"\n=== IMPLEMENTATION DETAILS ===\n{safe_context}\n=== END IMPLEMENTATION DETAILS ===\n"
+
         prompt = f"""Generate comprehensive QA test cases for this {issue_type}.
 
 === ITEM TO TEST ===
@@ -335,7 +382,7 @@ Type: {issue_type}
 {children_context}
 {custom_section}
 === END OF ITEM ===
-
+{impl_section}
 === TESTING CONFIGURATION ===
 Testing Level: {qa_config['level'].upper()}
 {level_guidance}
@@ -390,6 +437,7 @@ Return ONLY the JSON array, no other text."""
         qa_task: Dict,
         project_path: str,
         issue_context: Optional[Dict] = None,
+        db: Optional["AsyncSession"] = None,
     ) -> Dict[str, Any]:
         """
         Execute a single automated QA task using AI.
@@ -409,11 +457,21 @@ Return ONLY the JSON array, no other text."""
                 - priority: CRITICAL, HIGH, MEDIUM, LOW
             project_path: Path to the project being tested
             issue_context: Optional context about the issue being tested:
+                - id: Issue ID (DB primary key) — required to look up the
+                  ExecutionSummary in CB-1603
+                - projectId: Project ID — required to enforce cross-project
+                  isolation when fetching the ExecutionSummary
                 - key: Issue key (e.g., "CB-123")
                 - title: Issue title
                 - type: Issue type (FEATURE, STORY, TASK, etc.)
                 - description: Issue description
                 - status: Current issue status
+            db: Optional AsyncSession used (alongside a wired self._rag) to
+                fetch the latest ExecutionSummary for the linked issue
+                (CB-1603). When provided, the implementation-context block is
+                injected into the execution prompt so the AI can ground its
+                pass/fail verdict in what was actually built. Omitted (or
+                rag-unwired) callers fall back to the pre-CB-1603 prompt.
 
         Returns:
             Execution result dict with:
@@ -465,6 +523,53 @@ Issue Status: {issue_context.get('status', 'Unknown')}
 === END ISSUE CONTEXT ===
 """
 
+        # CB-1603: fetch implementation context from latest ExecutionSummary
+        # via RAG so the AI grounds pass/fail in what was actually built
+        # (file paths, components, architecture notes) rather than in abstract
+        # requirements. Requires db, a wired self._rag, and an issue_context
+        # carrying both `id` and `projectId` (project scoping enforces the
+        # same cross-project isolation boundary as CB-1600/CB-1601).
+        impl_context = ""
+        if (
+            db is not None
+            and self._rag is not None
+            and issue_context is not None
+            and issue_context.get("id")
+            and issue_context.get("projectId")
+        ):
+            try:
+                impl_context = await self._rag.get_implementation_context_for_qa(
+                    db,
+                    issue_context["projectId"],
+                    issue_context["id"],
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch implementation context for QA task "
+                    f"{task_key} (issue {issue_context.get('key')}): {e}"
+                )
+                impl_context = ""
+
+        # Defense-in-depth (mirrors CB-1600 sec audit M-1 + L-1 on
+        # generate_qa_plan):
+        #   * Neutralize the literal close fence so a crafted ExecutionSummary
+        #     cannot escape the IMPLEMENTATION CONTEXT block to inject prompt
+        #     instructions that flip the verdict.
+        #   * Cap length at 8 KB to bound input-token cost from a pathological
+        #     summary.
+        impl_section = ""
+        if impl_context:
+            safe_context = impl_context.replace(
+                "=== END IMPLEMENTATION CONTEXT ===",
+                "=== END IMPL CONTEXT (escaped) ===",
+            )
+            if len(safe_context) > 8000:
+                safe_context = safe_context[:8000] + "\n[... truncated ...]"
+            impl_section = (
+                f"\n=== IMPLEMENTATION CONTEXT ===\n{safe_context}\n"
+                f"=== END IMPLEMENTATION CONTEXT ===\n"
+            )
+
         # Build priority context
         priority = qa_task.get('priority', 'MEDIUM')
         priority_note = ""
@@ -490,7 +595,7 @@ Expected Result:
 
 Project Path: {project_path}
 === END TEST CASE ===
-{issue_context_section}
+{issue_context_section}{impl_section}
 Analyze this test case and simulate its execution. Consider:
 
 1. FUNCTIONALITY CHECK: Does the described functionality make sense for this type of feature?
@@ -577,6 +682,7 @@ Return ONLY the JSON object, no additional text."""
         issue_context: Optional[Dict] = None,
         on_progress: Optional[Callable] = None,
         execution_id: Optional[str] = None,
+        db: Optional["AsyncSession"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Execute QA tasks one by one (sequential).
@@ -618,7 +724,9 @@ Return ONLY the JSON object, no additional text."""
                 if on_progress:
                     on_progress(i, total, task.get('key'), 'IN_PROGRESS')
 
-                result = await self.execute_qa_task(task, project_path, issue_context)
+                result = await self.execute_qa_task(
+                    task, project_path, issue_context, db=db
+                )
                 results.append(result)
 
                 # Update state after task completion
@@ -661,6 +769,7 @@ Return ONLY the JSON object, no additional text."""
         project_path: str,
         issue_context: Optional[Dict] = None,
         execution_id: Optional[str] = None,
+        db: Optional["AsyncSession"] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute QA tasks sequentially with streaming progress updates.
@@ -726,7 +835,9 @@ Return ONLY the JSON object, no additional text."""
                 }
 
                 # Execute the task
-                result = await self.execute_qa_task(task, project_path, issue_context)
+                result = await self.execute_qa_task(
+                    task, project_path, issue_context, db=db
+                )
                 results.append(result)
 
                 # Update state
@@ -791,6 +902,7 @@ Return ONLY the JSON object, no additional text."""
         project_path: str,
         issue_context: Optional[Dict] = None,
         max_concurrent: int = 5,
+        db: Optional["AsyncSession"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Execute QA tasks in parallel with concurrency limit.
@@ -808,7 +920,9 @@ Return ONLY the JSON object, no additional text."""
 
         async def execute_with_limit(task):
             async with semaphore:
-                return await self.execute_qa_task(task, project_path, issue_context)
+                return await self.execute_qa_task(
+                    task, project_path, issue_context, db=db
+                )
 
         tasks = [execute_with_limit(task) for task in qa_tasks]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -837,6 +951,7 @@ Return ONLY the JSON object, no additional text."""
         issue_context: Optional[Dict] = None,
         max_concurrent: int = 5,
         execution_id: Optional[str] = None,
+        db: Optional["AsyncSession"] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute QA tasks in parallel with streaming progress updates.
@@ -910,7 +1025,9 @@ Return ONLY the JSON object, no additional text."""
                 })
 
                 try:
-                    result = await self.execute_qa_task(task, project_path, issue_context)
+                    result = await self.execute_qa_task(
+                        task, project_path, issue_context, db=db
+                    )
                 except Exception as e:
                     result = {
                         'qaTaskId': task.get('id'),

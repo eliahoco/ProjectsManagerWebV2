@@ -359,6 +359,7 @@ async def generate_qa_plan(
         issue_type=issue.type,
         children=children,
         custom_instructions=request.customInstructions,
+        db=db,
     )
 
     # Create QA tasks
@@ -461,6 +462,7 @@ async def generate_qa_plan_stream(
                 issue_type=issue.type,
                 children=children,
                 custom_instructions=request.customInstructions,
+                db=db,
             )
 
             if not qa_suggestions:
@@ -566,7 +568,12 @@ async def execute_qa_tasks(
     project = result.scalar_one_or_none()
     project_path = project.path if project else "/unknown"
 
-    # Get the linked issue for context (use first task's first linked issue)
+    # Get the linked issue for context (use first task's first linked issue).
+    # CB-1603 sec audit M-1: QATaskIssueLink does not enforce that the linked
+    # Issue belongs to the same project as the QA task. Refuse to build the
+    # issue_context from a foreign-project Issue — this would otherwise leak
+    # that project's title/description AND its ExecutionSummary (via RAG)
+    # into the QA execution prompt and back into actualResult.
     issue_context = None
     if tasks[0].linkedIssues:
         first_link = tasks[0].linkedIssues[0]
@@ -574,8 +581,10 @@ async def execute_qa_tasks(
             select(Issue).where(Issue.id == first_link.issueId)
         )
         linked_issue = result.scalar_one_or_none()
-        if linked_issue:
+        if linked_issue and linked_issue.projectId == project_id:
             issue_context = {
+                "id": linked_issue.id,
+                "projectId": linked_issue.projectId,
                 "key": linked_issue.key,
                 "title": linked_issue.title,
                 "type": linked_issue.type,
@@ -583,6 +592,13 @@ async def execute_qa_tasks(
                 "description": linked_issue.description,
             }
             logger.info(f"Using issue context: {linked_issue.key} - {linked_issue.title}")
+        elif linked_issue:
+            logger.warning(
+                f"QA task {tasks[0].key} linked to issue {linked_issue.key} "
+                f"in foreign project {linked_issue.projectId} (task is in "
+                f"{project_id}) — skipping issue context to prevent "
+                f"cross-project leakage (CB-1603 M-1)."
+            )
 
     # Convert to dicts for service
     task_dicts = [
@@ -603,14 +619,16 @@ async def execute_qa_tasks(
         task.status = "IN_PROGRESS"
     await db.commit()
 
-    # Execute based on mode
+    # Execute based on mode (CB-1603: pass db so qa_service can fetch the
+    # latest ExecutionSummary and inject implementation context into the
+    # per-task prompt).
     if request.executionMode == "parallel":
         results = await qa_service.execute_qa_tasks_parallel(
-            task_dicts, project_path, issue_context
+            task_dicts, project_path, issue_context, db=db
         )
     else:
         results = await qa_service.execute_qa_tasks_sequential(
-            task_dicts, project_path, issue_context
+            task_dicts, project_path, issue_context, db=db
         )
 
     # Update tasks with results
@@ -687,7 +705,8 @@ async def execute_qa_tasks_stream(
     project = result.scalar_one_or_none()
     project_path = project.path if project else "/unknown"
 
-    # Get the linked issue for context
+    # CB-1603 sec audit M-1: refuse foreign-project linked issues. See the
+    # /qa/execute endpoint for full rationale.
     issue_context = None
     if tasks[0].linkedIssues:
         first_link = tasks[0].linkedIssues[0]
@@ -695,14 +714,22 @@ async def execute_qa_tasks_stream(
             select(Issue).where(Issue.id == first_link.issueId)
         )
         linked_issue = result.scalar_one_or_none()
-        if linked_issue:
+        if linked_issue and linked_issue.projectId == project_id:
             issue_context = {
+                "id": linked_issue.id,
+                "projectId": linked_issue.projectId,
                 "key": linked_issue.key,
                 "title": linked_issue.title,
                 "type": linked_issue.type,
                 "status": linked_issue.status,
                 "description": linked_issue.description,
             }
+        elif linked_issue:
+            logger.warning(
+                f"QA task {tasks[0].key} linked to issue {linked_issue.key} "
+                f"in foreign project {linked_issue.projectId} — skipping "
+                f"issue context (CB-1603 M-1)."
+            )
 
     # Convert to dicts for service
     task_dicts = [
@@ -729,7 +756,7 @@ async def execute_qa_tasks_stream(
     async def event_generator():
         """Generate SSE events for the streaming response"""
         async for event in qa_service.execute_qa_tasks_sequential_stream(
-            task_dicts, project_path, issue_context, execution_id
+            task_dicts, project_path, issue_context, execution_id, db=db
         ):
             # Update task in database when complete
             if event.get("event") == "task_complete":
@@ -815,7 +842,8 @@ async def execute_qa_tasks_parallel_stream(
     project = result.scalar_one_or_none()
     project_path = project.path if project else "/unknown"
 
-    # Get the linked issue for context
+    # CB-1603 sec audit M-1: refuse foreign-project linked issues. See the
+    # /qa/execute endpoint for full rationale.
     issue_context = None
     if tasks[0].linkedIssues:
         first_link = tasks[0].linkedIssues[0]
@@ -823,14 +851,22 @@ async def execute_qa_tasks_parallel_stream(
             select(Issue).where(Issue.id == first_link.issueId)
         )
         linked_issue = result.scalar_one_or_none()
-        if linked_issue:
+        if linked_issue and linked_issue.projectId == project_id:
             issue_context = {
+                "id": linked_issue.id,
+                "projectId": linked_issue.projectId,
                 "key": linked_issue.key,
                 "title": linked_issue.title,
                 "type": linked_issue.type,
                 "status": linked_issue.status,
                 "description": linked_issue.description,
             }
+        elif linked_issue:
+            logger.warning(
+                f"QA task {tasks[0].key} linked to issue {linked_issue.key} "
+                f"in foreign project {linked_issue.projectId} — skipping "
+                f"issue context (CB-1603 M-1)."
+            )
 
     # Convert to dicts for service
     task_dicts = [
@@ -860,7 +896,7 @@ async def execute_qa_tasks_parallel_stream(
     async def event_generator():
         """Generate SSE events for the parallel streaming response"""
         async for event in qa_service.execute_qa_tasks_parallel_stream(
-            task_dicts, project_path, issue_context, max_concurrent, execution_id
+            task_dicts, project_path, issue_context, max_concurrent, execution_id, db=db
         ):
             # Update task in database when complete
             if event.get("event") == "task_complete":

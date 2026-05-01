@@ -2,6 +2,8 @@
 Pydantic schemas for API request/response validation
 """
 
+import json
+
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
@@ -550,6 +552,124 @@ class FeatureDocumentationResponse(FeatureDocumentationCreate):
     id: str
     projectId: str
     lastIndexedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================
+# Implementation Note Schemas
+# ============================================
+
+
+class NoteCategory(str, Enum):
+    DECISION = "DECISION"
+    APPROACH = "APPROACH"
+    TRADEOFF = "TRADEOFF"
+    DEPENDENCY = "DEPENDENCY"
+    RISK = "RISK"
+    LESSON = "LESSON"
+    GENERAL = "GENERAL"
+
+
+class NoteImportance(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+# CB-2118 (F3): per-item caps + URL shape validation. Module-level constants
+# (Pydantic v2 promotes leading-underscore class attributes to ModelPrivateAttr,
+# which can't be used in arithmetic comparisons inside validators).
+_IMPL_NOTE_MAX_TAGS = 50
+_IMPL_NOTE_MAX_TAG_LEN = 200
+_IMPL_NOTE_MAX_REFS = 50
+_IMPL_NOTE_MAX_REF_LEN = 2_000
+_IMPL_NOTE_UNSAFE_URL_SCHEMES = ("javascript:", "vbscript:", "data:", "file:")
+
+
+class ImplementationNoteCreate(BaseModel):
+    """Schema for creating an implementation note.
+
+    `tags` and `references` are JSON-encoded strings (matching the storage
+    model). The validators enforce "valid JSON array of strings" so
+    downstream consumers can `json.loads` without try/except, and per-item
+    caps + URL-scheme rejection on `references` close the dormant XSS path
+    that existed when the only constraint was the outer `max_length` cap
+    (the endpoint is unauthenticated — see security audit H1/H2).
+    """
+    title: str = Field(..., min_length=1, max_length=500)
+    content: str = Field(..., min_length=1, max_length=100_000)
+    category: NoteCategory = NoteCategory.GENERAL
+    importance: NoteImportance = NoteImportance.MEDIUM
+    tags: Optional[str] = Field(default=None, max_length=10_000)
+    references: Optional[str] = Field(default=None, max_length=10_000)
+    author: Optional[str] = Field(default="System", max_length=200)
+
+    @field_validator("tags")
+    @classmethod
+    def _validate_tags(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"tags must be valid JSON: {exc.msg}") from None
+        if not isinstance(parsed, list) or not all(isinstance(i, str) for i in parsed):
+            raise ValueError("tags must be a JSON array of strings")
+        if len(parsed) > _IMPL_NOTE_MAX_TAGS:
+            raise ValueError(
+                f"tags exceeds {_IMPL_NOTE_MAX_TAGS} items (got {len(parsed)})"
+            )
+        for tag in parsed:
+            if len(tag) > _IMPL_NOTE_MAX_TAG_LEN:
+                raise ValueError(
+                    f"tag exceeds {_IMPL_NOTE_MAX_TAG_LEN} chars (got {len(tag)})"
+                )
+        return v
+
+    @field_validator("references")
+    @classmethod
+    def _validate_references(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        try:
+            parsed = json.loads(v)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"references must be valid JSON: {exc.msg}") from None
+        if not isinstance(parsed, list) or not all(isinstance(i, str) for i in parsed):
+            raise ValueError("references must be a JSON array of strings")
+        if len(parsed) > _IMPL_NOTE_MAX_REFS:
+            raise ValueError(
+                f"references exceeds {_IMPL_NOTE_MAX_REFS} items (got {len(parsed)})"
+            )
+        for ref in parsed:
+            if len(ref) > _IMPL_NOTE_MAX_REF_LEN:
+                raise ValueError(
+                    f"reference exceeds {_IMPL_NOTE_MAX_REF_LEN} chars (got {len(ref)})"
+                )
+            lower = ref.strip().lower()
+            for scheme in _IMPL_NOTE_UNSAFE_URL_SCHEMES:
+                if lower.startswith(scheme):
+                    raise ValueError(
+                        f"reference uses disallowed URL scheme: {scheme}"
+                    )
+        return v
+
+
+class ImplementationNoteResponse(BaseModel):
+    """Schema for implementation note response"""
+    id: str
+    issueId: str
+    title: str
+    content: str
+    category: str
+    author: str
+    tags: Optional[str] = None
+    references: Optional[str] = None
+    importance: str
     createdAt: datetime
     updatedAt: datetime
 

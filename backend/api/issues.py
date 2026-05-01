@@ -103,6 +103,7 @@ async def trigger_qa_generation(issue_id: str, issue_key: str, project_id: str):
                 issue_description=issue.description,
                 issue_type=issue.type,
                 children=children,
+                db=db,
             )
 
             if not qa_suggestions:
