@@ -4,6 +4,7 @@ Database Models for ProjectsManagerWebV2
 
 from models.database import Base, get_db, init_db, AsyncSessionLocal, engine
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
+from models.grouping import IssueGroup, IssueGroupMember
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation, ImplementationNote
@@ -29,6 +30,14 @@ from models.schemas import (
     ActivityResponse,
     IssueLinkCreate,
     IssueLinkResponse,
+    IssueSummary,
+    IssueGroupCreate,
+    IssueGroupUpdate,
+    IssueGroupResponse,
+    IssueGroupMemberResponse,
+    GroupAggregateStatus,
+    IssueGroupDetailResponse,
+    PaginatedGroupResponse,
     ProjectResponse,
     PaginatedResponse,
     BatchStatusUpdate,
@@ -52,6 +61,7 @@ from models.schemas import (
     # Documentation schemas
     ExecutionSummaryCreate,
     ExecutionSummaryResponse,
+    ExecutionSummaryWithKeyResponse,
     FeatureDocumentationCreate,
     FeatureDocumentationUpdate,
     FeatureDocumentationResponse,
@@ -88,6 +98,8 @@ __all__ = [
     "Comment",
     "Activity",
     "IssueLink",
+    "IssueGroup",
+    "IssueGroupMember",
     "IssueSequence",
     "Project",
     "CommitLink",
@@ -137,6 +149,14 @@ __all__ = [
     "ActivityResponse",
     "IssueLinkCreate",
     "IssueLinkResponse",
+    "IssueSummary",
+    "IssueGroupCreate",
+    "IssueGroupUpdate",
+    "IssueGroupResponse",
+    "IssueGroupMemberResponse",
+    "GroupAggregateStatus",
+    "IssueGroupDetailResponse",
+    "PaginatedGroupResponse",
     "ProjectResponse",
     "PaginatedResponse",
     "BatchStatusUpdate",
@@ -157,6 +177,7 @@ __all__ = [
     # Pydantic Schemas - Documentation
     "ExecutionSummaryCreate",
     "ExecutionSummaryResponse",
+    "ExecutionSummaryWithKeyResponse",
     "FeatureDocumentationCreate",
     "FeatureDocumentationUpdate",
     "FeatureDocumentationResponse",

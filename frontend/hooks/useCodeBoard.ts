@@ -1416,3 +1416,63 @@ export function useGenerateDocumentation() {
     },
   });
 }
+
+// ============================================
+// Documentation Settings Hooks (CB-2084 / S3.2)
+// ============================================
+
+export interface DocSettingsData {
+  key: string;
+  autoGenerate: boolean;
+  retentionDays: number;
+  maxPerIssue: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocSettingsUpdatePayload {
+  autoGenerate?: boolean;
+  retentionDays?: number;
+  maxPerIssue?: number;
+}
+
+/** GET /api/documentation/settings — singleton row, created on first call */
+export function useDocSettings() {
+  return useQuery<DocSettingsData>({
+    queryKey: ['doc-settings'],
+    queryFn: () => apiFetch<DocSettingsData>(`${API_BASE}/documentation/settings`),
+    staleTime: 60_000,
+  });
+}
+
+/** PATCH /api/documentation/settings — partial update, invalidates GET on success */
+export function useUpdateDocSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: DocSettingsUpdatePayload) =>
+      apiFetch<DocSettingsData>(`${API_BASE}/documentation/settings`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['doc-settings'], updated);
+    },
+  });
+}
+
+export interface ExecutionSummaryWithKeyData extends ExecutionSummaryData {
+  issueKey?: string | null;
+}
+
+/** GET /api/documentation/summaries?limit=N — recent execution summaries across all issues */
+export function useRecentExecutionSummaries(limit = 20) {
+  return useQuery<ExecutionSummaryWithKeyData[]>({
+    queryKey: ['recent-execution-summaries', limit],
+    queryFn: () =>
+      apiFetch<ExecutionSummaryWithKeyData[]>(
+        `${API_BASE}/documentation/summaries?limit=${limit}`,
+      ),
+    staleTime: 30_000,
+  });
+}

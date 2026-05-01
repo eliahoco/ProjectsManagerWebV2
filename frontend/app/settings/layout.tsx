@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings, Bot, Workflow, Sparkles } from 'lucide-react';
+import { Settings, Bot, Workflow, Sparkles, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const settingsNav = [
@@ -14,6 +14,7 @@ const settingsNav = [
   { name: 'AI Agents', href: '/settings/agents', icon: Bot },
   { name: 'AI Skills', href: '/settings/skills', icon: Sparkles },
   { name: 'Pipeline', href: '/settings/pipeline', icon: Workflow },
+  { name: 'Documentation', href: '/settings/documentation', icon: FileText },
 ];
 
 export default function SettingsLayout({

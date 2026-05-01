@@ -45,6 +45,7 @@ from app.errors import setup_exception_handlers  # noqa: E402
 from models.database import Base, get_db  # noqa: E402
 from models.doc_settings import DocSettings, SINGLETON_KEY  # noqa: E402
 from models.documentation import ExecutionSummary  # noqa: E402
+from models.issue import Issue, Project  # noqa: E402
 from services.doc_settings_service import (  # noqa: E402
     apply_retention,
     get_or_create_settings,
@@ -232,3 +233,94 @@ async def test_patch_empty_body_is_noop(client: AsyncClient):
     body = resp.json()
     assert body["autoGenerate"] is True
     assert body["retentionDays"] == 90
+
+
+# ---- /summaries endpoint (CB-2087) ----------------------------------------
+
+def _project_and_issue(
+    project_id: str, issue_id: str, key: str
+) -> tuple[Project, Issue]:
+    """Create a minimal Project + Issue pair for join tests."""
+    import time as _time
+
+    now_ms = int(_time.time() * 1000)
+    proj = Project(
+        id=project_id, name=f"proj-{project_id[:6]}",
+        path="/tmp/p", status="ACTIVE",
+        createdAt=now_ms, updatedAt=now_ms,
+    )
+    issue = Issue(
+        id=issue_id, projectId=project_id, key=key,
+        sequence=1, title="test", type="TASK",
+        status="DONE", priority="MEDIUM",
+        updatedAt=datetime.utcnow(),
+    )
+    return proj, issue
+
+
+@pytest.mark.asyncio
+async def test_summaries_empty(client: AsyncClient):
+    resp = await client.get("/api/documentation/summaries")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_summaries_returns_rows_newest_first(
+    client: AsyncClient,
+    factory,
+):
+    base = datetime.utcnow()
+    async with factory() as db:
+        for i in range(3):
+            db.add(_summary(f"s-{i}", "issue-X", base + timedelta(seconds=i)))
+        await db.commit()
+
+    resp = await client.get("/api/documentation/summaries")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 3
+    # Newest first
+    executed_ats = [r["executedAt"] for r in rows]
+    assert executed_ats == sorted(executed_ats, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_summaries_includes_issue_key(
+    client: AsyncClient,
+    factory,
+):
+    """issueKey from the Issue join is included in the response."""
+    proj, issue = _project_and_issue("proj-1", "issue-1", "CB-9999")
+    async with factory() as db:
+        db.add(proj)
+        await db.flush()
+        db.add(issue)
+        await db.flush()
+        db.add(_summary("sum-k1", issue.id, datetime.utcnow()))
+        await db.commit()
+
+    resp = await client.get("/api/documentation/summaries")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["issueKey"] == "CB-9999"
+
+
+@pytest.mark.asyncio
+async def test_summaries_limit_param(client: AsyncClient, factory):
+    base = datetime.utcnow()
+    async with factory() as db:
+        for i in range(10):
+            db.add(_summary(f"t-{i}", "issue-Y", base + timedelta(seconds=i)))
+        await db.commit()
+
+    resp = await client.get("/api/documentation/summaries?limit=3")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 3
+
+
+@pytest.mark.asyncio
+async def test_summaries_limit_exceeds_max_returns_422(client: AsyncClient):
+    resp = await client.get("/api/documentation/summaries?limit=999")
+    assert resp.status_code == 422

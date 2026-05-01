@@ -5,7 +5,7 @@ Pydantic schemas for API request/response validation
 import json
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -194,15 +194,199 @@ class IssueLinkCreate(BaseModel):
     linkType: LinkType
 
 
+class IssueSummary(BaseModel):
+    """Read-only summary projection of an Issue used to embed both ends of a link.
+
+    Populated from the ORM relationship side; never accepted as input.
+    Status is typed as ``str`` (not ``IssueStatus``) to mirror ``IssueResponse``
+    and avoid 500s on legacy rows whose status falls outside the enum.
+    """
+    id: str
+    key: str
+    title: str
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
 class IssueLinkResponse(BaseModel):
     id: str
     fromIssueId: str
     toIssueId: str
     linkType: LinkType
     createdAt: datetime
+    fromIssue: Optional[IssueSummary] = None
+    toIssue: Optional[IssueSummary] = None
 
     class Config:
         from_attributes = True
+
+
+# ============================================
+# Issue Group schemas (CB-1955 / Story CB-1961 / Task CB-1963)
+#
+# Wire-format contract for the IssueGroup + IssueGroupMember tables defined
+# in models/grouping.py. Aggregate status (statusBreakdown, completionPercent,
+# dominantStatus) is computed on read by the CB-1958 helper — no stored column.
+# ============================================
+
+# Hard caps on the create payload — bounded so the create path is predictable
+# and a malicious or buggy caller can't ship a multi-MB body that gets
+# persisted, indexed, and re-serialized in every list response.
+#   * 500 ids per create call: anything larger goes through a follow-up
+#     bulk-add endpoint instead of one giant POST body.
+#   * 64-char id: cuid is ~25 chars and CB-XXXX keys are far shorter; 64 is a
+#     forgiving ceiling.
+#   * 10_000-char description: matches the order of magnitude used elsewhere
+#     for human prose fields. Title is already capped at 500.
+_ISSUE_GROUP_MAX_INITIAL_MEMBERS = 500
+_ISSUE_GROUP_MAX_ISSUE_ID_LEN = 64
+_ISSUE_GROUP_MAX_DESCRIPTION_LEN = 10_000
+
+
+class IssueGroupCreate(BaseModel):
+    """Schema for creating a new IssueGroup.
+
+    `issueIds` is optional — a group can be created empty and have members
+    added later. When supplied, the schema dedupes (the underlying
+    `IssueGroupMember` table has a UNIQUE(groupId, issueId), so duplicates
+    would otherwise surface as a 500 from the service layer) and enforces
+    per-id length. Cross-project membership is the service layer's job —
+    only id-shape and list-cap are checked here.
+    """
+    title: str = Field(..., min_length=1, max_length=500)
+    description: Optional[str] = Field(
+        default=None, max_length=_ISSUE_GROUP_MAX_DESCRIPTION_LEN,
+    )
+    issueIds: Optional[List[str]] = Field(
+        default=None,
+        max_length=_ISSUE_GROUP_MAX_INITIAL_MEMBERS,
+    )
+
+    @field_validator("issueIds")
+    @classmethod
+    def _validate_issue_ids(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return v
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for raw in v:
+            if not isinstance(raw, str):
+                raise ValueError("issueIds entries must be strings")
+            issue_id = raw.strip()
+            if not issue_id:
+                raise ValueError("issueIds entries must be non-empty")
+            if len(issue_id) > _ISSUE_GROUP_MAX_ISSUE_ID_LEN:
+                raise ValueError(
+                    f"issueId exceeds {_ISSUE_GROUP_MAX_ISSUE_ID_LEN} chars "
+                    f"(got {len(issue_id)})"
+                )
+            if issue_id in seen:
+                continue
+            seen.add(issue_id)
+            deduped.append(issue_id)
+        return deduped
+
+
+class IssueGroupUpdate(BaseModel):
+    """Schema for updating an IssueGroup — title/description only.
+
+    Membership is managed via dedicated member endpoints (CB-1961 epic), not
+    via this PATCH body, so we deliberately omit issueIds here.
+    """
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+    description: Optional[str] = Field(
+        default=None, max_length=_ISSUE_GROUP_MAX_DESCRIPTION_LEN,
+    )
+
+
+class IssueGroupResponse(BaseModel):
+    """Group summary used in list endpoints.
+
+    `memberCount` is set by the service layer via ``setattr(group, ...)``
+    before ``model_validate`` — there is no ORM column for it. When the attr
+    is absent the field falls back to the default of 0 (validated by the
+    test suite); never wire ``func.count`` into the ORM in pursuit of this
+    field. Aggregate status is intentionally NOT included here; clients that
+    need it must fetch the detail endpoint.
+    """
+    id: str
+    projectId: str
+    title: str
+    description: Optional[str] = None
+    memberCount: int = Field(default=0, ge=0)
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IssueGroupMemberResponse(BaseModel):
+    """Membership row with embedded issue summary projection.
+
+    Mirrors the IssueLinkResponse pattern (CB-1960): the `issue` field is
+    populated from the read-only ORM relationship via selectinload at the
+    call site. Defaults to None so a bare ORM row without eager loading
+    still validates without raising.
+    """
+    id: str
+    groupId: str
+    issueId: str
+    createdAt: datetime
+    issue: Optional[IssueSummary] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GroupAggregateStatus(BaseModel):
+    """Computed status snapshot for a group's members.
+
+    Output shape for the CB-1958 compute_group_status helper. Empty groups
+    return an empty breakdown, completionPercent=0.0, dominantStatus=None.
+    `dominantStatus` is typed as plain str (not IssueStatus enum) for the
+    same reason IssueSummary.status is — to avoid 500s on legacy rows whose
+    status falls outside the current enum.
+    """
+    statusBreakdown: Dict[str, int] = Field(default_factory=dict)
+    completionPercent: float = Field(default=0.0, ge=0.0, le=100.0)
+    dominantStatus: Optional[str] = None
+
+
+class IssueGroupDetailResponse(BaseModel):
+    """Single group + full member list + aggregate status.
+
+    Used by GET /api/groups/{id}. `members` always contains the membership
+    rows even when their embedded `issue` projection is None (no eager
+    load), so callers can distinguish "no members" from "members without
+    issue summaries hydrated".
+    """
+    id: str
+    projectId: str
+    title: str
+    description: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+    members: List[IssueGroupMemberResponse] = Field(default_factory=list)
+    aggregateStatus: GroupAggregateStatus = Field(default_factory=GroupAggregateStatus)
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedGroupResponse(BaseModel):
+    """Paginated wrapper for the group list endpoint.
+
+    Mirrors PaginatedResponse for issues so the frontend can reuse the same
+    pagination component without a parallel shape.
+    """
+    items: List[IssueGroupResponse]
+    total: int
+    page: int
+    pageSize: int
+    totalPages: int
 
 
 # Project schemas (for reading from frontend DB)
@@ -504,6 +688,15 @@ class ExecutionSummaryResponse(ExecutionSummaryCreate):
 
     class Config:
         from_attributes = True
+
+
+class ExecutionSummaryWithKeyResponse(ExecutionSummaryResponse):
+    """ExecutionSummaryResponse enriched with the parent issue key.
+
+    Used by the project-wide /documentation/summaries endpoint (CB-2087)
+    so the frontend can display the CB-XXXX key without a second request.
+    """
+    issueKey: Optional[str] = None
 
 
 # ============================================
