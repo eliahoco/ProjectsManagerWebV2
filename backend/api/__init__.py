@@ -17,6 +17,7 @@ from api.pipeline import router as pipeline_router
 from api.park import router as park_router
 from api.skills import router as skills_router
 from api.documentation import router as documentation_router
+from api.doc_settings import router as doc_settings_router
 
 router = APIRouter()
 
@@ -41,3 +42,4 @@ router.include_router(pipeline_router, tags=["pipeline"])
 router.include_router(park_router, tags=["park"])
 router.include_router(skills_router, tags=["skills"])
 router.include_router(documentation_router, tags=["documentation"])
+router.include_router(doc_settings_router, tags=["documentation-settings"])

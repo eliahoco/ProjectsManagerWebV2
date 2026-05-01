@@ -7,6 +7,7 @@ from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Pro
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation, ImplementationNote
+from models.doc_settings import DocSettings, SINGLETON_KEY as DOC_SETTINGS_SINGLETON_KEY
 from models.agent_registry import AgentProfile
 from models.skill_registry import SkillProfile
 from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
@@ -58,6 +59,8 @@ from models.schemas import (
     NoteImportance,
     ImplementationNoteCreate,
     ImplementationNoteResponse,
+    DocSettingsResponse,
+    DocSettingsUpdate,
 )
 from models.pipeline_schemas import (
     PipelineStatus,
@@ -161,6 +164,11 @@ __all__ = [
     "NoteImportance",
     "ImplementationNoteCreate",
     "ImplementationNoteResponse",
+    # Documentation Settings
+    "DocSettings",
+    "DOC_SETTINGS_SINGLETON_KEY",
+    "DocSettingsResponse",
+    "DocSettingsUpdate",
     # Pydantic Schemas - Pipeline
     "PipelineExecutionCreate",
     "PipelineExecutionUpdate",

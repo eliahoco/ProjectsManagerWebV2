@@ -54,6 +54,8 @@ class LinkType(str, Enum):
     RELATES_TO = "RELATES_TO"
     DUPLICATES = "DUPLICATES"
     IS_DUPLICATED_BY = "IS_DUPLICATED_BY"
+    CAUSED_BY = "CAUSED_BY"
+    CAUSES = "CAUSES"
 
 
 class CommitLinkType(str, Enum):
@@ -675,3 +677,38 @@ class ImplementationNoteResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============================================
+# DocSettings (CB-2080 / T3.1.1) — singleton config for documentation pipeline
+# ============================================
+
+# Hard upper bounds. retentionDays caps to ~5 years; maxPerIssue caps at 1000
+# (anything beyond that and the per-issue ExecutionSummary list becomes
+# operationally meaningless).
+_DOC_SETTINGS_MAX_RETENTION_DAYS = 1825
+_DOC_SETTINGS_MAX_PER_ISSUE = 1000
+
+
+class DocSettingsResponse(BaseModel):
+    """Schema for DocSettings response."""
+    key: str
+    autoGenerate: bool
+    retentionDays: int
+    maxPerIssue: int
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DocSettingsUpdate(BaseModel):
+    """Schema for DocSettings PATCH — all fields optional."""
+    autoGenerate: Optional[bool] = None
+    retentionDays: Optional[int] = Field(
+        default=None, ge=1, le=_DOC_SETTINGS_MAX_RETENTION_DAYS,
+    )
+    maxPerIssue: Optional[int] = Field(
+        default=None, ge=1, le=_DOC_SETTINGS_MAX_PER_ISSUE,
+    )

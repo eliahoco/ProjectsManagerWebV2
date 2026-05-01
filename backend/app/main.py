@@ -96,18 +96,41 @@ async def _process_completion_for_session(db, session_id: str) -> bool:
     # the same transaction. Failures swallowed — best-effort enrichment.
     doc_job = terminal_service.peek_pending_doc_job(session_id)
     if doc_job and issue:
+        # CB-2082 (T3.1.3): honor DocSettings.autoGenerate. When the user
+        # has disabled auto-generation via /api/documentation/settings, we
+        # still flip the issue to COMPLETED_WAITING_QA above (the primary
+        # completion path) but skip the doc-gen call. The pending doc-job
+        # is still cleared by the caller after commit so it doesn't leak.
+        from services.doc_settings_service import get_or_create_settings
         try:
-            await documentation_generator.generate_from_execution(
-                session=session,
-                issue=issue,
-                project_path=doc_job.get("project_path") or session.project_path,
-                db=db,
-            )
+            doc_settings = await get_or_create_settings(db)
+            auto_generate = bool(doc_settings.autoGenerate)
         except Exception:
+            # Defensive: if settings load fails, default to ON so we don't
+            # silently drop summaries because of an unrelated DB hiccup.
             logger.exception(
-                "Documentation generation failed for %s",
+                "Failed to load DocSettings — defaulting autoGenerate=True"
+            )
+            auto_generate = True
+
+        if not auto_generate:
+            logger.info(
+                "doc-gen skipped for %s (autoGenerate=False)",
                 session.issue_key,
             )
+        else:
+            try:
+                await documentation_generator.generate_from_execution(
+                    session=session,
+                    issue=issue,
+                    project_path=doc_job.get("project_path") or session.project_path,
+                    db=db,
+                )
+            except Exception:
+                logger.exception(
+                    "Documentation generation failed for %s",
+                    session.issue_key,
+                )
     elif doc_job and not issue:
         # Issue row vanished mid-flight (deleted concurrently). Drop the
         # captured snapshot rather than silently leaking it.
@@ -163,6 +186,42 @@ async def process_pending_completions():
         await asyncio.sleep(2)
 
 
+# CB-2083 (T3.1.4): retention loop — purges old ExecutionSummary rows
+# according to DocSettings.retentionDays + maxPerIssue. Runs every 6 hours.
+_RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
+
+
+async def process_doc_retention():
+    """Background task — applies DocSettings retention every 6 hours.
+
+    Failures are logged + swallowed so a transient DB error never kills
+    the loop. The first run happens after one interval, not at startup,
+    so a slow boot never blocks request serving.
+    """
+    from models import AsyncSessionLocal
+    from services.doc_settings_service import apply_retention
+
+    while True:
+        try:
+            await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
+            async with AsyncSessionLocal() as db:
+                try:
+                    purged_age, purged_cap = await apply_retention(db)
+                    await db.commit()
+                    if purged_age or purged_cap:
+                        logger.info(
+                            "Doc retention pass: purged_by_age=%d purged_by_cap=%d",
+                            purged_age, purged_cap,
+                        )
+                except Exception:
+                    logger.exception("Doc retention pass failed — rolling back")
+                    await db.rollback()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Doc retention loop iteration failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
@@ -210,17 +269,27 @@ async def lifespan(app: FastAPI):
     evict_task = asyncio.create_task(evict_stale_sessions())
     logger.info("Started background task for stale session eviction")
 
+    # CB-2083 (T3.1.4): doc retention loop — purges old ExecutionSummary
+    # rows by retentionDays + maxPerIssue every 6h.
+    retention_task = asyncio.create_task(process_doc_retention())
+    logger.info("Started background task for doc retention")
+
     yield
 
     # Shutdown
     completion_task.cancel()
     evict_task.cancel()
+    retention_task.cancel()
     try:
         await completion_task
     except asyncio.CancelledError:
         pass
     try:
         await evict_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await retention_task
     except asyncio.CancelledError:
         pass
     # Cancel any remaining fire-and-forget background tasks
