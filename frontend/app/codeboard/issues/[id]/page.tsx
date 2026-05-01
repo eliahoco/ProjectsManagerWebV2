@@ -5,7 +5,7 @@
  * Route: /codeboard/issues/[id]
  */
 
-import { use, useState, useMemo } from 'react';
+import { use, useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -35,11 +35,13 @@ import {
   useIssueCommits,
   useLinkedCommits,
   useProjects,
+  useExecutionSummaries,
   type ExecutionSession,
 } from '@/hooks/useCodeBoard';
 import { ExecuteButton } from '@/components/codeboard/ExecuteButton';
 import { ExecutionModal } from '@/components/codeboard/ExecutionModal';
 import { CommentsSection } from '@/components/codeboard/comments-section';
+import { ImplementationTab } from '@/components/codeboard/ImplementationTab';
 import {
   Issue,
   ISSUE_TYPES,
@@ -64,7 +66,9 @@ export default function IssueDetailPage({ params }: PageProps) {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [activeExecution, setActiveExecution] = useState<ExecutionSession | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'activity' | 'comments'>('details');
+  const [activeTab, setActiveTab] = useState<
+    'details' | 'implementation' | 'activity' | 'comments'
+  >('details');
 
   // Queries
   const { data: issue, isLoading, error } = useIssue(id);
@@ -74,6 +78,30 @@ export default function IssueDetailPage({ params }: PageProps) {
     issue?.key || null
   );
   const { data: linkedCommits } = useLinkedCommits(issue?.id || null);
+  const { data: executionSummaries } = useExecutionSummaries(issue?.id);
+  const hasImplementation = (executionSummaries?.length ?? 0) > 0;
+
+  // If summaries vanish (e.g. cache invalidation) while user is on the tab,
+  // fall back to Details so an orphaned tab panel never lingers.
+  useEffect(() => {
+    if (!hasImplementation && activeTab === 'implementation') {
+      setActiveTab('details');
+    }
+  }, [hasImplementation, activeTab]);
+
+  // Honor #implementation hash from slide-over "View Full" link (CB-1612).
+  // Listens to hashchange so navigating between slide-over links re-applies the tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const apply = () => {
+      if (window.location.hash === '#implementation' && hasImplementation) {
+        setActiveTab('implementation');
+      }
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    return () => window.removeEventListener('hashchange', apply);
+  }, [hasImplementation]);
 
   // Mutations
   const updateIssue = useUpdateIssue();
@@ -303,6 +331,22 @@ export default function IssueDetailPage({ params }: PageProps) {
                       Details
                     </span>
                   </button>
+                  {hasImplementation && (
+                    <button
+                      onClick={() => setActiveTab('implementation')}
+                      className={cn(
+                        'pb-3 text-sm font-medium border-b-2 transition-colors',
+                        activeTab === 'implementation'
+                          ? 'border-cyan-500 text-cyan-500'
+                          : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Implementation
+                      </span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setActiveTab('activity')}
                     className={cn(
@@ -465,6 +509,12 @@ export default function IssueDetailPage({ params }: PageProps) {
                         </div>
                       </div>
                     )}
+                </div>
+              )}
+
+              {activeTab === 'implementation' && (
+                <div className="space-y-4">
+                  <ImplementationTab issueId={issue.id} />
                 </div>
               )}
 

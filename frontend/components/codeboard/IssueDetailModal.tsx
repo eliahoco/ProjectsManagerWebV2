@@ -17,6 +17,7 @@ import {
   GitCommit,
   Link2,
   ExternalLink,
+  ChevronDown,
   ChevronRight,
   CheckCircle,
   Sparkles,
@@ -24,6 +25,7 @@ import {
   CheckSquare,
   PlayCircle,
   Copy,
+  FileCode,
 } from 'lucide-react';
 import {
   Issue,
@@ -39,6 +41,7 @@ import {
   useIssueCommits,
   useLinkedCommits,
   useStartExecution,
+  useExecutionSummaries,
 } from '@/hooks/useCodeBoard';
 import { ExecuteButton } from './ExecuteButton';
 import { ShortcutBadge } from './KeyboardShortcutsHelp';
@@ -78,12 +81,27 @@ export function IssueDetailModal({
   const [editDescription, setEditDescription] = useState('');
   const [selectedChildren, setSelectedChildren] = useState<Set<string>>(new Set());
   const [isExecutingBatch, setIsExecutingBatch] = useState(false);
+  const [isImplSummaryOpen, setIsImplSummaryOpen] = useState(true);
 
   const startExecution = useStartExecution();
   const toast = useToast();
 
   // Fetch the issue with children directly from API
   const { data: issueWithChildren } = useIssue(issue?.id || null);
+
+  // Fetch execution summaries (CB-1612).
+  const { data: executionSummaries } = useExecutionSummaries(issue?.id);
+  const latestSummary = executionSummaries?.[0];
+  const implFiles = useMemo(() => {
+    if (!latestSummary?.filesTouched) return [] as string[];
+    try {
+      const parsed = JSON.parse(latestSummary.filesTouched);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((p): p is string => typeof p === 'string');
+    } catch {
+      return [];
+    }
+  }, [latestSummary?.filesTouched]);
 
   // Copy issue key to clipboard
   const copyIssueKey = useCallback(() => {
@@ -396,6 +414,66 @@ export function IssueDetailModal({
                 <p className="text-zinc-400 whitespace-pre-wrap">{issue.description}</p>
               )}
             </>
+          )}
+
+          {/* Implementation Summary (CB-1612) — compact view of latest ExecutionSummary */}
+          {latestSummary && (
+            <div className="border border-zinc-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setIsImplSummaryOpen(!isImplSummaryOpen)}
+                aria-expanded={isImplSummaryOpen}
+                aria-controls="impl-summary-modal-panel"
+                className="w-full flex items-center gap-2 px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors text-left"
+              >
+                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="text-sm font-medium text-zinc-300 flex-1">Implementation Summary</span>
+                <span className="text-xs text-zinc-500 mr-2">
+                  {executionSummaries && executionSummaries.length > 1
+                    ? `latest of ${executionSummaries.length}`
+                    : 'latest'}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 text-zinc-500 transition-transform',
+                    isImplSummaryOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+              {isImplSummaryOpen && (
+                <div id="impl-summary-modal-panel" className="px-4 py-3 border-t border-zinc-800 space-y-3">
+                  {latestSummary.summary && (
+                    <p className="text-sm text-zinc-300 whitespace-pre-wrap">
+                      {latestSummary.summary.length > 200
+                        ? `${latestSummary.summary.slice(0, 200).trimEnd()}…`
+                        : latestSummary.summary}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+                      <FileCode className="w-3 h-3" aria-hidden="true" />
+                      {implFiles.length} file{implFiles.length === 1 ? '' : 's'}
+                    </span>
+                    {typeof latestSummary.linesAdded === 'number' && latestSummary.linesAdded > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-green-900/40 text-green-400 font-mono">
+                        +{latestSummary.linesAdded}
+                      </span>
+                    )}
+                    {typeof latestSummary.linesRemoved === 'number' && latestSummary.linesRemoved > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-red-900/40 text-red-400 font-mono">
+                        -{latestSummary.linesRemoved}
+                      </span>
+                    )}
+                  </div>
+                  <Link
+                    href={`/codeboard/issues/${encodeURIComponent(issue.id)}#implementation`}
+                    className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    View Full
+                    <ChevronRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Properties Grid */}

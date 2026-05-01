@@ -1182,6 +1182,126 @@ export function useFeatureLiveData(projectId: string | null) {
   };
 }
 
+// ============================================
+// Documentation Hooks (CB-1606)
+// ============================================
+
+export type NoteCategory =
+  | 'DECISION'
+  | 'APPROACH'
+  | 'TRADEOFF'
+  | 'DEPENDENCY'
+  | 'RISK'
+  | 'LESSON'
+  | 'GENERAL';
+
+export type NoteImportance = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ExecutionSummaryData {
+  id: string;
+  issueId: string;
+  summary: string;
+  executedAt: string;
+  executionTime: number;
+  provider: string;
+  model?: string;
+  exitCode?: number;
+  componentsModified: string; // JSON array
+  filesTouched: string; // JSON array
+  linesAdded?: number;
+  linesRemoved?: number;
+  architectureNotes?: string;
+  technicalNotes?: string;
+  challengesFaced?: string;
+  lessonsLearned?: string;
+  commitHashes?: string; // JSON array
+  docFilePath?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImplementationNoteData {
+  id: string;
+  issueId: string;
+  title: string;
+  content: string;
+  category: NoteCategory;
+  author: string;
+  importance: NoteImportance;
+  tags?: string;
+  references?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateImplementationNoteData {
+  title: string;
+  content: string;
+  category?: NoteCategory;
+  importance?: NoteImportance;
+  tags?: string;
+  references?: string;
+  author?: string;
+}
+
+// Fetch execution summaries for an issue
+export function useExecutionSummaries(issueId: string | undefined) {
+  return useQuery<ExecutionSummaryData[]>({
+    queryKey: ['execution-summaries', issueId],
+    queryFn: async () => {
+      if (!issueId) return [];
+      return apiFetch<ExecutionSummaryData[]>(
+        `${API_BASE}/issues/${issueId}/documentation`
+      );
+    },
+    enabled: !!issueId,
+    staleTime: 30_000,
+  });
+}
+
+// Fetch implementation notes for an issue
+export function useImplementationNotes(issueId: string | undefined) {
+  return useQuery<ImplementationNoteData[]>({
+    queryKey: ['implementation-notes', issueId],
+    queryFn: async () => {
+      if (!issueId) return [];
+      return apiFetch<ImplementationNoteData[]>(
+        `${API_BASE}/issues/${issueId}/documentation/notes`
+      );
+    },
+    enabled: !!issueId,
+    staleTime: 30_000,
+  });
+}
+
+// Create implementation note
+export function useCreateImplementationNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      issueId,
+      data,
+    }: {
+      issueId: string;
+      data: CreateImplementationNoteData;
+    }) => {
+      return apiFetch<ImplementationNoteData>(
+        `${API_BASE}/issues/${issueId}/documentation/notes`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      );
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['implementation-notes', variables.issueId],
+      });
+    },
+  });
+}
+
 // Generate execution documentation for an Epic/Story
 export function useGenerateDocumentation() {
   const queryClient = useQueryClient();
