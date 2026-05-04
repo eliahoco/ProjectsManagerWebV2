@@ -3,6 +3,7 @@ Pydantic schemas for API request/response validation
 """
 
 import json
+import re
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any, Dict
@@ -190,7 +191,21 @@ class ActivityResponse(BaseModel):
 
 # Issue Link schemas
 class IssueLinkCreate(BaseModel):
-    toIssueId: str
+    """Create payload for POST /api/issues/{id}/relations (CB-1971).
+
+    `extra="forbid"` rejects over-posting; `toIssueId` is bound by the
+    project's id-shape (CUIDs ~25 chars, UUIDs 36, CB-XXXX keys far
+    shorter — 64 is a forgiving ceiling). The pattern blocks control
+    chars (CRLF) so the value can't forge log lines downstream.
+    """
+    model_config = {"extra": "forbid"}
+
+    toIssueId: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_\-]+$",
+    )
     linkType: LinkType
 
 
@@ -221,6 +236,110 @@ class IssueLinkResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Bulk relation create (CB-1972). Hard-cap targets to bound the per-request
+# work — each target may trigger a cycle-BFS for transitive types, and the
+# cycle BFS itself is bounded by `_MAX_CYCLE_VISIT` in api/relations.py.
+# 100 covers realistic batch-link use cases (multi-select in the UI, import
+# flows) without letting a single POST hold a worker indefinitely.
+_ISSUE_LINK_BULK_MAX_TARGETS = 100
+_ISSUE_LINK_ID_PATTERN = r"^[A-Za-z0-9_\-]+$"
+
+
+class IssueLinkBulkCreate(BaseModel):
+    """Create payload for POST /api/issues/{id}/relations/bulk (CB-1972).
+
+    `extra="forbid"` blocks over-posting. `toIssueIds` is bounded both in
+    list size and per-id length/shape — same regex as the single-create
+    schema, applied per item via `field_validator`. Duplicates within the
+    request are tolerated here and deduplicated at the endpoint layer
+    (preserving order) so callers can safely paste a list with repeats.
+    """
+    model_config = {"extra": "forbid"}
+
+    toIssueIds: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=_ISSUE_LINK_BULK_MAX_TARGETS,
+    )
+    linkType: LinkType
+
+    @field_validator("toIssueIds")
+    @classmethod
+    def _check_id_shape(cls, value: List[str]) -> List[str]:
+        for tid in value:
+            if not isinstance(tid, str) or not (1 <= len(tid) <= 64):
+                raise ValueError("toIssueId must be a 1-64 char string")
+            if not re.fullmatch(_ISSUE_LINK_ID_PATTERN, tid):
+                raise ValueError("toIssueId contains invalid characters")
+        return value
+
+
+class IssueLinkBulkSkipped(BaseModel):
+    """One entry of the `skipped` list returned by the bulk-create endpoint.
+
+    `reason` is one of `DUPLICATE` (link already exists in either
+    direction) or `CYCLE` (transitive types only — would close a cycle in
+    the BLOCKS or CAUSES family graph). Surfaced explicitly so the client
+    can distinguish *why* an item didn't make it in without forcing a
+    second round-trip to GET the existing relations.
+    """
+    toIssueId: str
+    reason: str
+
+
+class IssueLinkBulkResponse(BaseModel):
+    """Response for POST /api/issues/{id}/relations/bulk (CB-1972).
+
+    `created` mirrors the single-create response shape (CB-1971) — full
+    IssueLinkResponse with embedded fromIssue/toIssue summaries — and is
+    ordered to match the order in which links were inserted (which itself
+    reflects the de-duplicated order of the request payload). `skipped`
+    enumerates targets that were silently skipped instead of raising.
+    """
+    created: List[IssueLinkResponse]
+    skipped: List[IssueLinkBulkSkipped]
+
+
+class IssueLinkDeleteResponse(BaseModel):
+    """Response for DELETE /api/issues/{id}/relations/{relation_id} (CB-1974).
+
+    `deleted` is the number of rows removed in the same transaction —
+    always 2 in practice (the targeted row plus its companion inverse row
+    written by the create path, CB-1971). Surfaced as an integer instead
+    of a fixed constant so a future evolution that drops the companion
+    invariant doesn't silently break the contract — clients can assert
+    on the count and notice.
+
+    Bounds: ``ge=1`` because the endpoint raises 404 on rowcount=0 (no
+    successful response is ever returned with 0); ``le=2`` because the
+    DELETE matches at most the addressed row plus exactly one companion
+    under UNIQUE(fromIssueId, toIssueId, linkType). A future regression
+    that returns 0 or >2 will fail Pydantic response validation and
+    surface as a 500 instead of a silent contract drift.
+    """
+    deleted: int = Field(..., ge=1, le=2)
+
+
+class IssueRelationsListResponse(BaseModel):
+    """Response for GET /api/issues/{id}/relations (CB-1973).
+
+    Splits the rows by direction:
+      * `outbound` — rows where the requested issue is the `from` end
+        (i.e. the row's ``fromIssueId`` equals the issue id in the URL).
+      * `inbound` — rows where the requested issue is the `to` end.
+
+    Because the create path writes a primary row plus a companion inverse
+    row in the same transaction (CB-1971), every relation involving the
+    issue surfaces in BOTH lists — once as the user-authored direction and
+    once as its companion. Consumers that want a deduplicated view can
+    pick the side that matches their UI orientation; the embedded
+    fromIssue/toIssue summaries (CB-1960) carry enough context to render
+    either side without additional fetches.
+    """
+    outbound: List[IssueLinkResponse]
+    inbound: List[IssueLinkResponse]
 
 
 # ============================================
@@ -330,12 +449,27 @@ class IssueGroupMemberResponse(BaseModel):
     populated from the read-only ORM relationship via selectinload at the
     call site. Defaults to None so a bare ORM row without eager loading
     still validates without raising.
+
+    `position` (CB-1965) is the 1-based ordinal of this member within its
+    group. The default of 0 covers two cases: legacy rows that pre-date the
+    column, and bare ORM instances built in tests without going through the
+    `next_member_position` service helper.
     """
     id: str
     groupId: str
     issueId: str
+    position: int = Field(default=0, ge=0)
     createdAt: datetime
     issue: Optional[IssueSummary] = None
+
+    @field_validator("position", mode="before")
+    @classmethod
+    def _default_position(cls, v: Any) -> Any:
+        # SQLAlchemy only fires Column(default=0) at flush time, so a bare
+        # ORM row built in tests or before commit has position=None.
+        # Coerce None → 0 so model_validate succeeds without forcing every
+        # caller to commit first.
+        return 0 if v is None else v
 
     class Config:
         from_attributes = True
@@ -387,6 +521,241 @@ class PaginatedGroupResponse(BaseModel):
     page: int
     pageSize: int
     totalPages: int
+
+
+# Bulk membership add (CB-1989). Reuses the create-group caps so a caller can
+# never bulk-grow a group's bounded membership in a single POST larger than
+# the original max-initial-members budget. The id-shape rules mirror
+# IssueGroupCreate so callers see a single consistent contract for member ids
+# regardless of which endpoint they hit.
+class IssueGroupMembersBulkAdd(BaseModel):
+    """Schema for POST /api/groups/{group_id}/members (CB-1989).
+
+    Body shape: ``{issueIds: [str]}``. The schema dedupes duplicates within
+    the request (the same UNIQUE(groupId, issueId) the create path defends
+    against) and enforces per-id length, mirroring IssueGroupCreate so the
+    two endpoints share one wire contract for member ids. ``min_length=1``
+    because an empty bulk-add is a no-op the caller shouldn't be making.
+    Cross-project membership and missing-issue checks live in the endpoint —
+    only id-shape and list-cap are checked here.
+    """
+    model_config = {"extra": "forbid"}
+
+    issueIds: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=_ISSUE_GROUP_MAX_INITIAL_MEMBERS,
+    )
+
+    @field_validator("issueIds")
+    @classmethod
+    def _validate_issue_ids(cls, v: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for raw in v:
+            if not isinstance(raw, str):
+                raise ValueError("issueIds entries must be strings")
+            issue_id = raw.strip()
+            if not issue_id:
+                raise ValueError("issueIds entries must be non-empty")
+            if len(issue_id) > _ISSUE_GROUP_MAX_ISSUE_ID_LEN:
+                raise ValueError(
+                    f"issueId exceeds {_ISSUE_GROUP_MAX_ISSUE_ID_LEN} chars "
+                    f"(got {len(issue_id)})"
+                )
+            if issue_id in seen:
+                continue
+            seen.add(issue_id)
+            deduped.append(issue_id)
+        return deduped
+
+
+class IssueGroupMembersBulkAddResponse(BaseModel):
+    """Response for POST /api/groups/{group_id}/members (CB-1989).
+
+    `added` is the list of issueIds that were inserted as new members in
+    this call. `skipped` is the list of issueIds that were silently skipped
+    because they were already members of the group (UNIQUE(groupId,
+    issueId) would otherwise fire). Order in both lists preserves the
+    deduplicated request order so the caller can correlate against their
+    input array.
+
+    The shape is intentionally minimal (issueIds only, no embedded member
+    rows) — clients that need the full membership list call the detail
+    endpoint (CB-1986) once after the bulk-add.
+    """
+    added: List[str] = Field(default_factory=list)
+    skipped: List[str] = Field(default_factory=list)
+
+
+# Bulk membership remove (CB-1990). Same wire-shape rules as BulkAdd so
+# callers see one consistent contract for member-id payloads regardless of
+# which membership endpoint they hit. The cap mirrors the create-group
+# budget so a single DELETE can never strip more rows than a single POST
+# could ever have inserted.
+class IssueGroupMembersBulkRemove(BaseModel):
+    """Schema for DELETE /api/groups/{group_id}/members (CB-1990).
+
+    Body shape: ``{issueIds: [str]}``. The schema dedupes duplicates within
+    the request (so a doubled-up id is only classified once across the
+    {removed, notFound} split) and enforces the same per-id length cap as
+    IssueGroupMembersBulkAdd. ``min_length=1`` because an empty bulk-remove
+    is a no-op the caller shouldn't be making — a 422 here surfaces the
+    misuse instead of silently returning ``{removed:0, notFound:[]}``.
+
+    Existence + membership checks live in the endpoint — only id-shape and
+    list-cap are enforced here. Issues that don't exist at all and issues
+    that exist but aren't members of this group are treated identically as
+    `notFound` (the caller's request was "not a member"); the endpoint is
+    therefore safe against a probing caller (no existence-oracle leak via
+    differing error codes).
+    """
+    model_config = {"extra": "forbid"}
+
+    issueIds: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=_ISSUE_GROUP_MAX_INITIAL_MEMBERS,
+    )
+
+    @field_validator("issueIds")
+    @classmethod
+    def _validate_issue_ids(cls, v: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for raw in v:
+            if not isinstance(raw, str):
+                raise ValueError("issueIds entries must be strings")
+            issue_id = raw.strip()
+            if not issue_id:
+                raise ValueError("issueIds entries must be non-empty")
+            if len(issue_id) > _ISSUE_GROUP_MAX_ISSUE_ID_LEN:
+                raise ValueError(
+                    f"issueId exceeds {_ISSUE_GROUP_MAX_ISSUE_ID_LEN} chars "
+                    f"(got {len(issue_id)})"
+                )
+            if issue_id in seen:
+                continue
+            seen.add(issue_id)
+            deduped.append(issue_id)
+        return deduped
+
+
+class IssueGroupMembersBulkRemoveResponse(BaseModel):
+    """Response for DELETE /api/groups/{group_id}/members (CB-1990).
+
+    `removed` is the actual number of GroupMember rows the DELETE wiped —
+    sourced from the statement's rowcount, not ``len(notFound's complement)``,
+    so a concurrent unmember between the membership-classification SELECT
+    and the DELETE is reflected truthfully (the caller learns we removed
+    fewer than they expected, instead of us claiming a phantom delete).
+
+    `notFound` is the list of issueIds that were not members of the group
+    at the moment of classification — covers (a) ids that point to
+    nonexistent issues and (b) ids that point to issues belonging to a
+    different group / no group / the same project but not this group.
+    Lumping both cases under one bucket avoids leaking issue existence to
+    a probing caller via differing response shapes (the endpoint has no
+    project-level auth today, but the unified shape future-proofs against
+    one being added later). Order preserves the deduped request order so
+    the caller can correlate against their input array.
+
+    Issues themselves are never deleted — only the GroupMember row is
+    removed (FK on IssueGroupMember.issueId is RESTRICT-by-omission, but
+    the DELETE here only touches IssueGroupMember rows, not Issue rows).
+    """
+    removed: int = Field(..., ge=0)
+    notFound: List[str] = Field(default_factory=list)
+
+
+# Bulk membership reorder (CB-2015 / drag-to-reorder).
+#
+# Why a single bulk-rewrite endpoint instead of a per-row PATCH /members/{id}:
+#   * The drag-to-reorder UX moves one row but renumbers a contiguous range
+#     (e.g. moving slot 3 → 1 shifts 1..2 down). A per-row PATCH would force
+#     the client into N round-trips with a half-numbered intermediate state
+#     visible on the wire, plus we'd need a temporary unique-violation
+#     suspension. A single payload that asserts "this is the new full order"
+#     is atomic, monotonically renumbers 1..N inside one transaction, and
+#     can't leave gaps under crash or partial failure.
+#   * The set-equality precondition (orderedIssueIds must equal the current
+#     member set, no extras / no missing) closes the TOCTOU window where a
+#     concurrent add/remove between the client's last GET and this PATCH
+#     would silently demote or duplicate a member. The 400 surfaces the
+#     diff so the caller can re-fetch and retry against fresh state.
+class IssueGroupMembersReorder(BaseModel):
+    """Schema for PATCH /api/groups/{group_id}/members/reorder (CB-2015).
+
+    Body shape: ``{orderedIssueIds: [str]}`` — the COMPLETE membership of
+    the group in the new desired order (1-based positions assigned in
+    list order). The schema dedupes (silent dedup is a contract bug here:
+    a duplicate would mean the caller's UI shows the same member twice,
+    which we surface as VALIDATION_ERROR rather than collapsing) and caps
+    at the same _ISSUE_GROUP_MAX_INITIAL_MEMBERS as create / bulk-add so
+    the wire-payload budgets stay aligned.
+
+    Cross-membership / existence / set-equality checks live in the endpoint
+    — only id-shape, list cap, and within-request uniqueness are checked
+    here. ``min_length=1`` because reordering an empty group is a no-op
+    the caller shouldn't be making.
+    """
+    model_config = {"extra": "forbid"}
+
+    orderedIssueIds: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=_ISSUE_GROUP_MAX_INITIAL_MEMBERS,
+    )
+
+    @field_validator("orderedIssueIds")
+    @classmethod
+    def _validate_ordered_issue_ids(cls, v: List[str]) -> List[str]:
+        # Unlike bulk-add (which silently dedupes — caller's "I asked twice
+        # for the same op" is benign), reorder must reject duplicates: a
+        # repeated id in the order list means the caller's frame of the
+        # ordering is internally inconsistent. Surface as VALIDATION_ERROR
+        # so the UI can re-derive the order from server state instead of
+        # the schema picking an arbitrary winner. Same per-id length cap as
+        # the sibling membership endpoints to keep one wire contract.
+        seen: set[str] = set()
+        cleaned: List[str] = []
+        for raw in v:
+            if not isinstance(raw, str):
+                raise ValueError("orderedIssueIds entries must be strings")
+            issue_id = raw.strip()
+            if not issue_id:
+                raise ValueError("orderedIssueIds entries must be non-empty")
+            if len(issue_id) > _ISSUE_GROUP_MAX_ISSUE_ID_LEN:
+                raise ValueError(
+                    f"issueId exceeds {_ISSUE_GROUP_MAX_ISSUE_ID_LEN} chars "
+                    f"(got {len(issue_id)})"
+                )
+            if issue_id in seen:
+                raise ValueError(
+                    f"orderedIssueIds contains duplicate id '{issue_id}' — "
+                    "reorder requires a strict order with no repeats"
+                )
+            seen.add(issue_id)
+            cleaned.append(issue_id)
+        return cleaned
+
+
+class IssueGroupMembersReorderResponse(BaseModel):
+    """Response for PATCH /api/groups/{group_id}/members/reorder (CB-2015).
+
+    `reordered` is the count of member rows the UPDATE re-positioned —
+    sourced from the actual statement rowcount, so a no-op reorder (every
+    position already matches) honestly reports 0 instead of len(payload).
+
+    `members` is the post-update full member list (sorted by the new
+    position 1..N) so the caller can prime its detail-page cache from the
+    response without a follow-up GET. Mirrors the IssueGroupDetailResponse
+    `members` shape (each entry includes the embedded IssueSummary
+    projection) so the frontend can swap the cache atomically without a
+    second round-trip.
+    """
+    reordered: int = Field(..., ge=0)
+    members: List[IssueGroupMemberResponse] = Field(default_factory=list)
 
 
 # Project schemas (for reading from frontend DB)
@@ -905,3 +1274,108 @@ class DocSettingsUpdate(BaseModel):
     maxPerIssue: Optional[int] = Field(
         default=None, ge=1, le=_DOC_SETTINGS_MAX_PER_ISSUE,
     )
+
+
+# ============================================
+# AutoPilot Persistence (CB-1951)
+# ============================================
+
+
+class AutoPilotQueueStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    PAUSED = "paused"
+    WAITING_RESET = "waiting_reset"
+    COMPLETED = "completed"
+    ABORTED = "aborted"
+
+
+class AutoPilotTaskStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class AutoPilotPauseReason(str, Enum):
+    TOKEN_EXHAUSTION = "token_exhaustion"
+    CRASH_RECOVERY = "crash_recovery"
+    MANUAL = "manual"
+
+
+class AutoPilotEventType(str, Enum):
+    CREATED = "created"
+    TASK_STARTED = "task_started"
+    TASK_COMPLETED = "task_completed"
+    TASK_FAILED = "task_failed"
+    AUTO_PAUSED = "auto_paused"
+    MANUAL_PAUSED = "manual_paused"
+    RESUMED = "resumed"
+    AUTO_RESUME_SCHEDULED = "auto_resume_scheduled"
+    AUTO_RESUME_FIRED = "auto_resume_fired"
+    ABORTED = "aborted"
+    CRASH_RECOVERY_DETECTED = "crash_recovery_detected"
+
+
+class AutoPilotTaskRecordResponse(BaseModel):
+    id: str
+    queueId: str
+    sequence: int
+    issueId: str
+    status: AutoPilotTaskStatus
+    attempts: int
+    sessionId: Optional[str] = None
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    failureReason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AutoPilotEventResponse(BaseModel):
+    id: str
+    queueId: str
+    type: AutoPilotEventType
+    payload: str  # JSON string; callers can json.loads
+    createdAt: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AutoPilotQueueRecordResponse(BaseModel):
+    id: str
+    projectId: str
+    featureId: Optional[str] = None
+    status: AutoPilotQueueStatus
+    currentIndex: int
+    pauseReason: Optional[AutoPilotPauseReason] = None
+    resetTime: Optional[datetime] = None
+    config: str  # JSON string
+    createdAt: datetime
+    updatedAt: datetime
+    completedAt: Optional[datetime] = None
+    tasks: List[AutoPilotTaskRecordResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AutoPilotRecoveryStatusResponse(BaseModel):
+    """Returned by GET /api/execute/queue/recovery-status."""
+    queues: List[AutoPilotQueueRecordResponse] = []
+    recoveredCount: int = 0
+
+
+class AutoPilotMetricsResponse(BaseModel):
+    """Returned by GET /api/execute/queue/metrics."""
+    pending: int = 0
+    running: int = 0
+    paused: int = 0
+    waiting_reset: int = 0
+    completed: int = 0
+    aborted: int = 0
+    autoPause24h: int = 0
+    avgResetWaitSeconds: Optional[float] = None

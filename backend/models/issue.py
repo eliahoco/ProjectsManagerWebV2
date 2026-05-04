@@ -3,7 +3,8 @@ SQLAlchemy models for CodeBoard issue tracking
 """
 
 from sqlalchemy import (
-    Column, String, Integer, Float, DateTime, Text, ForeignKey, Index, BigInteger
+    Column, String, Integer, Float, DateTime, Text, ForeignKey, Index, BigInteger,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -163,13 +164,24 @@ class IssueLink(Base):
     fromIssueId = Column(String, ForeignKey("Issue.id", ondelete="CASCADE"), nullable=False)
     toIssueId = Column(String, ForeignKey("Issue.id", ondelete="CASCADE"), nullable=False)
 
-    linkType = Column(String, nullable=False)  # BLOCKS, IS_BLOCKED_BY, RELATES_TO, etc.
+    linkType = Column(String, nullable=False)  # BLOCKS, IS_BLOCKED_BY, RELATES_TO, DUPLICATES, IS_DUPLICATED_BY, CAUSED_BY, CAUSES
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
+
+    # CB-1960: read-only relationships used to project endpoint summaries
+    # ({id, key, title, status}) for both ends of the link without a second
+    # round-trip. Never written through. lazy="raise_on_sql" forces eager
+    # loading via selectinload while remaining safe on transient instances.
+    fromIssue = relationship("Issue", foreign_keys=[fromIssueId], lazy="raise_on_sql")
+    toIssue = relationship("Issue", foreign_keys=[toIssueId], lazy="raise_on_sql")
 
     __table_args__ = (
         Index("IssueLink_fromIssueId_idx", "fromIssueId"),
         Index("IssueLink_toIssueId_idx", "toIssueId"),
+        UniqueConstraint(
+            "fromIssueId", "toIssueId", "linkType",
+            name="IssueLink_fromIssueId_toIssueId_linkType_key",
+        ),
     )
 
 

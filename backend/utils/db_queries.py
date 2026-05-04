@@ -5,10 +5,62 @@ This module provides efficient query patterns for common operations,
 replacing recursive Python loops with single SQL queries.
 """
 
-from sqlalchemy import select, text, and_, update
+from sqlalchemy import select, text, and_, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Set
+from typing import List, Optional, Set
 from datetime import datetime
+
+
+# CB-1975 / CB-1976 — cycle-detection helper for IssueLink relations.
+#
+# Asymmetric transitive families only. Maps each user-facing linkType to the
+# canonical-direction family that lives in the IssueLink graph; symmetric
+# types (RELATES_TO, DUPLICATES / IS_DUPLICATED_BY) are present with value
+# ``None`` so an unknown linkType raises (catches misuse loudly) while the
+# known-symmetric set short-circuits to "no cycle" without a DB hit.
+#
+# Must stay in sync with ``api/relations.py::_TRANSITIVE_FAMILIES`` and the
+# ``LinkType`` enum in ``models/schemas.py``. CB-1977 will dedupe the two
+# dicts; until then a new LinkType added in one place must be mirrored
+# here. The ``_CYCLE_KNOWN_LINK_TYPES`` set below catches the drift at
+# call time even before that cleanup lands.
+_CYCLE_TRANSITIVE_FAMILIES: dict = {
+    "BLOCKS": "BLOCKS",
+    "IS_BLOCKED_BY": "BLOCKS",
+    "CAUSES": "CAUSES",
+    "CAUSED_BY": "CAUSES",
+}
+
+# Symmetric link types — known but cycle-irrelevant. Listed explicitly so
+# ``check_cycle_on_insert`` can distinguish "known and skipped" from
+# "unknown and rejected" rather than collapsing both to a silent ``None``.
+_CYCLE_SYMMETRIC_LINK_TYPES: frozenset = frozenset((
+    "RELATES_TO",
+    "DUPLICATES",
+    "IS_DUPLICATED_BY",
+))
+
+_CYCLE_KNOWN_LINK_TYPES: frozenset = frozenset(
+    _CYCLE_TRANSITIVE_FAMILIES
+) | _CYCLE_SYMMETRIC_LINK_TYPES
+
+# Hard cap on recursive-CTE depth (per CB-1976 spec). Bounds the longest
+# path the cycle search will walk; the CTE's per-path ``seen`` membership
+# guard further bounds total work to O(N) where N is the reachable
+# node-set in the canonical family. Together they prevent both
+# pathological-depth chains and diamond-shaped row explosion. A cycle
+# deeper than 50 hops will not be detected — the cap is a DoS guard, not
+# a correctness boundary.
+_CYCLE_DEPTH_CAP = 50
+
+# Path delimiter for the recursive CTE's path column. ``\x1f`` (ASCII Unit
+# Separator) is a non-printable C0 control char that cannot appear in any
+# text-encoded issue id (CUIDs match ``[a-z0-9]+``; the request layer's
+# Pydantic regex restricts to ``[A-Za-z0-9_\-]+``). Using a non-printable
+# means a direct-DB-write tool that plants a malformed id still cannot
+# inject false path entries via delimiter collision; ``split('\x1f')``
+# round-trips losslessly regardless of id alphabet.
+_CYCLE_PATH_DELIMITER = "\x1f"
 
 
 async def get_all_descendant_ids(db: AsyncSession, parent_id: str) -> List[str]:
@@ -968,6 +1020,70 @@ async def cascade_done_to_parents(
     return updated_parents
 
 
+async def compute_group_status(
+    db: AsyncSession,
+    group_id: str,
+):
+    """Aggregate-status snapshot for an IssueGroup (CB-1958 / CB-1966 / CB-1967).
+
+    Single GROUP BY query joins ``IssueGroupMember`` to ``Issue`` and bins the
+    member statuses. Returns a :class:`GroupAggregateStatus` with:
+
+    * ``statusBreakdown`` — ``{status: count}`` for every status present.
+    * ``completionPercent`` — share of members in ``DONE`` or
+      ``COMPLETED_WAITING_QA``, expressed in ``[0, 100]`` and rounded to two
+      decimals. Uses the same "complete" predicate as
+      ``cascade_status_to_parents`` so the helper agrees with the cascade
+      gate. ``CANCELLED`` rows count toward the denominator (no carve-out)
+      to keep the percentage stable as members are cancelled vs. dropped.
+    * ``dominantStatus`` — status with the highest count; ties broken by
+      lexicographic sort of the status string (deterministic, no hidden
+      enum priority — ``dominantStatus`` is plain str, see schema comment).
+
+    Empty groups (and groups whose members are all orphaned by FK cleanup)
+    return ``GroupAggregateStatus()`` defaults: ``{}``, ``0.0``, ``None``.
+
+    Authorization contract: this is a util — it does NOT verify that the
+    caller can read ``group_id``. Routers MUST scope on
+    ``IssueGroup.projectId`` before invoking, or the helper becomes an IDOR
+    surface for any caller who can guess a group id.
+    """
+    from models import GroupAggregateStatus, IssueGroupMember
+    from models.issue import Issue
+
+    result = await db.execute(
+        select(Issue.status, func.count())
+        .join(IssueGroupMember, IssueGroupMember.issueId == Issue.id)
+        .where(IssueGroupMember.groupId == group_id)
+        .group_by(Issue.status)
+    )
+    rows = result.all()
+
+    # ``Issue.status`` is NOT NULL with a server-side default, so a None key
+    # is unreachable today — filter anyway so a corrupted/migrated row can't
+    # crash ``min()`` with a str/None comparison (defense in depth).
+    breakdown = {status: int(count) for status, count in rows if status is not None}
+
+    if not breakdown:
+        return GroupAggregateStatus()
+
+    total = sum(breakdown.values())
+
+    completed = breakdown.get("DONE", 0) + breakdown.get("COMPLETED_WAITING_QA", 0)
+    completion_percent = round(completed * 100.0 / total, 2) if total else 0.0
+
+    # Tie-break: pick the lexicographically smallest status name among those
+    # with the top count. Deterministic, no hidden enum priority.
+    top_count = max(breakdown.values())
+    dominant_status = min(s for s, c in breakdown.items() if c == top_count)
+
+    return GroupAggregateStatus(
+        statusBreakdown=breakdown,
+        completionPercent=completion_percent,
+        dominantStatus=dominant_status,
+    )
+
+
 async def get_recent_activity(
     db: AsyncSession,
     project_id: str = None,
@@ -1041,3 +1157,164 @@ async def get_recent_activity(
         }
         for row in rows
     ]
+
+
+async def check_cycle_on_insert(
+    db: AsyncSession,
+    from_id: str,
+    to_id: str,
+    link_type: str,
+) -> Optional[List[str]]:
+    """Detect whether inserting a typed relation would close a directed cycle.
+
+    Recursive-CTE reachability check for the asymmetric transitive families
+    BLOCKS (BLOCKS / IS_BLOCKED_BY) and CAUSES (CAUSES / CAUSED_BY). The
+    symmetric families (RELATES_TO, DUPLICATES / IS_DUPLICATED_BY) carry no
+    direction so cannot form cycles — returns ``None`` for those without a
+    DB hit.
+
+    The proposed ``(from_id, to_id, link_type)`` is mapped to its canonical
+    family edge ``a → b``. A cycle exists iff ``b`` can already reach ``a``
+    via existing canonical-family rows. The CTE walks outgoing edges of the
+    canonical family only — companion rows in the inverse direction are
+    deliberately skipped so each undirected pair is counted once. This
+    matches the canonical-edge convention used by the create path
+    (``api/relations.py``) so the helper and the route agree on what counts
+    as a cycle.
+
+    Runs inside the caller's transaction. The CTE sees in-flight edges
+    flushed by the caller (matters for bulk inserts where consecutive
+    candidates can close a cycle against an earlier sibling in the same
+    batch — caller must ``await db.flush()`` between iterations to make
+    the new edges visible).
+
+    Args:
+        db: Async session participating in the caller's transaction.
+        from_id: User-supplied source issue id.
+        to_id: User-supplied target issue id.
+        link_type: One of the LinkType enum values.
+
+    Returns:
+        ``None`` if no cycle would form, or if ``link_type`` is non-transitive.
+        On detection: a list of canonical issue ids tracing the closing
+        cycle, ordered as ``[a, b, ...intermediaries..., a]`` — the
+        proposed canonical edge ``a → b`` followed by the existing path
+        ``b → ... → a`` back to the source. Suitable for surfacing to the
+        user as ``details.path`` per the CB-1977 contract.
+
+    Authorization contract: this is a util — it does NOT verify that
+    ``from_id`` and ``to_id`` share a project. Routers MUST enforce
+    same-project before invoking, or the returned cycle path becomes an
+    IDOR surface for any caller who can guess an issue id from another
+    project. ``api/relations.py::create_relation`` performs this check
+    before invoking the helper; new callers must follow suit.
+
+    Raises:
+        ValueError: if ``link_type`` is not a recognised LinkType value.
+            Symmetric types (RELATES_TO, DUPLICATES, IS_DUPLICATED_BY)
+            return ``None`` (cycle check is irrelevant); only truly
+            unknown values raise. This catches misuse at the boundary
+            instead of silently disabling the cycle check.
+
+    Notes:
+        * Depth is capped at 50 ancestors (``_CYCLE_DEPTH_CAP``) per
+          CB-1976 spec. A cycle deeper than 50 hops will not be detected
+          here — the cap is a DoS guard, not a correctness boundary.
+          Combined with the per-path ``seen`` membership filter (which
+          enforces simple paths), worst-case work for a graph with N
+          reachable nodes and branching factor k is O(min(k^50, N!)),
+          which is acceptable for realistic project graphs but can grow
+          on pathological adversarial graphs. CB-1977 should layer in a
+          per-request rate limit / size gate at the route boundary.
+        * Self-link (``from_id == to_id``) is the caller's responsibility
+          to reject upstream; this helper does not special-case it.
+        * Returns the shortest path on tie (``ORDER BY depth, path``) so
+          the surfaced diagnostic is deterministic across runs and SQLite
+          versions — important because the path is asserted on in tests.
+    """
+    if link_type not in _CYCLE_KNOWN_LINK_TYPES:
+        raise ValueError(f"Unknown linkType: {link_type!r}")
+
+    family = _CYCLE_TRANSITIVE_FAMILIES.get(link_type)
+    if family is None:
+        # Symmetric type — cycle check is meaningless. Skip the DB hit.
+        return None
+
+    # Canonical edge: for the inverse forms (IS_BLOCKED_BY, CAUSED_BY) the
+    # row stored in the family graph is the companion, so the canonical
+    # edge flips. Mirrors ``api/relations.py::_canonical_edge``.
+    if link_type in ("BLOCKS", "CAUSES"):
+        a, b = from_id, to_id
+    else:
+        a, b = to_id, from_id
+
+    # ``seen`` is a delimiter-bracketed list of node ids visited so far, used
+    # to prune any edge that would re-enter a node already on the current
+    # path. Without it, the CTE would enumerate every distinct path through
+    # the graph (UNION ALL semantics), and a diamond like b→x→y, b→x→z,
+    # y→t, z→t blows up exponentially in row count even though each path is
+    # short. Depth caps the *length* of a walk; ``seen`` caps the *width* —
+    # together they bound work to O(N) rows where N is the reachable
+    # node-set size, matching the BFS-with-visited bound used by
+    # ``api/relations.py::_has_cycle``.
+    #
+    # The bracketing (``delim`` on both sides of every id) is what makes the
+    # ``instr(seen, delim || id || delim) = 0`` membership test exact —
+    # without the leading delim it would match an id that is a suffix of
+    # another id; CUIDs make this unlikely but not impossible. Bracketing
+    # keeps the test correct regardless of id alphabet.
+    #
+    # The membership filter never blocks the legitimate cycle close: the
+    # walk starts at ``b`` and the proposed edge is ``a → b``, so reaching
+    # ``a`` requires arriving at ``a`` for the first time on the walk — the
+    # check only blocks *re-entering* a node already on the current path,
+    # which is precisely what we want.
+    sql = text("""
+        WITH RECURSIVE reach(id, depth, path, seen) AS (
+            SELECT
+                toIssueId,
+                1,
+                fromIssueId || :delim || toIssueId,
+                :delim || fromIssueId || :delim || toIssueId || :delim
+            FROM IssueLink
+            WHERE fromIssueId = :start
+              AND linkType = :family
+
+            UNION ALL
+
+            SELECT
+                il.toIssueId,
+                r.depth + 1,
+                r.path || :delim || il.toIssueId,
+                r.seen || il.toIssueId || :delim
+            FROM IssueLink il
+            INNER JOIN reach r ON il.fromIssueId = r.id
+            WHERE il.linkType = :family
+              AND r.depth < :depth_cap
+              AND instr(r.seen, :delim || il.toIssueId || :delim) = 0
+        )
+        SELECT path
+        FROM reach
+        WHERE id = :target
+        ORDER BY depth, path
+        LIMIT 1
+    """)
+
+    result = await db.execute(
+        sql,
+        {
+            "start": b,
+            "target": a,
+            "family": family,
+            "depth_cap": _CYCLE_DEPTH_CAP,
+            "delim": _CYCLE_PATH_DELIMITER,
+        },
+    )
+    row = result.first()
+    if row is None:
+        return None
+
+    # ``row[0]`` is the existing path "b>...>a". Prepend ``a`` so the
+    # returned list represents the full closing cycle ``a → b → ... → a``.
+    existing_path = row[0].split(_CYCLE_PATH_DELIMITER)
+    return [a, *existing_path]

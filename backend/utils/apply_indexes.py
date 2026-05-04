@@ -52,6 +52,9 @@ NEW_INDEXES = [
     ("CommitLink", "CommitLink_projectId_author_idx", ["projectId", "author"], False),
     ("CommitLink", "CommitLink_committedAt_idx", ["committedAt"], False),
     ("CommitLink", "CommitLink_projectId_committedAt_idx", ["projectId", "committedAt"], False),
+
+    # IssueLink table - prevent duplicate identical relations (CB-1959)
+    ("IssueLink", "IssueLink_fromIssueId_toIssueId_linkType_key", ["fromIssueId", "toIssueId", "linkType"], True),
 ]
 
 

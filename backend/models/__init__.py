@@ -4,7 +4,7 @@ Database Models for ProjectsManagerWebV2
 
 from models.database import Base, get_db, init_db, AsyncSessionLocal, engine
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
-from models.grouping import IssueGroup, IssueGroupMember
+from models.grouping import IssueGroup, IssueGroupMember, next_member_position
 from models.git import CommitLink, GitSyncState
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation, ImplementationNote
@@ -13,6 +13,7 @@ from models.agent_registry import AgentProfile
 from models.skill_registry import SkillProfile
 from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
 from models.park import ParkEvent
+from models.autopilot import AutoPilotQueueRecord, AutoPilotTaskRecord, AutoPilotEvent
 from models.schemas import (
     IssueType,
     IssueStatus,
@@ -30,6 +31,11 @@ from models.schemas import (
     ActivityResponse,
     IssueLinkCreate,
     IssueLinkResponse,
+    IssueLinkBulkCreate,
+    IssueLinkBulkSkipped,
+    IssueLinkBulkResponse,
+    IssueLinkDeleteResponse,
+    IssueRelationsListResponse,
     IssueSummary,
     IssueGroupCreate,
     IssueGroupUpdate,
@@ -38,6 +44,12 @@ from models.schemas import (
     GroupAggregateStatus,
     IssueGroupDetailResponse,
     PaginatedGroupResponse,
+    IssueGroupMembersBulkAdd,
+    IssueGroupMembersBulkAddResponse,
+    IssueGroupMembersBulkRemove,
+    IssueGroupMembersBulkRemoveResponse,
+    IssueGroupMembersReorder,
+    IssueGroupMembersReorderResponse,
     ProjectResponse,
     PaginatedResponse,
     BatchStatusUpdate,
@@ -85,6 +97,18 @@ from models.pipeline_schemas import (
     PipelineConfigUpdate,
     PipelineConfigResponse,
 )
+# AutoPilot persistence schemas (CB-1951)
+from models.schemas import (
+    AutoPilotQueueStatus,
+    AutoPilotTaskStatus,
+    AutoPilotPauseReason,
+    AutoPilotEventType,
+    AutoPilotTaskRecordResponse,
+    AutoPilotEventResponse,
+    AutoPilotQueueRecordResponse,
+    AutoPilotRecoveryStatusResponse,
+    AutoPilotMetricsResponse,
+)
 
 __all__ = [
     # Database
@@ -100,6 +124,7 @@ __all__ = [
     "IssueLink",
     "IssueGroup",
     "IssueGroupMember",
+    "next_member_position",
     "IssueSequence",
     "Project",
     "CommitLink",
@@ -123,6 +148,10 @@ __all__ = [
     "PipelineConfig",
     # SQLAlchemy Models - Park
     "ParkEvent",
+    # SQLAlchemy Models - AutoPilot Persistence (CB-1951)
+    "AutoPilotQueueRecord",
+    "AutoPilotTaskRecord",
+    "AutoPilotEvent",
     # Enums - Issues
     "IssueType",
     "IssueStatus",
@@ -149,6 +178,11 @@ __all__ = [
     "ActivityResponse",
     "IssueLinkCreate",
     "IssueLinkResponse",
+    "IssueLinkBulkCreate",
+    "IssueLinkBulkSkipped",
+    "IssueLinkBulkResponse",
+    "IssueLinkDeleteResponse",
+    "IssueRelationsListResponse",
     "IssueSummary",
     "IssueGroupCreate",
     "IssueGroupUpdate",
@@ -157,6 +191,12 @@ __all__ = [
     "GroupAggregateStatus",
     "IssueGroupDetailResponse",
     "PaginatedGroupResponse",
+    "IssueGroupMembersBulkAdd",
+    "IssueGroupMembersBulkAddResponse",
+    "IssueGroupMembersBulkRemove",
+    "IssueGroupMembersBulkRemoveResponse",
+    "IssueGroupMembersReorder",
+    "IssueGroupMembersReorderResponse",
     "ProjectResponse",
     "PaginatedResponse",
     "BatchStatusUpdate",
@@ -199,4 +239,14 @@ __all__ = [
     "PipelineConfigCreate",
     "PipelineConfigUpdate",
     "PipelineConfigResponse",
+    # AutoPilot Persistence enums + schemas (CB-1951)
+    "AutoPilotQueueStatus",
+    "AutoPilotTaskStatus",
+    "AutoPilotPauseReason",
+    "AutoPilotEventType",
+    "AutoPilotTaskRecordResponse",
+    "AutoPilotEventResponse",
+    "AutoPilotQueueRecordResponse",
+    "AutoPilotRecoveryStatusResponse",
+    "AutoPilotMetricsResponse",
 ]

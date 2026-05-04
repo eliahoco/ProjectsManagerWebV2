@@ -5,6 +5,8 @@ API Routes for ProjectsManagerWebV2
 from fastapi import APIRouter
 
 from api.issues import router as issues_router
+from api.relations import router as relations_router
+from api.groups import router as groups_router
 from api.projects import router as projects_router
 from api.search import router as search_router
 from api.ai import router as ai_router
@@ -18,6 +20,7 @@ from api.park import router as park_router
 from api.skills import router as skills_router
 from api.documentation import router as documentation_router
 from api.doc_settings import router as doc_settings_router
+from api.system import router as system_router
 
 router = APIRouter()
 
@@ -31,6 +34,8 @@ async def api_health():
 # Include routes
 router.include_router(projects_router, tags=["projects"])
 router.include_router(issues_router, tags=["issues"])
+router.include_router(relations_router, tags=["relations"])
+router.include_router(groups_router, tags=["groups"])
 router.include_router(search_router, tags=["search"])
 router.include_router(ai_router, tags=["ai"])
 router.include_router(git_router, tags=["git"])
@@ -43,3 +48,4 @@ router.include_router(park_router, tags=["park"])
 router.include_router(skills_router, tags=["skills"])
 router.include_router(documentation_router, tags=["documentation"])
 router.include_router(doc_settings_router, tags=["documentation-settings"])
+router.include_router(system_router, tags=["system"])
