@@ -14,87 +14,18 @@ import type {
   PaginatedResponse,
   CreateIssueData,
   UpdateIssueData,
-  IssueStatus
+  IssueStatus,
 } from '@/types/codeboard';
-import { apiFetch as apiFetchHttp } from '@/lib/api/api-fetch';
+// `APIError` + `apiFetch` live in `lib/api/api-client.ts` — shared so the
+// hook layer doesn't form an import cycle (the relations hooks live in
+// their own module and this file re-exports them; both need the same
+// error contract). Re-exported here so existing callers
+// (`AddRelationModal`, tests, etc.) keep `import { APIError } from
+// '@/hooks/useCodeBoard'` working.
+import { apiFetch, APIError } from '@/lib/api/api-client';
+export { APIError };
 
 const API_BASE = '/api/codeboard';
-
-/**
- * Custom error class for API errors
- */
-export class APIError extends Error {
-  statusCode: number;
-  code?: string;
-  details?: Record<string, unknown>;
-
-  constructor(message: string, statusCode: number, code?: string, details?: Record<string, unknown>) {
-    super(message);
-    this.name = 'APIError';
-    this.statusCode = statusCode;
-    this.code = code;
-    this.details = details;
-  }
-}
-
-/**
- * Fetch wrapper with error handling
- */
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await apiFetchHttp(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    let errorData: { message?: string; error?: string; code?: string; details?: Record<string, unknown> } = {};
-    try {
-      errorData = await response.json();
-    } catch {
-      // Response wasn't JSON
-    }
-
-    const message = errorData.message || errorData.error || getDefaultErrorMessage(response.status);
-    throw new APIError(message, response.status, errorData.code, errorData.details);
-  }
-
-  // Handle empty responses (204 No Content)
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json();
-}
-
-/**
- * Get user-friendly error message based on status code
- */
-function getDefaultErrorMessage(status: number): string {
-  switch (status) {
-    case 400:
-      return 'Invalid request. Please check your input.';
-    case 401:
-      return 'Please log in to continue.';
-    case 403:
-      return 'You do not have permission to perform this action.';
-    case 404:
-      return 'The requested resource was not found.';
-    case 409:
-      return 'A conflict occurred. Please refresh and try again.';
-    case 429:
-      return 'Too many requests. Please wait a moment.';
-    case 500:
-      return 'A server error occurred. Please try again.';
-    case 502:
-    case 503:
-      return 'The server is temporarily unavailable. Please try again.';
-    default:
-      return 'An unexpected error occurred.';
-  }
-}
 
 // Fetch projects
 export function useProjects() {
@@ -184,6 +115,18 @@ export function useIssueDescendants(issueId: string | null) {
     enabled: !!issueId,
   });
 }
+
+// Issue relations hooks live in their own module (CB-2006). Re-exported
+// here as `useCreateRelation` / `useCreateRelationsBulk` so existing
+// callers (AddRelationModal, future panel wiring) keep importing from one
+// place — the new canonical names are `useAddRelation` /
+// `useAddRelationBulk` from `@/hooks/useIssueRelations`.
+export {
+  useIssueRelations,
+  useAddRelation as useCreateRelation,
+  useAddRelationBulk as useCreateRelationsBulk,
+  useDeleteRelation,
+} from './useIssueRelations';
 
 // Search within an issue's descendants with filtering and relevance ranking (CB-1122)
 export interface EpicSearchParams {
