@@ -18,11 +18,13 @@
  *     optimistic rollback already restores the visible order).
  *
  * Out of scope (sibling tasks own these):
- *   * CB-2016 — the richer aggregate-status header (status breakdown bar +
- *     dominant-status visual). The minimal pill + percent shipped here
- *     satisfies the CB-2014 spec ("header shows aggregateStatus") and gives
- *     CB-2016 a stable mount point to extend.
  *   * Edit / delete / member add+remove — separate stories under EPIC 5.
+ *
+ * CB-2016 implemented inline below: `AggregateHeader` now also renders a
+ * segmented horizontal progress bar with one slice per non-zero status,
+ * coloured to match the kanban columns, plus per-segment hover tooltips
+ * showing the count + percentage. Falls back to the minimal pill+percent
+ * line for empty groups.
  *
  * Security notes:
  *   * `id` from `useParams()` is user-controlled. It's only ever interpolated
@@ -107,14 +109,69 @@ function AggregateHeader({ aggregate, memberCount }: AggregateHeaderProps) {
   // precision isn't useful at this size.
   const percent = Math.round(aggregate.completionPercent);
 
+  // CB-2016: build segments from statusBreakdown. Iterate STATUS_COLUMNS to
+  // get a stable ordering matching the kanban (BACKLOG → DONE), then fall
+  // through to any unknown statuses appended at the end. Segments with zero
+  // count are dropped (no zero-width slivers in the bar).
+  const total = memberCount;
+  const knownStatuses = new Set<string>(STATUS_COLUMNS.map((s) => s.status));
+  const orderedSegments = [
+    ...STATUS_COLUMNS.map((col) => ({
+      status: col.status,
+      label: col.label,
+      color: col.color,
+      count: aggregate.statusBreakdown[col.status] ?? 0,
+    })),
+    // Surface any statuses the backend reported that aren't in STATUS_COLUMNS
+    // (legacy enum values). They render with a neutral colour so the bar
+    // doesn't silently lose member counts.
+    ...Object.entries(aggregate.statusBreakdown)
+      .filter(([s]) => !knownStatuses.has(s))
+      .map(([status, count]) => ({
+        status,
+        label: status,
+        color: 'bg-zinc-600',
+        count,
+      })),
+  ].filter((s) => s.count > 0);
+
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <StatusBadge status={aggregate.dominantStatus} />
-      <span className="text-zinc-300">{percent}% complete</span>
-      <span className="text-zinc-500">·</span>
-      <span className="text-zinc-400">
-        {memberCount} {memberCount === 1 ? 'member' : 'members'}
-      </span>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <StatusBadge status={aggregate.dominantStatus} />
+        <span className="text-zinc-300">{percent}% complete</span>
+        <span className="text-zinc-500">·</span>
+        <span className="text-zinc-400">
+          {total} {total === 1 ? 'member' : 'members'}
+        </span>
+      </div>
+
+      {/* CB-2016 — segmented status breakdown bar. Tailwind flex with each
+          segment's flex-grow proportional to its count. Width-driven via
+          flex rather than percent strings to avoid sub-pixel rounding holes
+          between segments. role=img + aria-label gives screen readers the
+          summary; the per-segment `title` attribute provides a native hover
+          tooltip without a JS popover dependency. */}
+      <div
+        role="img"
+        aria-label={
+          orderedSegments
+            .map((s) => `${s.count} ${s.label}`)
+            .join(', ') || 'No member status data'
+        }
+        className="flex h-2 w-full overflow-hidden rounded-full bg-zinc-800"
+      >
+        {orderedSegments.map((seg) => (
+          <div
+            key={seg.status}
+            className={cn('h-full transition-[flex-grow] duration-200', seg.color)}
+            style={{ flexGrow: seg.count }}
+            title={`${seg.label}: ${seg.count} (${
+              total > 0 ? Math.round((seg.count / total) * 100) : 0
+            }%)`}
+          />
+        ))}
+      </div>
     </div>
   );
 }

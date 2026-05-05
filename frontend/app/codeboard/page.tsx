@@ -6,12 +6,13 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, RefreshCw, LayoutGrid, List, Sparkles, Layers, GitCommit, Keyboard, FolderInput, Rocket } from 'lucide-react';
+import { Plus, RefreshCw, LayoutGrid, List, Sparkles, Layers, GitCommit, Keyboard, FolderInput, Rocket, FolderPlus } from 'lucide-react';
 import { useProjects, useIssues, useCreateIssue, useUpdateIssue, useDeleteIssue, useBatchUpdateStatus, useAIStatus, useExecutionSessions, useStopExecution, useProjectLabels, type ExecutionSession } from '@/hooks/useCodeBoard';
 import { KanbanBoard, EpicSwimlanesBoard, HierarchyListView, FilterBar, CreateIssueModal, IssueDetailModal, ExecutionModal, SemanticSearchPanel, FeatureExecutionPanel, FeatureSelector } from '@/components/codeboard';
 import { FloatingExecutionStatus } from '@/components/codeboard/FloatingExecutionStatus';
 import { GlobalAgentStatusBar } from '@/components/codeboard/GlobalAgentStatusBar';
 import { AIBreakdownModal } from '@/components/codeboard/AIBreakdownModal';
+import { CreateGroupModal } from '@/components/codeboard/CreateGroupModal';
 import { GitSyncPanel } from '@/components/codeboard/GitSyncPanel';
 import { KeyboardShortcutsHelp } from '@/components/codeboard/KeyboardShortcutsHelp';
 import { Issue, IssueStatus, CreateIssueData, Project, SortField, SortOrder, DateFilterField } from '@/types/codeboard';
@@ -52,6 +53,8 @@ export default function CodeBoardPage() {
   const [createDefaultParentId, setCreateDefaultParentId] = useState<string | undefined>();
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [isAIBreakdownOpen, setIsAIBreakdownOpen] = useState(false);
+  // CB-2017 / CB-2019: open the Create-group modal from the toolbar.
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [aiBreakdownIssue, setAIBreakdownIssue] = useState<Issue | null>(null);
   const [activeExecution, setActiveExecution] = useState<ExecutionSession | null>(null);
   const [isExecutionMinimized, setIsExecutionMinimized] = useState(false);
@@ -622,6 +625,18 @@ export default function CodeBoardPage() {
               </button>
             )}
 
+            {/* CB-2017 / CB-2019: Create Group button — opens picker modal */}
+            {selectedProjectId && (
+              <button
+                onClick={() => setIsCreateGroupOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+                title="Create issue group"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>New Group</span>
+              </button>
+            )}
+
             {/* Create Button */}
             <button
               onClick={() => handleCreateClick()}
@@ -767,6 +782,19 @@ export default function CodeBoardPage() {
         onIssueClick={handleIssueClick}
         onExecutionStart={handleExecutionStart}
       />
+
+      {/* CB-2017 / CB-2019: Create Group Modal */}
+      {selectedProjectId && (
+        <CreateGroupModal
+          isOpen={isCreateGroupOpen}
+          onClose={() => setIsCreateGroupOpen(false)}
+          projectId={selectedProjectId}
+          onSuccess={(groupId) => {
+            setIsCreateGroupOpen(false);
+            router.push(`/codeboard/groups/${encodeURIComponent(groupId)}`);
+          }}
+        />
+      )}
 
       {/* AI Breakdown Modal */}
       {isAIBreakdownOpen && selectedProjectId && (

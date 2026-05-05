@@ -36,7 +36,19 @@ import type {
   IssueGroupDetailResponse,
   IssueGroupMembersReorderPayload,
   IssueGroupMembersReorderResponse,
+  IssueGroupResponse,
 } from '@/types/codeboard';
+
+/**
+ * Payload for POST /api/projects/{projectId}/groups (CB-2017 / CB-2019).
+ * `memberIssueIds` is optional — backend accepts an empty group; the modal
+ * always sends an array (possibly empty) for shape stability.
+ */
+export interface CreateGroupPayload {
+  title: string;
+  description?: string;
+  memberIssueIds?: string[];
+}
 
 const API_BASE = '/api/codeboard';
 
@@ -235,6 +247,42 @@ export function useReorderGroupMembers(groupId: string | null) {
       // fresh GET on the next read.
       queryClient.invalidateQueries({
         queryKey: ['issue-group', groupId],
+      });
+    },
+  });
+}
+
+
+/**
+ * POST /api/projects/{projectId}/groups — create a new group, optionally
+ * with initial members. CB-2017 / CB-2019 (CreateGroupModal entry point).
+ *
+ * On success: invalidate the project's group list cache so a future
+ * sidebar (CB-2010) picks up the new group without manual refresh. The
+ * caller's `onSuccess` (passed via `mutateAsync` resolution) typically
+ * navigates straight to the detail page (`/codeboard/groups/{id}`).
+ */
+export function useCreateGroup(projectId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<IssueGroupResponse, Error, CreateGroupPayload>({
+    mutationFn: (payload) => {
+      if (!projectId) {
+        throw new Error('useCreateGroup: projectId is required');
+      }
+      return apiFetch<IssueGroupResponse>(
+        `${API_BASE}/projects/${encodeURIComponent(projectId)}/groups`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+      );
+    },
+    onSuccess: () => {
+      if (!projectId) return;
+      // Invalidate the per-project group list (CB-2010 sidebar key shape).
+      queryClient.invalidateQueries({
+        queryKey: ['issue-groups', projectId],
       });
     },
   });
