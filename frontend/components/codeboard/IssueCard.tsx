@@ -20,6 +20,13 @@ interface IssueCardProps {
   isDragging?: boolean;
   showDetailLink?: boolean;  // Show link to full detail page
   isFocused?: boolean;  // Keyboard navigation focus
+  // CB-2018 — multi-select mode. When `selectMode` is true, a checkbox renders
+  // in the card header. Toggling the checkbox calls `onToggleSelected(issue.id)`
+  // and stops the click from propagating into `onClick` (which would open
+  // the detail modal). `isSelected` controls the checkbox visual state.
+  selectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelected?: (issueId: string) => void;
 }
 
 // Type-specific styling
@@ -56,7 +63,7 @@ const TYPE_STYLES: Record<string, { bg: string; border: string; badge: string }>
   },
 };
 
-export function IssueCard({ issue, parent, grandparent, completionInfo, childCount, descendantCount, onClick, isDragging, showDetailLink = true, isFocused = false }: IssueCardProps) {
+export function IssueCard({ issue, parent, grandparent, completionInfo, childCount, descendantCount, onClick, isDragging, showDetailLink = true, isFocused = false, selectMode = false, isSelected = false, onToggleSelected }: IssueCardProps) {
   const issueType = ISSUE_TYPES.find(t => t.type === issue.type);
   const priority = PRIORITIES.find(p => p.priority === issue.priority);
   const typeStyle = TYPE_STYLES[issue.type] || TYPE_STYLES.TASK;
@@ -65,22 +72,62 @@ export function IssueCard({ issue, parent, grandparent, completionInfo, childCou
     ? Math.round((completionInfo.done / completionInfo.total) * 100)
     : null;
 
+  // CB-2018 — in select mode, a card click toggles selection instead of
+  // opening the detail modal. The checkbox itself also calls toggle (for
+  // discoverability — keyboard users tab into the checkbox).
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (selectMode && onToggleSelected) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleSelected(issue.id);
+      return;
+    }
+    onClick?.();
+  };
+
   return (
     <div
       data-testid="issue-card"
       data-issue-id={issue.id}
       data-issue-key={issue.key}
       data-status={issue.status}
-      onClick={onClick}
+      onClick={handleCardClick}
       className={cn(
         'p-3 rounded-lg border cursor-pointer transition-all',
         typeStyle.bg,
         typeStyle.border,
         isDragging && 'opacity-50 rotate-2 scale-105',
         isDone && 'opacity-90',
-        isFocused && 'ring-2 ring-cyan-500 ring-offset-1 ring-offset-zinc-900'
+        isFocused && 'ring-2 ring-cyan-500 ring-offset-1 ring-offset-zinc-900',
+        selectMode && isSelected && 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-zinc-900'
       )}
     >
+      {/* CB-2018 — selection checkbox (render only in selectMode). Sits at
+          the top so it's always reachable regardless of card size. The
+          `pointer-events-auto` + `stopPropagation` lets the box receive
+          clicks even though the card itself owns the outer click handler. */}
+      {selectMode && (
+        <div
+          className="mb-2 flex items-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelected?.(issue.id);
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            readOnly
+            tabIndex={0}
+            aria-label={`Select ${issue.key}`}
+            className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
+          />
+          <span className="ml-2 text-[10px] text-zinc-500">
+            {isSelected ? 'Selected' : 'Click to select'}
+          </span>
+        </div>
+      )}
+
       {/* Hierarchy Context (Epic → Story) - grayed out for DONE items */}
       {(grandparent || parent) && (
         <div className={cn(

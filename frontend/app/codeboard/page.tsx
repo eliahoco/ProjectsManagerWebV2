@@ -55,6 +55,30 @@ export default function CodeBoardPage() {
   const [isAIBreakdownOpen, setIsAIBreakdownOpen] = useState(false);
   // CB-2017 / CB-2019: open the Create-group modal from the toolbar.
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  // CB-2018 — multi-select mode. Toggle from the toolbar; checkbox per row
+  // lights up when active. Selection state lives here (page-level) so it
+  // survives view-mode switches between board / list / swimlanes.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // Pre-fill state for CreateGroupModal — used when "Group selected" opens
+  // the modal with the current selection seeded as initialMemberIds.
+  const [groupInitialIds, setGroupInitialIds] = useState<string[] | undefined>(
+    undefined,
+  );
+
+  const toggleSelected = useCallback((issueId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(issueId)) next.delete(issueId);
+      else next.add(issueId);
+      return next;
+    });
+  }, []);
+
+  const handleStartGroupFromSelection = useCallback(() => {
+    setGroupInitialIds(Array.from(selectedIds));
+    setIsCreateGroupOpen(true);
+  }, [selectedIds]);
   const [aiBreakdownIssue, setAIBreakdownIssue] = useState<Issue | null>(null);
   const [activeExecution, setActiveExecution] = useState<ExecutionSession | null>(null);
   const [isExecutionMinimized, setIsExecutionMinimized] = useState(false);
@@ -625,15 +649,56 @@ export default function CodeBoardPage() {
               </button>
             )}
 
-            {/* CB-2017 / CB-2019: Create Group button — opens picker modal */}
+            {/* CB-2018 — multi-select mode toggle */}
             {selectedProjectId && (
               <button
-                onClick={() => setIsCreateGroupOpen(true)}
+                onClick={() => {
+                  setSelectMode((prev) => {
+                    // Leaving select mode → clear the selection so re-entry
+                    // starts fresh. Entering → keep the empty set.
+                    if (prev) setSelectedIds(new Set());
+                    return !prev;
+                  });
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
+                  selectMode
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700',
+                )}
+                title="Toggle multi-select mode"
+              >
+                <span>{selectMode ? '✓ Selecting' : 'Select'}</span>
+              </button>
+            )}
+
+            {/* CB-2017 / CB-2019: Create Group button — opens picker modal.
+                In selectMode + with at least one selected issue, this button
+                pre-fills the modal with the current selection. Otherwise it
+                opens the empty modal so the user picks inside it. */}
+            {selectedProjectId && (
+              <button
+                onClick={() => {
+                  if (selectMode && selectedIds.size > 0) {
+                    handleStartGroupFromSelection();
+                  } else {
+                    setGroupInitialIds(undefined);
+                    setIsCreateGroupOpen(true);
+                  }
+                }}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
-                title="Create issue group"
+                title={
+                  selectMode && selectedIds.size > 0
+                    ? `Create group from ${selectedIds.size} selected issue${selectedIds.size === 1 ? '' : 's'}`
+                    : 'Create issue group'
+                }
               >
                 <FolderPlus className="w-4 h-4" />
-                <span>New Group</span>
+                <span>
+                  {selectMode && selectedIds.size > 0
+                    ? `Group selected (${selectedIds.size})`
+                    : 'New Group'}
+                </span>
               </button>
             )}
 
@@ -743,6 +808,9 @@ export default function CodeBoardPage() {
             focusedIssueId={focusedIssueId}
             sortField={sortField}
             sortOrder={sortOrder}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelected={toggleSelected}
           />
         ) : (
           <HierarchyListView
@@ -752,6 +820,9 @@ export default function CodeBoardPage() {
             focusedIssueId={focusedIssueId}
             sortField={sortField}
             sortOrder={sortOrder}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelected={toggleSelected}
           />
         )}
       </div>
@@ -783,14 +854,24 @@ export default function CodeBoardPage() {
         onExecutionStart={handleExecutionStart}
       />
 
-      {/* CB-2017 / CB-2019: Create Group Modal */}
+      {/* CB-2017 / CB-2019 / CB-2018: Create Group Modal — `initialMemberIds`
+          is populated when "Group selected" was clicked in selectMode. */}
       {selectedProjectId && (
         <CreateGroupModal
           isOpen={isCreateGroupOpen}
-          onClose={() => setIsCreateGroupOpen(false)}
+          onClose={() => {
+            setIsCreateGroupOpen(false);
+            setGroupInitialIds(undefined);
+          }}
           projectId={selectedProjectId}
+          initialMemberIds={groupInitialIds}
           onSuccess={(groupId) => {
             setIsCreateGroupOpen(false);
+            setGroupInitialIds(undefined);
+            // Leave selectMode on so the user can build another group
+            // without re-toggling — but clear the selection so the same
+            // issues aren't accidentally re-grouped.
+            setSelectedIds(new Set());
             router.push(`/codeboard/groups/${encodeURIComponent(groupId)}`);
           }}
         />

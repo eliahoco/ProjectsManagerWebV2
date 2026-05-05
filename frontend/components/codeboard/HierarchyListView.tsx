@@ -20,7 +20,17 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-interface HierarchyListViewProps {
+interface SelectionAPI {
+  // CB-2018 — page-level multi-select state forwarded into the list view.
+  // Mirrors the shape KanbanBoard accepts. When `selectMode` is true, each
+  // row renders a checkbox; clicking the row toggles selection instead of
+  // opening the detail modal.
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelected?: (issueId: string) => void;
+}
+
+interface HierarchyListViewProps extends SelectionAPI {
   issues: Issue[];
   onIssueClick: (issue: Issue) => void;
   onCreateClick: (status?: IssueStatus, parentId?: string) => void;
@@ -54,7 +64,7 @@ interface TreeNode {
   level: number;
 }
 
-export function HierarchyListView({ issues, onIssueClick, onCreateClick, focusedIssueId, sortField = 'sequence', sortOrder = 'asc' }: HierarchyListViewProps) {
+export function HierarchyListView({ issues, onIssueClick, onCreateClick, focusedIssueId, sortField = 'sequence', sortOrder = 'asc', selectMode = false, selectedIds, onToggleSelected }: HierarchyListViewProps) {
   const updateIssue = useUpdateIssue();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -297,8 +307,37 @@ export function HierarchyListView({ issues, onIssueClick, onCreateClick, focused
               style={{ paddingLeft: `${16 + level * 24}px` }}
               onMouseEnter={() => setHoveredId(issue.id)}
               onMouseLeave={() => setHoveredId(null)}
-              onClick={() => onIssueClick(issue)}
+              onClick={() => {
+                // CB-2018 — in selectMode, row click toggles selection
+                // instead of opening the detail modal.
+                if (selectMode && onToggleSelected) {
+                  onToggleSelected(issue.id);
+                  return;
+                }
+                onIssueClick(issue);
+              }}
             >
+              {/* CB-2018 — selection checkbox (only in selectMode). Sits
+                  before the expand/collapse so the row's leading visual
+                  cue is the selection state when the mode is active. */}
+              {selectMode && (
+                <div
+                  className="w-5 flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSelected?.(issue.id);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!selectedIds?.has(issue.id)}
+                    readOnly
+                    aria-label={`Select ${issue.key}`}
+                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
+                  />
+                </div>
+              )}
+
               {/* Expand/Collapse Toggle */}
               <div className="w-6 flex-shrink-0">
                 {hasChildren ? (

@@ -20,10 +20,32 @@ interface KanbanBoardProps {
   focusedIssueId?: string | null;
   sortField?: SortField;
   sortOrder?: SortOrder;
+  // CB-2018 — multi-select threading. Page-level state is forwarded to each
+  // IssueCard so the checkbox + selection ring render uniformly across all
+  // nested rows. KanbanBoard does not own selection state — page.tsx does.
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelected?: (issueId: string) => void;
 }
 
-export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDropToTodo, onCascadeMove, focusedIssueId, sortField = 'sequence', sortOrder = 'asc' }: KanbanBoardProps) {
+export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDropToTodo, onCascadeMove, focusedIssueId, sortField = 'sequence', sortOrder = 'asc', selectMode = false, selectedIds, onToggleSelected }: KanbanBoardProps) {
   const updateIssue = useUpdateIssue();
+
+  // CB-2018 — IssueCard wrapper that auto-injects selection props from the
+  // page-level state. Lets us add multi-select to all 14 IssueCard call sites
+  // below without a 14-way repetitive prop spread. Drop-in replacement for
+  // <IssueCard> — same prop shape, plus the selection bits are filled in.
+  // ESLint warns about destructuring inside the inner component; the closure
+  // captures `selectMode` / `selectedIds` / `onToggleSelected` from the outer
+  // scope, which are stable per render of KanbanBoard.
+  const SCard = (props: React.ComponentProps<typeof IssueCard>) => (
+    <SCard
+      {...props}
+      selectMode={selectMode}
+      isSelected={!!selectedIds?.has(props.issue.id)}
+      onToggleSelected={onToggleSelected}
+    />
+  );
 
   // Sorting helper function
   const sortIssuesInternal = (issuesToSort: Issue[]): Issue[] => {
@@ -294,7 +316,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                       draggable
                       onDragStart={(e) => handleDragStart(e, feature.id)}
                     >
-                      <IssueCard
+                      <SCard
                         issue={feature}
                         onClick={() => onIssueClick(feature)}
                         isFocused={focusedIssueId === feature.id}
@@ -311,7 +333,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                             draggable
                             onDragStart={(e) => handleDragStart(e, epic.id)}
                           >
-                            <IssueCard
+                            <SCard
                               issue={epic}
                               onClick={() => onIssueClick(epic)}
                               isFocused={focusedIssueId === epic.id}
@@ -328,7 +350,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                                   draggable
                                   onDragStart={(e) => handleDragStart(e, story.id)}
                                 >
-                                  <IssueCard
+                                  <SCard
                                     issue={story}
                                     onClick={() => onIssueClick(story)}
                                     isFocused={focusedIssueId === story.id}
@@ -343,7 +365,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, task.id)}
                                   >
-                                    <IssueCard
+                                    <SCard
                                       issue={task}
                                       onClick={() => onIssueClick(task)}
                                       isFocused={focusedIssueId === task.id}
@@ -371,7 +393,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                       draggable
                       onDragStart={(e) => handleDragStart(e, epic.id)}
                     >
-                      <IssueCard
+                      <SCard
                         issue={epic}
                         onClick={() => onIssueClick(epic)}
                         isFocused={focusedIssueId === epic.id}
@@ -388,7 +410,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                             draggable
                             onDragStart={(e) => handleDragStart(e, story.id)}
                           >
-                            <IssueCard
+                            <SCard
                               issue={story}
                               onClick={() => onIssueClick(story)}
                               isFocused={focusedIssueId === story.id}
@@ -405,7 +427,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                                   draggable
                                   onDragStart={(e) => handleDragStart(e, task.id)}
                                 >
-                                  <IssueCard
+                                  <SCard
                                     issue={task}
                                     onClick={() => onIssueClick(task)}
                                     isFocused={focusedIssueId === task.id}
@@ -419,7 +441,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, subtask.id)}
                                   >
-                                    <IssueCard
+                                    <SCard
                                       issue={subtask}
                                       onClick={() => onIssueClick(subtask)}
                                       isFocused={focusedIssueId === subtask.id}
@@ -447,7 +469,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                       draggable
                       onDragStart={(e) => handleDragStart(e, story.id)}
                     >
-                      <IssueCard
+                      <SCard
                         issue={story}
                         parent={parent?.type === 'EPIC' ? parent : undefined}
                         onClick={() => onIssueClick(story)}
@@ -465,7 +487,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                             draggable
                             onDragStart={(e) => handleDragStart(e, task.id)}
                           >
-                            <IssueCard
+                            <SCard
                               issue={task}
                               onClick={() => onIssueClick(task)}
                               isFocused={focusedIssueId === task.id}
@@ -478,7 +500,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                               draggable
                               onDragStart={(e) => handleDragStart(e, subtask.id)}
                             >
-                              <IssueCard
+                              <SCard
                                 issue={subtask}
                                 onClick={() => onIssueClick(subtask)}
                                 isFocused={focusedIssueId === subtask.id}
@@ -518,7 +540,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
                     >
-                      <IssueCard
+                      <SCard
                         issue={task}
                         parent={parent?.type === 'STORY' ? parent : undefined}
                         grandparent={grandparent?.type === 'EPIC' ? grandparent : undefined}
@@ -534,7 +556,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                         draggable
                         onDragStart={(e) => handleDragStart(e, subtask.id)}
                       >
-                        <IssueCard
+                        <SCard
                           issue={subtask}
                           onClick={() => onIssueClick(subtask)}
                           isFocused={focusedIssueId === subtask.id}
@@ -557,7 +579,7 @@ export function KanbanBoard({ issues, onIssueClick, onCreateClick, onFeatureDrop
                     draggable
                     onDragStart={(e) => handleDragStart(e, subtask.id)}
                   >
-                    <IssueCard
+                    <SCard
                       issue={subtask}
                       parent={parent}
                       grandparent={grandparent?.type === 'STORY' ? grandparent : (greatGrandparent?.type === 'EPIC' ? greatGrandparent : undefined)}
