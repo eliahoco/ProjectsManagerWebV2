@@ -41,13 +41,19 @@ import type {
 
 /**
  * Payload for POST /api/projects/{projectId}/groups (CB-2017 / CB-2019).
- * `memberIssueIds` is optional — backend accepts an empty group; the modal
+ * `issueIds` is optional — backend accepts an empty group; the modal
  * always sends an array (possibly empty) for shape stability.
+ *
+ * NOTE: the backend schema field is `issueIds`, not `memberIssueIds`. The
+ * 2026-05-05 regression caught this — earlier drafts of CreateGroupModal
+ * shipped `memberIssueIds` and the backend silently dropped the members
+ * (no validation error because `extra` isn't strict on this schema, and
+ * the field name simply didn't match).
  */
 export interface CreateGroupPayload {
   title: string;
   description?: string;
-  memberIssueIds?: string[];
+  issueIds?: string[];
 }
 
 const API_BASE = '/api/codeboard';

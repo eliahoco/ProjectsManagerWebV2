@@ -141,7 +141,7 @@ export function CreateGroupModal({
         const created = await createGroup.mutateAsync({
           title: trimmedTitle,
           description: description.trim() || undefined,
-          memberIssueIds: Array.from(selected),
+          issueIds: Array.from(selected),
         });
         onSuccess?.(created.id);
         onClose();
