@@ -25,6 +25,7 @@ class ErrorCode(str, Enum):
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
     CONFLICT = "CONFLICT"
+    CYCLE_DETECTED = "CYCLE_DETECTED"
     RATE_LIMITED = "RATE_LIMITED"
 
     # Server errors (5xx)
@@ -94,6 +95,34 @@ class ConflictError(AppException):
         super().__init__(
             status_code=409,
             code=ErrorCode.CONFLICT,
+            message=message,
+            details=details
+        )
+
+
+class AlreadyExistsError(AppException):
+    """Resource already exists (409). Distinct from ConflictError so the
+    response carries `code=ALREADY_EXISTS` — used by the relations API
+    (CB-1971) and any other create endpoint that wants to differentiate
+    duplicate-rejected from generic conflict."""
+    def __init__(self, message: str, details: Dict[str, Any] = None):
+        super().__init__(
+            status_code=409,
+            code=ErrorCode.ALREADY_EXISTS,
+            message=message,
+            details=details
+        )
+
+
+class CycleDetectedError(AppException):
+    """Cycle in a transitive relation graph (409). CB-1977 — distinguishes
+    cycle rejection from generic validation/conflict so callers can render
+    `details.path` (the closed cycle in canonical family-graph direction)
+    without string-matching the message."""
+    def __init__(self, message: str, details: Dict[str, Any] = None):
+        super().__init__(
+            status_code=409,
+            code=ErrorCode.CYCLE_DETECTED,
             message=message,
             details=details
         )

@@ -15,7 +15,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { APIError, useProjects, useIssues, useIssue } from '@/hooks/useCodeBoard';
+import {
+  APIError,
+  useProjects,
+  useIssues,
+  useIssue,
+  useGenerateFeatureDocumentation,
+} from '@/hooks/useCodeBoard';
 
 // Helper to create a wrapper with QueryClientProvider
 function createWrapper() {
@@ -279,6 +285,77 @@ describe('useCodeBoard Hooks', () => {
 
       // Query is disabled, but if forced to run it returns empty
       expect(result.current.data).toBeUndefined();
+    });
+  });
+
+  describe('useGenerateFeatureDocumentation (CB-2376)', () => {
+    // Local wrapper variant that exposes the QueryClient so each test can
+    // assert against `invalidateQueries` directly. The shared `createWrapper`
+    // helper hides the client, which makes spying on it impossible.
+    function createWrapperWithClient() {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: 0 },
+          mutations: { retry: false },
+        },
+      });
+      const Wrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          children
+        );
+      return { queryClient, Wrapper };
+    }
+
+    it('should invalidate the feature-documentation query on success', async () => {
+      const { queryClient, Wrapper } = createWrapperWithClient();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      mockFetchResponse({
+        id: 'doc-1',
+        projectId: 'p1',
+        featureIssueId: 'i1',
+        featureKey: 'CB-1',
+        title: 't',
+        overview: '', requirements: '', implementation: '', architecture: '',
+        techStack: '[]', testingStrategy: '',
+        totalTasks: 0, completedTasks: 0,
+        totalQATasks: 0, passedQATasks: 0, failedQATasks: 0,
+        mdFilePath: '', embeddingId: null, lastIndexedAt: null,
+        createdAt: '2026-05-07T00:00:00Z', updatedAt: '2026-05-07T00:00:00Z',
+      });
+
+      const { result } = renderHook(() => useGenerateFeatureDocumentation(), {
+        wrapper: Wrapper,
+      });
+
+      result.current.mutate({ issueId: 'i1', projectId: 'p1' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['feature-documentation', 'i1', 'p1'],
+      });
+    });
+
+    it('should invalidate the feature-documentation query on error (504/etc.)', async () => {
+      const { queryClient, Wrapper } = createWrapperWithClient();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      // Simulate the CB-2375 504 path — proxy times out even though the
+      // backend has already persisted the documentation row.
+      mockFetchError(504, { message: 'Gateway Timeout' });
+
+      const { result } = renderHook(() => useGenerateFeatureDocumentation(), {
+        wrapper: Wrapper,
+      });
+
+      result.current.mutate({ issueId: 'i1', projectId: 'p1' });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['feature-documentation', 'i1', 'p1'],
+      });
     });
   });
 

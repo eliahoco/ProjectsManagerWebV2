@@ -1,0 +1,1016 @@
+{
+  "feature": {
+    "key": "CB-1951",
+    "id": "03f5c3a6-2ba1-4bd3-96b1-e55a81a3b977"
+  },
+  "epics": {
+    "E1": {
+      "key": "CB-2221",
+      "id": "8dcc4105-85d1-49d8-a034-98ac0a7344be",
+      "title": "Persistent Queue State"
+    },
+    "E2": {
+      "key": "CB-2239",
+      "id": "00ca1ce1-34fd-4d5b-868a-f5a629009a7b",
+      "title": "Crash Recovery on Startup"
+    },
+    "E3": {
+      "key": "CB-2250",
+      "id": "3864a870-1240-4514-9fb0-487576d4005c",
+      "title": "Token-Exhaustion Detection + Auto-Pause"
+    },
+    "E4": {
+      "key": "CB-2263",
+      "id": "deba49a5-2858-4f22-bd10-8c1ced8d9902",
+      "title": "Resume Flow (manual + scheduled auto-resume)"
+    },
+    "E5": {
+      "key": "CB-2274",
+      "id": "1e2e45b4-bb66-4a60-888c-be71cfa0db74",
+      "title": "Frontend Pause/Resume UX"
+    },
+    "E6": {
+      "key": "CB-2285",
+      "id": "0d01d488-920d-4c0e-baae-f177b3afaada",
+      "title": "Telemetry & Observability"
+    },
+    "E7": {
+      "key": "CB-2295",
+      "id": "4a0acffa-8be4-4df7-8d95-90cc989dd9fa",
+      "title": "Migration & Backfill"
+    },
+    "E8": {
+      "key": "CB-2300",
+      "id": "13dd52a9-7ed9-43da-8a9d-7a05f6aabef8",
+      "title": "Test Suite + QA Board Push"
+    },
+    "E9": {
+      "key": "CB-2318",
+      "id": "4b270cc5-8883-44c4-8fe0-3ebc22de381e",
+      "title": "Runbook & Documentation"
+    },
+    "E10": {
+      "key": "CB-2323",
+      "id": "db394563-600a-487c-9feb-0c6504038207",
+      "title": "Feature Flag Rollout"
+    }
+  },
+  "stories": {
+    "E1.1": {
+      "key": "CB-2222",
+      "id": "d8a86995-0321-4d79-93af-2057d3a56343",
+      "title": "Schema design (Prisma + SQLAlchemy mirrors)"
+    },
+    "E1.2": {
+      "key": "CB-2230",
+      "id": "1f1317b4-9d6b-4530-ba4d-5628f52d25e2",
+      "title": "Repository layer (utils/autopilot_repository.py)"
+    },
+    "E1.3": {
+      "key": "CB-2233",
+      "id": "27e61781-d8a3-4914-89b7-d405ccbb5b40",
+      "title": "Wire write-through persistence into queue service"
+    },
+    "E2.1": {
+      "key": "CB-2240",
+      "id": "3eb30a65-b5f8-48b3-a6fd-1926f0ce3407",
+      "title": "Rehydration logic in queue service"
+    },
+    "E2.2": {
+      "key": "CB-2244",
+      "id": "76b2f07e-6e9f-4628-a01b-391bccf095d2",
+      "title": "FastAPI lifespan integration"
+    },
+    "E2.3": {
+      "key": "CB-2247",
+      "id": "696bdfca-d49d-4232-b6ac-86a85c94472b",
+      "title": "Recovery status endpoint + frontend banner"
+    },
+    "E3.1": {
+      "key": "CB-2251",
+      "id": "71a3888d-38eb-4313-abba-3149559def5a",
+      "title": "Pattern audit + extension"
+    },
+    "E3.2": {
+      "key": "CB-2256",
+      "id": "cbacce4d-46a6-4982-a025-122b12986427",
+      "title": "Reset-time extraction strengthening"
+    },
+    "E3.3": {
+      "key": "CB-2260",
+      "id": "8fb81587-e909-45a9-b306-6bfe4f826889",
+      "title": "Auto-pause flow wiring"
+    },
+    "E4.1": {
+      "key": "CB-2264",
+      "id": "2e718d8e-5d92-444a-8cae-03723347fbb5",
+      "title": "Manual resume hardening"
+    },
+    "E4.2": {
+      "key": "CB-2267",
+      "id": "d79de459-086e-45a4-b6d1-2cdeac9398d2",
+      "title": "Scheduled auto-resume"
+    },
+    "E4.3": {
+      "key": "CB-2271",
+      "id": "b93c620e-71ac-4706-a5ed-aac6065c3c50",
+      "title": "Resume preflight checks"
+    },
+    "E5.1": {
+      "key": "CB-2275",
+      "id": "7cd589cd-44c4-4ab0-b839-0928d2ecb615",
+      "title": "Status surface for new states"
+    },
+    "E5.2": {
+      "key": "CB-2279",
+      "id": "c916bb35-4aca-4f91-a54e-a43261f92ef5",
+      "title": "Resume now button + optimistic UI"
+    },
+    "E5.3": {
+      "key": "CB-2282",
+      "id": "7e8a3bc6-1dc1-474d-b5cf-aa7c5756a377",
+      "title": "Toast notifications via SSE"
+    },
+    "E6.1": {
+      "key": "CB-2286",
+      "id": "3c75e04d-1d39-48e0-9118-ae69ad18fd5d",
+      "title": "Structured logging helper"
+    },
+    "E6.2": {
+      "key": "CB-2289",
+      "id": "60713d48-467d-4407-9704-0251cb3c133a",
+      "title": "Watchdog integration"
+    },
+    "E6.3": {
+      "key": "CB-2292",
+      "id": "2e269755-4e10-4d33-ba00-f254e9b8b57e",
+      "title": "Metrics endpoint + Settings tile"
+    },
+    "E7.1": {
+      "key": "CB-2296",
+      "id": "231fe6b1-3d07-47de-9108-2e440bdef082",
+      "title": "Migration procedure doc"
+    },
+    "E7.2": {
+      "key": "CB-2298",
+      "id": "b4b750ff-389a-49ef-a4e3-44ccd2bf951d",
+      "title": "Idempotent backfill script"
+    },
+    "E8.1": {
+      "key": "CB-2301",
+      "id": "4fb0773c-57da-4022-a2cc-09a2859c91f8",
+      "title": "Backend unit tests"
+    },
+    "E8.2": {
+      "key": "CB-2307",
+      "id": "206d9d28-7794-4187-aae3-340d7c9cbbf0",
+      "title": "Backend integration + chaos tests"
+    },
+    "E8.3": {
+      "key": "CB-2310",
+      "id": "5207a581-c069-4880-91c7-2baf45976d65",
+      "title": "Frontend tests"
+    },
+    "E8.4": {
+      "key": "CB-2313",
+      "id": "76bd003f-2e98-48f4-8fd1-6562371ad27b",
+      "title": "QA Board push + runner"
+    },
+    "E9.1": {
+      "key": "CB-2319",
+      "id": "d3d6de82-1e42-438a-bf3f-374f1bfe7a9c",
+      "title": "Operational runbook"
+    },
+    "E9.2": {
+      "key": "CB-2321",
+      "id": "36b21b04-dc77-4509-a532-e41cd73d3ca3",
+      "title": "CLAUDE.md update"
+    },
+    "E10.1": {
+      "key": "CB-2324",
+      "id": "63b9da21-5d8c-4260-9acf-4b0a237eccc4",
+      "title": "Feature flag plumbing"
+    },
+    "E10.2": {
+      "key": "CB-2327",
+      "id": "6b319da0-aa92-4df1-a7da-c041101aeab2",
+      "title": "Soak + flag removal"
+    }
+  },
+  "tasks": {
+    "E1.1.1": {
+      "key": "CB-2223",
+      "id": "a1630722-9093-484b-a2c0-f6ffbde1f27b",
+      "title": "Add Prisma models to schema.prisma"
+    },
+    "E1.1.2": {
+      "key": "CB-2227",
+      "id": "c1efee48-db17-45a4-92b0-0ea1cc89cf46",
+      "title": "Mirror SQLAlchemy ORM models in backend/models/autopilot.py"
+    },
+    "E1.2.1": {
+      "key": "CB-2231",
+      "id": "404c66fb-d673-4b07-84fc-a51a90fcb314",
+      "title": "Implement save/load/record functions"
+    },
+    "E1.2.2": {
+      "key": "CB-2232",
+      "id": "45faedbe-adae-4b3b-872b-8f3f04f46da7",
+      "title": "Repository unit tests"
+    },
+    "E1.3.1": {
+      "key": "CB-2234",
+      "id": "191ac4b7-cf5b-40bd-9907-3546522e0f96",
+      "title": "Save in create_queue (line 198)"
+    },
+    "E1.3.2": {
+      "key": "CB-2235",
+      "id": "38b872bb-9f12-42f9-9c30-3fce19141122",
+      "title": "Save in _execute_task (line 398)"
+    },
+    "E1.3.3": {
+      "key": "CB-2236",
+      "id": "03d8006a-236e-4954-9029-b84ad207408f",
+      "title": "Save in _apply_success / _apply_failure (lines 564, 603)"
+    },
+    "E1.3.4": {
+      "key": "CB-2237",
+      "id": "628de0c0-db5a-4bfc-99d9-4de499657084",
+      "title": "Save in pause_queue / resume_queue / skip_current / abort_queue (lines 876-919)"
+    },
+    "E1.3.5": {
+      "key": "CB-2238",
+      "id": "897d70e4-1414-4eee-a2bf-21a3fa7a9e26",
+      "title": "Save in _finalize_queue (line 715)"
+    },
+    "E2.1.1": {
+      "key": "CB-2241",
+      "id": "2657edc1-092d-449c-a101-7a3d6c203269",
+      "title": "Implement rehydrate_from_db()"
+    },
+    "E2.1.2": {
+      "key": "CB-2242",
+      "id": "d053e9f8-109e-45c5-a137-3796a3a5691f",
+      "title": "Mark stale RUNNING tasks as failed(crash_recovery)"
+    },
+    "E2.1.3": {
+      "key": "CB-2243",
+      "id": "40af7a75-3189-4256-a3a3-3411a23c3617",
+      "title": "Set queue \u2192 PAUSED with reason=crash_recovery"
+    },
+    "E2.2.1": {
+      "key": "CB-2245",
+      "id": "92252e19-39eb-412a-aa32-07fb091e2f0f",
+      "title": "Wire into app/main.py lifespan"
+    },
+    "E2.2.2": {
+      "key": "CB-2246",
+      "id": "ad05abf8-7b42-4af4-8921-d84bd03e6096",
+      "title": "INFO log [AutoPilot] Recovered N queues from crash"
+    },
+    "E2.3.1": {
+      "key": "CB-2248",
+      "id": "d7f46012-f329-4fce-bfba-8c563cbedcdd",
+      "title": "Implement GET /api/execute/queue/recovery-status"
+    },
+    "E2.3.2": {
+      "key": "CB-2249",
+      "id": "dad0abcd-73f4-4e15-bf7a-3d9ee144d3f7",
+      "title": "Frontend banner in AutoPilotFloatingBar.tsx"
+    },
+    "E3.1.1": {
+      "key": "CB-2252",
+      "id": "d858a40b-b36c-4d98-8ce0-af4c6a73a990",
+      "title": "Scan recent backend logs for failure modes"
+    },
+    "E3.1.2": {
+      "key": "CB-2253",
+      "id": "a2bfbf06-6444-4b6d-9f7f-87916e33f28a",
+      "title": "Extend TOKEN_EXHAUSTION_PATTERNS (line 69)"
+    },
+    "E3.1.3": {
+      "key": "CB-2254",
+      "id": "cea762b9-a838-4a81-88e9-d01d00cf24f2",
+      "title": "Parse stream-json error events"
+    },
+    "E3.1.4": {
+      "key": "CB-2255",
+      "id": "216780a5-7875-4075-a5b4-d02b8238dc70",
+      "title": "8+ fixture-based unit tests"
+    },
+    "E3.2.1": {
+      "key": "CB-2257",
+      "id": "dd001aea-218d-442c-8923-dd945211f697",
+      "title": "Refactor extract_reset_time to return datetime"
+    },
+    "E3.2.2": {
+      "key": "CB-2258",
+      "id": "daa61064-5ac0-4489-954d-0e2e627d8ac2",
+      "title": "Parse 6 timestamp formats"
+    },
+    "E3.2.3": {
+      "key": "CB-2259",
+      "id": "a5c6f93b-c99a-445d-8edc-f632ff13c00a",
+      "title": "tests/test_reset_time_extraction.py"
+    },
+    "E3.3.1": {
+      "key": "CB-2261",
+      "id": "68d50c44-aa7b-4119-8dfe-320f25e40314",
+      "title": "Wire is_token_exhaustion into _apply_failure (line 603)"
+    },
+    "E3.3.2": {
+      "key": "CB-2262",
+      "id": "5c568493-4589-43d8-aa51-84af04f7bc14",
+      "title": "Set queue.resetTime from extracted datetime"
+    },
+    "E4.1.1": {
+      "key": "CB-2265",
+      "id": "13e63d4b-e515-4aa7-815d-48ada4199eff",
+      "title": "Clear resetTime + pauseReason on resume"
+    },
+    "E4.1.2": {
+      "key": "CB-2266",
+      "id": "7e844795-b82b-48dd-bab4-f5fd63f6b759",
+      "title": "Refuse resume if no active task selected"
+    },
+    "E4.2.1": {
+      "key": "CB-2268",
+      "id": "8a5e51cb-e29d-4b8f-be7a-1a017ff8b900",
+      "title": "_schedule_auto_resume(queue, reset_time) helper"
+    },
+    "E4.2.2": {
+      "key": "CB-2269",
+      "id": "b6f91938-172e-4761-b03f-8a93fe12eadd",
+      "title": "Cancellation on manual resume / abort"
+    },
+    "E4.2.3": {
+      "key": "CB-2270",
+      "id": "830d05b4-78dc-478a-84b2-67007a5d9c60",
+      "title": "Re-schedule on rehydration if reset still in future"
+    },
+    "E4.3.1": {
+      "key": "CB-2272",
+      "id": "e6e7df13-3d40-41ae-8f48-9cff06533787",
+      "title": "Verify Claude CLI binary on PATH"
+    },
+    "E4.3.2": {
+      "key": "CB-2273",
+      "id": "59446b90-8c98-4133-ba96-0c2bb631a2d6",
+      "title": "Re-fetch issue, skip if already terminal"
+    },
+    "E5.1.1": {
+      "key": "CB-2276",
+      "id": "11e0fea9-035b-460a-9ea9-24678a58c68e",
+      "title": "Render WAITING_RESET with countdown"
+    },
+    "E5.1.2": {
+      "key": "CB-2277",
+      "id": "8bf388ef-5b86-418c-93ac-af184f4f1a83",
+      "title": "Render crash_recovery state with action buttons"
+    },
+    "E5.1.3": {
+      "key": "CB-2278",
+      "id": "aa0bbad2-bb4b-42e3-b1e6-da9ec8411065",
+      "title": "Visual distinction for each state"
+    },
+    "E5.2.1": {
+      "key": "CB-2280",
+      "id": "c3416cd1-40a0-4de5-be53-09c3f0819675",
+      "title": "Add Resume now button"
+    },
+    "E5.2.2": {
+      "key": "CB-2281",
+      "id": "6a0943cd-9b78-4770-bdb5-ed552fb03dd9",
+      "title": "Optimistic UI + error rollback"
+    },
+    "E5.3.1": {
+      "key": "CB-2283",
+      "id": "a49e1013-aadf-417a-902e-6358d471613f",
+      "title": "SSE endpoint /api/execute/queue/events"
+    },
+    "E5.3.2": {
+      "key": "CB-2284",
+      "id": "601492d1-50d4-4c34-8edb-c242cdf52206",
+      "title": "useAutoPilotEvents hook + toast wiring"
+    },
+    "E6.1.1": {
+      "key": "CB-2287",
+      "id": "b21cb077-2d8d-46a0-a9dc-3b01c0bcbbc1",
+      "title": "Implement _log_event helper"
+    },
+    "E6.1.2": {
+      "key": "CB-2288",
+      "id": "7a1195ba-fcdf-474f-8bcd-e2d4cce43b32",
+      "title": "Replace ad-hoc log calls throughout service"
+    },
+    "E6.2.1": {
+      "key": "CB-2290",
+      "id": "a33f294e-0eaf-4957-8c98-18f547ebd9cb",
+      "title": "Emit WatchdogEvent on rehydration"
+    },
+    "E6.2.2": {
+      "key": "CB-2291",
+      "id": "96886126-41ea-479c-961d-32c5f359a9ab",
+      "title": "Emit WatchdogEvent on token-exhaust auto-pause"
+    },
+    "E6.3.1": {
+      "key": "CB-2293",
+      "id": "12765b2a-63e6-4ece-b312-2873935d409b",
+      "title": "Backend /api/execute/queue/metrics"
+    },
+    "E6.3.2": {
+      "key": "CB-2294",
+      "id": "52d79d86-53b8-4911-a9ef-b098d1fc1861",
+      "title": "Settings page metrics tile"
+    },
+    "E7.1.1": {
+      "key": "CB-2297",
+      "id": "dce3d913-60d0-4699-9c06-f0b817df537a",
+      "title": "Write backend/MIGRATION_NOTES.md section"
+    },
+    "E7.2.1": {
+      "key": "CB-2299",
+      "id": "af37dfd1-a5db-4613-b7e2-21720a606fe3",
+      "title": "Implement backfill_autopilot.py"
+    },
+    "E8.1.1": {
+      "key": "CB-2302",
+      "id": "f203f5da-01cf-4e75-a416-d0114a849fff",
+      "title": "tests/test_autopilot_repository.py"
+    },
+    "E8.1.2": {
+      "key": "CB-2303",
+      "id": "d6fbb7bc-ce87-4fb3-9807-b025e64c7f61",
+      "title": "tests/test_autopilot_persistence.py"
+    },
+    "E8.1.3": {
+      "key": "CB-2304",
+      "id": "e21a3ee9-5b2b-46e5-b499-e4f6a925039e",
+      "title": "tests/test_token_exhaustion_detection.py"
+    },
+    "E8.1.4": {
+      "key": "CB-2305",
+      "id": "9bc40545-7df6-4ee4-a87d-1c477c870956",
+      "title": "tests/test_reset_time_extraction.py"
+    },
+    "E8.1.5": {
+      "key": "CB-2306",
+      "id": "d031b50e-a1f1-4312-a9e6-3fbfd2ab4d8d",
+      "title": "tests/test_auto_resume_scheduler.py"
+    },
+    "E8.2.1": {
+      "key": "CB-2308",
+      "id": "abd856f0-d185-4db9-bc4a-fceac795da10",
+      "title": "tests/test_autopilot_e2e.py \u2014 full lifecycle"
+    },
+    "E8.2.2": {
+      "key": "CB-2309",
+      "id": "a9b198ee-b0e6-4a80-8db5-c09a8aba1936",
+      "title": "Chaos tests \u2014 SIGKILL during run"
+    },
+    "E8.3.1": {
+      "key": "CB-2311",
+      "id": "f9e78f49-d84d-427f-9919-2524114fa261",
+      "title": "AutoPilotFloatingBar.test.tsx"
+    },
+    "E8.3.2": {
+      "key": "CB-2312",
+      "id": "988744d5-6efa-488c-b9f3-8aad4ce644f5",
+      "title": "use-autopilot-events.test.tsx"
+    },
+    "E8.4.1": {
+      "key": "CB-2314",
+      "id": "9f169928-235b-42ba-b879-63454c352724",
+      "title": "Push script (this script)"
+    },
+    "E8.4.2": {
+      "key": "CB-2315",
+      "id": "9ba08a6f-5896-4539-aab4-065a38f0b94f",
+      "title": "Runner orchestrator"
+    },
+    "E8.4.3": {
+      "key": "CB-2316",
+      "id": "b12959d4-40d5-4a9d-b0c7-0df01d366f2b",
+      "title": "Chrome UI test recipes (12)"
+    },
+    "E8.4.4": {
+      "key": "CB-2317",
+      "id": "f9b67983-5b5a-4e92-8eba-8b62e34aba03",
+      "title": "Manual QA matrix execution"
+    },
+    "E9.1.1": {
+      "key": "CB-2320",
+      "id": "7375f197-31f9-4786-ae23-2c62d17af762",
+      "title": "Write backend/docs/AUTOPILOT_RUNBOOK.md"
+    },
+    "E9.2.1": {
+      "key": "CB-2322",
+      "id": "03b0591c-9c79-44b6-aec3-6c159f866eee",
+      "title": "Update CLAUDE.md AutoPilot section"
+    },
+    "E10.1.1": {
+      "key": "CB-2325",
+      "id": "b0341495-bd6d-4926-a216-ddbbd08474e8",
+      "title": "Add AUTOPILOT_PERSISTENCE_ENABLED Setting"
+    },
+    "E10.1.2": {
+      "key": "CB-2326",
+      "id": "1f4c3b8a-84a9-46e2-bcce-73c8ef1a3daf",
+      "title": "Settings page toggle"
+    },
+    "E10.2.1": {
+      "key": "CB-2328",
+      "id": "7760a30b-824e-4b5c-a922-06cf355f04fc",
+      "title": "Soak window observation log"
+    },
+    "E10.2.2": {
+      "key": "CB-2329",
+      "id": "0433743e-d088-4dac-b6b7-e7cf03d4edfb",
+      "title": "Remove flag after soak"
+    }
+  },
+  "subtasks": {
+    "E1.1.1.s1": {
+      "key": "CB-2224",
+      "id": "0258c5c2-1678-498a-94de-ecf4da0e74e8",
+      "title": "Define columns + indexes for 3 models"
+    },
+    "E1.1.1.s2": {
+      "key": "CB-2225",
+      "id": "3f66b776-b4ee-4fa9-9d3c-118c72511774",
+      "title": "Generate + apply Prisma migration"
+    },
+    "E1.1.1.s3": {
+      "key": "CB-2226",
+      "id": "8af04891-6153-49c7-99bf-890eb14273cd",
+      "title": "Regenerate Prisma client + commit migration files"
+    },
+    "E1.1.2.s1": {
+      "key": "CB-2228",
+      "id": "2cee7739-83d5-41c6-982d-24f37d861a93",
+      "title": "ORM classes for 3 models"
+    },
+    "E1.1.2.s2": {
+      "key": "CB-2229",
+      "id": "bf3d3fb4-c215-413c-a676-7fcda7632e25",
+      "title": "Register in models/__init__.py + Pydantic schemas"
+    }
+  },
+  "qa_tasks": {
+    "QA-A01": {
+      "key": "QA-4557",
+      "id": "ce39418a-dc68-40cf-b37c-7276b5ad548e",
+      "title": "Repository: save_queue roundtrip",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A02": {
+      "key": "QA-4558",
+      "id": "bd8c0bb8-a696-4ea1-8cb7-ef1fcb7fe29f",
+      "title": "Repository: load_active_queue filters terminal",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A03": {
+      "key": "QA-4559",
+      "id": "1c9e5df2-2547-4d8c-8029-2c3594399fd4",
+      "title": "Repository: bulk task ordering preserved",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A04": {
+      "key": "QA-4560",
+      "id": "74cb40f5-e329-4d8e-90f2-a81bb89864ba",
+      "title": "Repository: record_event appends to log",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A05": {
+      "key": "QA-4561",
+      "id": "65bc187c-96d6-4b7b-a192-0bea127b8c8e",
+      "title": "Repository: idempotent re-save",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A06": {
+      "key": "QA-4562",
+      "id": "e8be8972-bc90-4b10-873e-00c0b771f44e",
+      "title": "Persistence: write-through on every transition",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A07": {
+      "key": "QA-4563",
+      "id": "aaff9c20-ff30-44d4-9456-fc59f346f1a7",
+      "title": "Persistence: rehydrate marks RUNNING failed",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A08": {
+      "key": "QA-4564",
+      "id": "faf191c2-9aa6-419b-a782-1ea5b6439e45",
+      "title": "Persistence: crash sets queue PAUSED(crash_recovery)",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A09": {
+      "key": "QA-4565",
+      "id": "9e19641f-e9aa-481b-97c0-1b36c13a11a8",
+      "title": "Persistence: cache + DB stay consistent under rapid changes",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A10": {
+      "key": "QA-4566",
+      "id": "52d055a9-c70b-4c0a-a6ff-e3e495e716cf",
+      "title": "Detection: 'out of extra usage' triggers exhaustion",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A11": {
+      "key": "QA-4567",
+      "id": "f201f792-d1fc-4aab-9ec2-8acf27ce6bad",
+      "title": "Detection: 'rate limit exceeded' triggers exhaustion",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A12": {
+      "key": "QA-4568",
+      "id": "a2ed9080-1fdf-487c-8271-2f826fcd7c23",
+      "title": "Detection: 'credit balance is too low' triggers exhaustion",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A13": {
+      "key": "QA-4569",
+      "id": "63269f10-b297-40d6-8e64-a3c6b8f0183d",
+      "title": "Detection: stream-json rate_limit_error event",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A14": {
+      "key": "QA-4570",
+      "id": "487a4408-149c-448f-9096-a5e8b7a02fdb",
+      "title": "Detection: ordinary exit_code=0 returns False",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A15": {
+      "key": "QA-4571",
+      "id": "d11217e9-975a-4cdd-937f-4e4b100748a3",
+      "title": "Detection: random non-quota error returns False",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A16": {
+      "key": "QA-4572",
+      "id": "f6444607-3cc9-4974-a1f2-c7c63f820fd8",
+      "title": "Detection: case-insensitive matching",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A17": {
+      "key": "QA-4573",
+      "id": "e22921ba-e7ae-4598-9f4c-7b0905e11605",
+      "title": "Detection: pattern at start vs end of output",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A18": {
+      "key": "QA-4574",
+      "id": "9c9d7c49-cc6d-4f95-88ae-47c372f8ac4c",
+      "title": "Reset extraction: ISO 8601 with tz",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A19": {
+      "key": "QA-4575",
+      "id": "b9f4eb38-2135-4ace-93c1-687169cb177e",
+      "title": "Reset extraction: ISO 8601 without tz",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A20": {
+      "key": "QA-4576",
+      "id": "93b9ef7d-1e9b-4e55-a7dd-d94ec35364ad",
+      "title": "Reset extraction: AM/PM with date",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A21": {
+      "key": "QA-4577",
+      "id": "5e8a1dd4-7d06-4edc-a9d1-51a03d714284",
+      "title": "Reset extraction: AM/PM without date",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A22": {
+      "key": "QA-4578",
+      "id": "6fbd3db1-13bd-4ed9-a86b-aacdc7cfe1c6",
+      "title": "Reset extraction: retry-after seconds",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A23": {
+      "key": "QA-4579",
+      "id": "28b45a46-ddb9-43b6-b68a-4d47b8e39157",
+      "title": "Reset extraction: malformed input returns None",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A24": {
+      "key": "QA-4580",
+      "id": "b6ba1c2f-514d-422a-9d2c-5797da0eafdd",
+      "title": "Scheduler: auto-resume fires at reset+60s",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A25": {
+      "key": "QA-4581",
+      "id": "ed3225cd-7684-4744-8911-bad81196c236",
+      "title": "Scheduler: cancellation on manual resume",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A26": {
+      "key": "QA-4582",
+      "id": "c47b353b-1624-4cae-badc-1969ecb852fe",
+      "title": "Scheduler: cancellation on abort",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A27": {
+      "key": "QA-4583",
+      "id": "e37d2850-b22c-4cdd-831f-e6db377ca060",
+      "title": "Scheduler: re-armed on rehydration if reset still future",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A28": {
+      "key": "QA-4584",
+      "id": "31500284-7053-4148-85e2-359ee05d7ba6",
+      "title": "Scheduler: fires immediately if reset already passed on rehydration",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A29": {
+      "key": "QA-4585",
+      "id": "e4a2a279-f9cc-4083-886f-a30af12caedf",
+      "title": "E2E: pause \u2192 reset \u2192 auto-resume happy path",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A30": {
+      "key": "QA-4586",
+      "id": "2b540437-037e-44c7-b05b-e89693ab54d9",
+      "title": "E2E: crash \u2192 rehydrate \u2192 manual resume",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A31": {
+      "key": "QA-4587",
+      "id": "f8cf72c1-ebb0-4f53-bed9-efb9ee287348",
+      "title": "E2E: token-exhaust paused queue does not advance",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A32": {
+      "key": "QA-4588",
+      "id": "c48a2535-4da4-42d9-b6c7-6cd8487d5f52",
+      "title": "E2E: resume preflight skips already-CWQ tasks",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A33": {
+      "key": "QA-4589",
+      "id": "245aae41-088e-409b-9c15-194c4769cade",
+      "title": "E2E: abort during WAITING_RESET cancels timer",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A34": {
+      "key": "QA-4590",
+      "id": "9e157c8f-db33-491a-8cbc-c9487d2800c4",
+      "title": "Regression: CB-1952 cascade does not demote CWQ parent",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A35": {
+      "key": "QA-4591",
+      "id": "f4c7db19-ac37-4d23-9c61-66ea6c3b4756",
+      "title": "Regression: full backend pytest suite green",
+      "type": "AUTOMATED",
+      "priority": "CRITICAL"
+    },
+    "QA-A36": {
+      "key": "QA-4592",
+      "id": "ea8e9ea9-8756-4f73-8225-53d4ffa95856",
+      "title": "Frontend: AutoPilotFloatingBar renders WAITING_RESET",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A37": {
+      "key": "QA-4593",
+      "id": "7f7dadd0-e426-49a4-9f14-dadb34fc7fde",
+      "title": "Frontend: AutoPilotFloatingBar renders crash_recovery",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A38": {
+      "key": "QA-4594",
+      "id": "38e828ee-5fb8-4f88-9055-17998251cfbc",
+      "title": "Frontend: Resume now button calls API",
+      "type": "AUTOMATED",
+      "priority": "HIGH"
+    },
+    "QA-A39": {
+      "key": "QA-4595",
+      "id": "72bdeb2a-6d67-4350-bf73-7e9b0db01c8c",
+      "title": "Frontend: countdown ticks every second",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A40": {
+      "key": "QA-4596",
+      "id": "5ad1a0e0-09a2-4c9d-86e3-b6f3ad67a6b7",
+      "title": "Frontend: SSE event triggers toast",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-A41": {
+      "key": "QA-4597",
+      "id": "d4c7ebca-e932-4b73-80c0-bfc24d2f5461",
+      "title": "Frontend: full vitest suite green",
+      "type": "AUTOMATED",
+      "priority": "MEDIUM"
+    },
+    "QA-C01": {
+      "key": "QA-4598",
+      "id": "160f4e1b-da4e-4950-98e3-07c1f43720d0",
+      "title": "Chrome: floating bar renders RUNNING state correctly",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-C02": {
+      "key": "QA-4599",
+      "id": "47bdb075-3523-4f1c-9268-f0bafaeea9ff",
+      "title": "Chrome: floating bar renders manual PAUSED state",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-C03": {
+      "key": "QA-4600",
+      "id": "5e71c083-a27e-400b-a96a-df9566552363",
+      "title": "Chrome: floating bar renders WAITING_RESET with countdown",
+      "type": "MANUAL",
+      "priority": "CRITICAL"
+    },
+    "QA-C04": {
+      "key": "QA-4601",
+      "id": "f0db730f-f7e1-4ceb-99b6-ef5a199c8032",
+      "title": "Chrome: crash_recovery banner after backend restart",
+      "type": "MANUAL",
+      "priority": "CRITICAL"
+    },
+    "QA-C05": {
+      "key": "QA-4602",
+      "id": "51ed694b-90a0-4e96-aa5a-bb7ac03f39fb",
+      "title": "Chrome: Resume now button click resumes queue",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-C06": {
+      "key": "QA-4603",
+      "id": "d88aa7bc-1465-4d53-933a-2d22e7dc14a6",
+      "title": "Chrome: Sonner toast on auto-pause",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-C07": {
+      "key": "QA-4604",
+      "id": "d961e2eb-b70d-401d-a889-154db9038479",
+      "title": "Chrome: Sonner toast on auto-resume",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-C08": {
+      "key": "QA-4605",
+      "id": "2e5fae9b-a860-422c-9b2b-0eaf7b78caa4",
+      "title": "Chrome: Settings toggle for AUTOPILOT_PERSISTENCE_ENABLED",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-C09": {
+      "key": "QA-4606",
+      "id": "2ef667ee-87db-4af3-b24e-72f7e3cefa8e",
+      "title": "Chrome: Metrics tile shows live counts",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-C10": {
+      "key": "QA-4607",
+      "id": "59a6d775-fd72-490d-a71e-6b542ef0ffc9",
+      "title": "Chrome: Watchdog page shows recovery event",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-C11": {
+      "key": "QA-4608",
+      "id": "41091261-67f0-4a73-be1b-7cb9e1cf1df2",
+      "title": "Chrome regression: CodeBoard back-button after AutoPilot interactions",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-C12": {
+      "key": "QA-4609",
+      "id": "7766608b-0128-434f-83fb-fe25096aedfd",
+      "title": "Chrome: AutoPilot survives full page reload mid-queue",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-M01": {
+      "key": "QA-4610",
+      "id": "5a085686-1fd7-4acf-a9ed-bf21c29002cc",
+      "title": "Manual: persistence visible in dev.db AutoPilotQueueRecord",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-M02": {
+      "key": "QA-4611",
+      "id": "a281d661-3155-4086-a49c-2ba0283b4d25",
+      "title": "Manual: pause + resume cycle persists",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-M03": {
+      "key": "QA-4612",
+      "id": "9d13574f-4247-4fcd-912f-d9d62be937cf",
+      "title": "Manual: backend kill mid-task \u2192 restart \u2192 crash banner",
+      "type": "MANUAL",
+      "priority": "CRITICAL"
+    },
+    "QA-M04": {
+      "key": "QA-4613",
+      "id": "12817077-0bc8-41b3-9529-e872ba8d3af6",
+      "title": "Manual: Resume from crash banner re-runs current task",
+      "type": "MANUAL",
+      "priority": "CRITICAL"
+    },
+    "QA-M05": {
+      "key": "QA-4614",
+      "id": "011a7936-239e-4745-bede-ad7faa59ec9c",
+      "title": "Manual: simulated rate-limit triggers WAITING_RESET",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-M06": {
+      "key": "QA-4615",
+      "id": "883a6685-e3ed-49b3-98c0-b46af03e6434",
+      "title": "Manual: scheduled auto-resume fires at +60s buffer",
+      "type": "MANUAL",
+      "priority": "HIGH"
+    },
+    "QA-M07": {
+      "key": "QA-4616",
+      "id": "fef1ef13-ff9d-4bb9-9031-a2c40e843293",
+      "title": "Manual: Resume now button overrides timer",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-M08": {
+      "key": "QA-4617",
+      "id": "fc6d4503-81a5-47c0-814f-9745606f7f82",
+      "title": "Manual: Abort during WAITING_RESET cancels timer",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-M09": {
+      "key": "QA-4618",
+      "id": "1d35eec4-8a2a-45a7-a352-3cb943744bb2",
+      "title": "Manual: Settings toggle disables persistence",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-M10": {
+      "key": "QA-4619",
+      "id": "63a8f5a1-a240-41c2-8b15-5f8bd689d1cf",
+      "title": "Manual: Watchdog WatchdogEvent for autopilot_recovery",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-M11": {
+      "key": "QA-4620",
+      "id": "2e89a6a1-b4af-4041-8d2e-f3f72732b368",
+      "title": "Manual: Metrics endpoint counts match observed state",
+      "type": "MANUAL",
+      "priority": "MEDIUM"
+    },
+    "QA-M12": {
+      "key": "QA-4621",
+      "id": "27a7dc5b-6cba-43af-93b2-1f74d2695a9d",
+      "title": "Manual: CB-1952 cascade behavior unchanged after CB-1951",
+      "type": "MANUAL",
+      "priority": "CRITICAL"
+    }
+  }
+}

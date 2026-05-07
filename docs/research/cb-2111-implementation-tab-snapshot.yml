@@ -1,0 +1,356 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e5]
+        - generic [ref=e7]: Projects Manager V2
+      - button "Search... ⌘K" [ref=e9]:
+        - img [ref=e10]
+        - generic [ref=e13]: Search...
+        - generic [ref=e14]: ⌘K
+      - navigation [ref=e15]:
+        - link "Dashboard" [ref=e16] [cursor=pointer]:
+          - /url: /
+          - img [ref=e17]
+          - text: Dashboard
+        - link "CodeBoard" [ref=e22] [cursor=pointer]:
+          - /url: /codeboard
+          - img [ref=e23]
+          - text: CodeBoard
+        - link "QA Board" [ref=e24] [cursor=pointer]:
+          - /url: /codeboard/qa
+          - img [ref=e25]
+          - text: QA Board
+        - link "Projects" [ref=e29] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e30]
+          - text: Projects
+        - link "Create" [ref=e32] [cursor=pointer]:
+          - /url: /create
+          - img [ref=e33]
+          - text: Create
+        - link "Import" [ref=e34] [cursor=pointer]:
+          - /url: /import
+          - img [ref=e35]
+          - text: Import
+        - link "Build" [ref=e38] [cursor=pointer]:
+          - /url: /build
+          - img [ref=e39]
+          - text: Build
+        - link "Ports" [ref=e43] [cursor=pointer]:
+          - /url: /ports
+          - img [ref=e44]
+          - text: Ports
+        - link "Docker" [ref=e49] [cursor=pointer]:
+          - /url: /docker
+          - img [ref=e50]
+          - text: Docker
+        - link "GitHub" [ref=e54] [cursor=pointer]:
+          - /url: /github
+          - img [ref=e55]
+          - text: GitHub
+        - link "Settings" [ref=e58] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e59]
+          - text: Settings
+      - generic [ref=e62]:
+        - button "Light Mode" [ref=e63]:
+          - img [ref=e64]
+          - text: Light Mode
+        - button "Shortcuts ?" [ref=e70]:
+          - img [ref=e71]
+          - text: Shortcuts
+          - generic [ref=e73]: "?"
+      - generic [ref=e75]:
+        - paragraph [ref=e76]: Projects Manager Web
+        - paragraph [ref=e77]: v1.0.0
+    - main [ref=e78]:
+      - generic [ref=e79]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - link "Back to CodeBoard" [ref=e105] [cursor=pointer]:
+              - /url: /codeboard
+              - img [ref=e106]
+            - generic [ref=e108]:
+              - generic [ref=e109]: ProjectsManagerWebV2
+              - img [ref=e110]
+              - generic [ref=e112]: ✓
+              - generic [ref=e113]: CB-2370
+          - generic [ref=e114]:
+            - button "Execute" [ref=e116]:
+              - img [ref=e117]
+              - generic [ref=e119]: Execute
+              - img [ref=e120]
+            - button "Edit" [ref=e123]:
+              - img [ref=e124]
+            - button "Delete" [ref=e126]:
+              - img [ref=e127]
+            - link "Close and return to board" [ref=e130] [cursor=pointer]:
+              - /url: /codeboard
+              - img [ref=e131]
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - heading "Implement /api/system/rag/status OR remove RagStatusCard poller" [level=1] [ref=e139]
+            - paragraph [ref=e141]: "Fix-task for CB-2365. Decision needed: implement the endpoint on the backend OR remove the polling on the frontend. Acceptance: zero [RagStatusCard] errors in console after the fix."
+            - navigation [ref=e143]:
+              - button "Details" [ref=e144]:
+                - generic [ref=e145]:
+                  - img [ref=e146]
+                  - text: Details
+              - button "Implementation" [ref=e150]:
+                - generic [ref=e151]:
+                  - img [ref=e152]
+                  - text: Implementation
+              - button "Activity" [ref=e154]:
+                - generic [ref=e155]:
+                  - img [ref=e156]
+                  - text: Activity
+              - button "Comments" [ref=e158]:
+                - generic [ref=e159]:
+                  - img [ref=e160]
+                  - text: Comments
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - generic [ref=e165]:
+                  - generic [ref=e166]:
+                    - img [ref=e167]
+                    - generic [ref=e169]:
+                      - heading "Latest Execution" [level=2] [ref=e170]
+                      - paragraph [ref=e171]: First execution
+                  - generic [ref=e172]:
+                    - generic [ref=e173]:
+                      - img [ref=e174]
+                      - time [ref=e177]: May 6, 2026, 09:59 PM
+                    - generic [ref=e178]:
+                      - img [ref=e179]
+                      - text: 8m 17s
+                - generic [ref=e182]:
+                  - generic [ref=e183]: claude_code
+                  - generic [ref=e184]: exit 0
+              - generic [ref=e185]:
+                - heading "Summary" [level=3] [ref=e187]:
+                  - img [ref=e189]
+                  - text: Summary
+                - generic [ref=e194]:
+                  - paragraph [ref=e195]:
+                    - text: CB-2370 resolved by implementing the missing
+                    - code [ref=e196]: GET /api/system/rag/status
+                    - text: backend endpoint rather than removing the RagStatusCard poller (removing it would have been a behavioural regression on a shipped surface). The backend endpoint was added to
+                    - code [ref=e197]: backend/api/system.py
+                    - text: and a corresponding Next.js proxy route was created at
+                    - code [ref=e198]: frontend/app/api/system/rag/status/route.ts
+                    - text: . A
+                    - code [ref=e199]: get_status_payload()
+                    - text: helper was added to
+                    - code [ref=e200]: backend/services/rag_service.py
+                    - text: that never raises — it surfaces faults via
+                    - code [ref=e201]: healthy=False
+                    - text: — and the endpoint returns mode, host, port, collections, total_docs, and healthy fields.
+                  - paragraph [ref=e202]:
+                    - text: "A total of 15 tests were written and verified green: 4 in"
+                    - code [ref=e203]: test_system_rag_status.py
+                    - text: ", 6 in"
+                    - code [ref=e204]: test_rag_service_status_payload.py
+                    - text: ", and 5 in"
+                    - code [ref=e205]: api-system-rag-status-route.test.ts
+                    - text: . Live curl verification confirmed HTTP 200 from both the backend (port 8401) and the Next.js proxy (port 3601). A Playwright browser check against the
+                    - code [ref=e206]: /codeboard
+                    - text: mount showed zero console errors and a green
+                    - code [ref=e207]: RAG HTTP 3,509 docs
+                    - text: badge, satisfying the acceptance criterion.
+                  - paragraph [ref=e208]: A security audit identified a misleading docstring (HIGH) that was fixed in-task, plus a MEDIUM (rate-limiting) and LOW (abspath disclosure) that were deferred to follow-up tickets CB-2372 and CB-2373 respectively. A MEDIUM code-review finding (sync chromadb calls on the event loop) was filed as CB-2374. The issue was moved to COMPLETED_WAITING_QA.
+              - generic [ref=e209]:
+                - generic [ref=e210]:
+                  - heading "Files Modified" [level=3] [ref=e211]:
+                    - img [ref=e213]
+                    - text: Files Modified
+                  - generic [ref=e218]:
+                    - generic [ref=e219]: "+7752"
+                    - generic [ref=e220]: "-71"
+                - generic [ref=e221]:
+                  - generic [ref=e222]:
+                    - generic [ref=e223]: "Components:"
+                    - generic [ref=e224]: backend/api/system.py
+                    - generic [ref=e225]: backend/services/rag_service.py
+                    - generic [ref=e226]: frontend/app/api/system/rag/status/route.ts
+                    - generic [ref=e227]: frontend/components/service-monitor.tsx
+                    - generic [ref=e228]: backend/api/__init__.py
+                    - generic [ref=e229]: CLAUDE.md
+                  - list [ref=e230]:
+                    - listitem [ref=e231]:
+                      - img [ref=e232]
+                      - generic "CLAUDE.md" [ref=e237]
+                    - listitem [ref=e238]:
+                      - img [ref=e239]
+                      - generic "PROMPT_HISTORY.md" [ref=e244]
+                    - listitem [ref=e245]:
+                      - img [ref=e246]
+                      - generic "backend/PROMPT_HISTORY.md" [ref=e251]
+                    - listitem [ref=e252]:
+                      - img [ref=e253]
+                      - generic "backend/api/execution.py" [ref=e258]
+                    - listitem [ref=e259]:
+                      - img [ref=e260]
+                      - generic "backend/app/errors.py" [ref=e265]
+                    - listitem [ref=e266]:
+                      - img [ref=e267]
+                      - generic "backend/app/main.py" [ref=e272]
+                    - listitem [ref=e273]:
+                      - img [ref=e274]
+                      - generic "backend/services/autopilot_queue_service.py" [ref=e279]
+                    - listitem [ref=e280]:
+                      - img [ref=e281]
+                      - generic "backend/services/rag_service.py" [ref=e286]
+                    - listitem [ref=e287]:
+                      - img [ref=e288]
+                      - generic "backend/tests/schema_test_utils.py" [ref=e293]
+                    - listitem [ref=e294]:
+                      - img [ref=e295]
+                      - generic "backend/tests/test_schema_data_integrity.py" [ref=e300]
+                    - listitem [ref=e301]:
+                      - img [ref=e302]
+                      - generic "frontend/PROMPT_HISTORY.md" [ref=e307]
+                    - listitem [ref=e308]:
+                      - img [ref=e309]
+                      - generic "frontend/app/settings/page.tsx" [ref=e314]
+                    - listitem [ref=e315]:
+                      - img [ref=e316]
+                      - generic ".../components/codeboard/AutoPilotFloatingBar.tsx" [ref=e321]
+                    - listitem [ref=e322]:
+                      - img [ref=e323]
+                      - generic "frontend/components/providers.tsx" [ref=e328]
+                    - listitem [ref=e329]:
+                      - img [ref=e330]
+                      - generic "frontend/components/service-monitor.tsx" [ref=e335]
+                    - listitem [ref=e336]:
+                      - img [ref=e337]
+                      - generic "frontend/contexts/AutoPilotContext.tsx" [ref=e342]
+                    - listitem [ref=e343]:
+                      - img [ref=e344]
+                      - generic "frontend/prisma/schema.prisma" [ref=e349]
+              - generic [ref=e350]:
+                - heading "Architecture Notes" [level=3] [ref=e352]:
+                  - img [ref=e354]
+                  - text: Architecture Notes
+                - paragraph [ref=e360]:
+                  - text: Decision was made to implement the endpoint rather than remove the poller, preserving the RAG status visibility surface shipped in CB-2046. The backend endpoint is mounted via backend/api/
+                  - strong [ref=e361]: init
+                  - text: ".py at /api/system/rag/status. The Next.js proxy uses a 15-second AbortController timeout and maps upstream failures to 502/504 with Cache-Control: no-store to prevent stale health data being served from edge caches. The get_status_payload() helper in rag_service.py is designed to be fault-tolerant (never raises), surfacing all errors as healthy=False in the response payload."
+              - generic [ref=e362]:
+                - heading "Technical Notes" [level=3] [ref=e364]:
+                  - img [ref=e366]
+                  - text: Technical Notes
+                - paragraph [ref=e370]: "backend/api/system.py received a corrected docstring after a security audit flagged an overclaim about Origin-header perimeter protection; the actual perimeter is loopback bind (127.0.0.1) not the CORS middleware. Follow-up tickets filed: CB-2372 (rate-limit the endpoint to protect ChromaDB), CB-2373 (redact abspath in RagStatusResponse.host), CB-2374 (wrap sync chromadb calls in get_status_payload to free the event loop). A helper script was written to scripts/codeboard/ per Rule 29 to file the follow-up issues via the Codeboard API."
+              - generic [ref=e371]:
+                - heading "Challenges" [level=3] [ref=e373]:
+                  - img [ref=e375]
+                  - text: Challenges
+                - paragraph [ref=e379]: Multiple Claude Code session initializations observed in the execution log suggesting retries or pool churn. The Codeboard API calls to file follow-up issues required several curl attempts to locate the correct project ID and issue endpoint format before succeeding. Security audit initially flagged the docstring as HIGH severity, requiring an in-task fix before CWQ gate could be cleared.
+              - generic [ref=e380]:
+                - heading "Lessons Learned" [level=3] [ref=e382]:
+                  - img [ref=e384]
+                  - text: Lessons Learned
+                - paragraph [ref=e388]: When a frontend poller exists for a missing endpoint, evaluate whether removing it causes a feature regression before defaulting to deletion — here removal would have broken a shipped RAG status badge. Audit gates (code-reviewer + security-auditor) should be run before marking CWQ, not after, to avoid rework cycles. Docstrings making security claims (e.g. about network perimeter) must accurately reflect actual bind configuration, not aspirational middleware intent.
+              - generic [ref=e389]:
+                - generic [ref=e390]:
+                  - heading "Implementation Notes" [level=3] [ref=e391]:
+                    - img [ref=e393]
+                    - text: Implementation Notes
+                  - button "Add implementation note" [ref=e396]:
+                    - img
+                    - text: Add
+                - paragraph [ref=e399]: No notes yet. Click Add to capture a decision, tradeoff, or lesson.
+          - generic [ref=e400]:
+            - generic [ref=e401]:
+              - generic [ref=e402]:
+                - generic [ref=e403]: Status
+                - combobox [ref=e404]:
+                  - option "Backlog"
+                  - option "To Do"
+                  - option "In Progress"
+                  - option "In Review"
+                  - option "Waiting QA" [selected]
+                  - option "Done"
+              - generic [ref=e405]:
+                - generic [ref=e406]: Priority
+                - combobox [ref=e407]:
+                  - option "Low" [selected]
+                  - option "Medium"
+                  - option "High"
+                  - option "Critical"
+              - generic [ref=e408]:
+                - generic [ref=e409]: Type
+                - combobox [ref=e410]:
+                  - option "🚀 Feature"
+                  - option "⚡ Epic"
+                  - option "📖 Story"
+                  - option "✓ Task" [selected]
+                  - option "○ Subtask"
+                  - option "🐛 Bug"
+              - generic [ref=e411]:
+                - generic [ref=e412]: Story Points
+                - generic [ref=e413]: "-"
+            - generic [ref=e414]:
+              - heading "People" [level=3] [ref=e415]
+              - generic [ref=e416]:
+                - generic [ref=e417]:
+                  - img [ref=e418]
+                  - generic [ref=e421]:
+                    - generic [ref=e422]: Assignee
+                    - text: Unassigned
+                - generic [ref=e423]:
+                  - img [ref=e424]
+                  - generic [ref=e427]:
+                    - generic [ref=e428]: Reporter
+                    - text: AI
+            - generic [ref=e429]:
+              - heading "Dates" [level=3] [ref=e430]
+              - generic [ref=e431]:
+                - generic [ref=e432]:
+                  - img [ref=e433]
+                  - generic [ref=e435]:
+                    - generic [ref=e436]: Created
+                    - text: 5/5/2026
+                - generic [ref=e437]:
+                  - img [ref=e438]
+                  - generic [ref=e441]:
+                    - generic [ref=e442]: Started
+                    - text: 5/6/2026
+            - generic [ref=e443]:
+              - heading "Labels" [level=3] [ref=e444]:
+                - img [ref=e445]
+                - text: Labels
+              - generic [ref=e448]:
+                - generic [ref=e449]: cb-1955-regression-postmortem
+                - generic [ref=e450]: fix-task
+            - generic [ref=e451]:
+              - heading "Parent Issue" [level=3] [ref=e452]
+              - link "View Parent Issue" [ref=e453] [cursor=pointer]:
+                - /url: /codeboard/issues/7f8ee1e2-e5d9-45e4-aa96-01daa2cc137d
+                - img [ref=e454]
+                - text: View Parent Issue
+  - button "RAG HTTP 3,540 docs" [ref=e456]:
+    - img [ref=e84]
+    - generic [ref=e89]: RAG HTTP
+    - generic [ref=e90]: 3,540 docs
+    - img [ref=e91]
+  - button "Open Next.js Dev Tools" [ref=e98] [cursor=pointer]:
+    - img [ref=e99]
+  - alert [ref=e102]
+  - generic [ref=e458]:
+    - img [ref=e459]
+    - generic [ref=e461]:
+      - generic [ref=e462]:
+        - generic [ref=e463]: CB-2038
+        - generic [ref=e464]: 18/21
+      - paragraph [ref=e465]: "CB-2111 — [QA] E4-1: Existing ImplementationTab renders ExecutionSummary on real issue"
+      - paragraph [ref=e466]: Generating response...
+    - generic [ref=e467]:
+      - button "Pause" [ref=e468]:
+        - img [ref=e469]
+      - button "Skip current task" [ref=e472]:
+        - img [ref=e473]
+      - button "Abort" [ref=e475]:
+        - img [ref=e476]
+      - button "Expand queue" [ref=e478]:
+        - img [ref=e479]

@@ -22,7 +22,10 @@
  *     status code; we never leak the raw `response` to the caller.
  */
 
-import { apiFetch as apiFetchHttp } from '@/lib/api/api-fetch';
+import {
+  apiFetch as apiFetchHttp,
+  type ApiFetchInit,
+} from '@/lib/api/api-fetch';
 
 /**
  * Standardized error thrown by `apiFetch`. Mirrors the backend error
@@ -83,10 +86,14 @@ export function getDefaultErrorMessage(status: number): string {
  * JSON fetch wrapper. Adds `Content-Type: application/json` (consumers
  * can override via `options.headers`), throws `APIError` on non-2xx, and
  * returns `undefined as T` on 204 No Content.
+ *
+ * Accepts the wider `ApiFetchInit` so callers can pass a per-request
+ * `timeout` (default 30s) for slow endpoints like LLM aggregation —
+ * see CB-2375 (`POST /features/{id}/documentation/generate`).
  */
 export async function apiFetch<T>(
   url: string,
-  options?: RequestInit,
+  options?: ApiFetchInit,
 ): Promise<T> {
   const response = await apiFetchHttp(url, {
     ...options,

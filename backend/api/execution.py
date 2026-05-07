@@ -996,6 +996,167 @@ async def get_active_queue():
     }
 
 
+@router.get("/queue/recovery-status")
+async def get_queue_recovery_status():
+    """Return queues that were rehydrated after a backend crash (CB-1951 E2.3.1).
+
+    The frontend AutoPilotFloatingBar uses this on mount to render the
+    crash-recovery banner. Once the user resumes / aborts a queue, the
+    backend drops it from the recovery set so subsequent polls return
+    empty for that queue.
+    """
+    recovered = autopilot_queue_service.get_recovered_queues()
+    return {
+        "recovered_count": len(recovered),
+        "queues": [
+            autopilot_queue_service.get_queue_status(q.id)
+            for q in recovered
+        ],
+    }
+
+
+@router.post("/queue/{queue_id}/clear-recovery")
+async def clear_queue_recovery(queue_id: str):
+    """Drop a queue from the post-crash recovery set after user takes action."""
+    autopilot_queue_service.clear_recovery_state(queue_id)
+    return {"ok": True, "queue_id": queue_id}
+
+
+@router.get("/queue/events")
+async def queue_events_stream(request: Request):
+    """Server-Sent Events stream of AutoPilot lifecycle events (CB-1951 E5.3.1).
+
+    Frontend hook ``useAutoPilotEvents`` subscribes to this endpoint and
+    surfaces ``auto_paused`` / ``auto_resume_fired`` / ``crash_recovery_detected``
+    events as sonner toasts. The stream is a tail of `AutoPilotEvent`:
+    every 2 seconds we re-query for new rows since the last seen createdAt
+    and emit them in order.
+
+    Connection lifecycle: client EventSource auto-reconnects on drop. We
+    keep the resource cost bounded by polling at 2s and stopping if the
+    client disconnects (Starlette ``request.is_disconnected``).
+    """
+    from datetime import datetime as _dt
+
+    async def _gen():
+        from models.autopilot import AutoPilotEvent
+        last_seen = _dt.utcnow()
+        # Heartbeat comment so EventSource keeps the connection alive
+        yield ":connected\n\n"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    return
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(
+                        select(AutoPilotEvent)
+                        .where(AutoPilotEvent.createdAt > last_seen)
+                        .order_by(AutoPilotEvent.createdAt.asc())
+                        .limit(50)
+                    )
+                    rows = list(result.scalars().all())
+                for row in rows:
+                    payload = {
+                        "id": row.id,
+                        "queueId": row.queueId,
+                        "type": row.type,
+                        "payload": row.payload,
+                        "createdAt": row.createdAt.isoformat(),
+                    }
+                    yield f"event: {row.type}\ndata: {json.dumps(payload)}\n\n"
+                    last_seen = row.createdAt
+                # Heartbeat to keep proxies from dropping the connection
+                yield ":hb\n\n"
+                await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            return
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("/queue/settings/persistence-enabled")
+async def get_persistence_flag():
+    """Return the current state of the AutoPilot persistence feature flag (E10)."""
+    return {"enabled": autopilot_queue_service.get_persistence_enabled()}
+
+
+class _PersistenceFlagBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/queue/settings/persistence-enabled")
+async def set_persistence_flag(body: _PersistenceFlagBody):
+    """Toggle the AutoPilot persistence feature flag at runtime (E10).
+
+    Existing queues snapshotted the flag at creation time. Toggling
+    affects only queues created after this call. The setting is in-process
+    only; restart resets it to the AUTOPILOT_PERSISTENCE_ENABLED env var.
+    """
+    autopilot_queue_service.set_persistence_enabled(body.enabled)
+    return {"enabled": autopilot_queue_service.get_persistence_enabled()}
+
+
+@router.get("/queue/metrics")
+async def get_queue_metrics(db: AsyncSession = Depends(get_db)):
+    """Return AutoPilot queue + event metrics (CB-1951 E6.3.1).
+
+    Used by the Settings page tile (E6.3.2) and any external observability
+    dashboard. All counts are per-installation; project-scoped variants are
+    out of scope for this endpoint.
+    """
+    from sqlalchemy import func
+    from datetime import timedelta
+    from utils.autopilot_repository import queue_status_counts
+    from models.autopilot import AutoPilotEvent
+
+    counts = await queue_status_counts(db)
+    # Map any unknown statuses into the canonical six so the response is
+    # stable for the frontend tile.
+    response = {
+        "pending": int(counts.get("pending", 0)),
+        "running": int(counts.get("running", 0)),
+        "paused": int(counts.get("paused", 0)),
+        "waiting_reset": int(counts.get("waiting_reset", 0)),
+        "completed": int(counts.get("completed", 0)),
+        "aborted": int(counts.get("aborted", 0)),
+    }
+
+    # Auto-pause count over the last 24 hours
+    since = datetime.utcnow() - timedelta(hours=24)
+    auto_pause_count = await db.execute(
+        select(func.count(AutoPilotEvent.id))
+        .where(AutoPilotEvent.type == "auto_paused")
+        .where(AutoPilotEvent.createdAt >= since)
+    )
+    response["autoPause24h"] = int(auto_pause_count.scalar_one() or 0)
+
+    # Auto-resume circuit-breaker trips in the last 24 hours
+    cb_count = await db.execute(
+        select(func.count(AutoPilotEvent.id))
+        .where(AutoPilotEvent.type == "auto_resume_circuit_breaker_tripped")
+        .where(AutoPilotEvent.createdAt >= since)
+    )
+    response["circuitBreakerTrips24h"] = int(cb_count.scalar_one() or 0)
+
+    # Crash-recovery events in the last 24 hours
+    cr_count = await db.execute(
+        select(func.count(AutoPilotEvent.id))
+        .where(AutoPilotEvent.type == "crash_recovery_detected")
+        .where(AutoPilotEvent.createdAt >= since)
+    )
+    response["crashRecovery24h"] = int(cr_count.scalar_one() or 0)
+
+    return response
+
+
 @router.get("/queue/available-models")
 async def get_available_models():
     """Get available execution providers and models."""

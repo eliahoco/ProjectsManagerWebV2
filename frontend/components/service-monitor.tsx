@@ -14,7 +14,16 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { AlertTriangle, RefreshCw, X, Play, CheckCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  RefreshCw,
+  X,
+  Play,
+  CheckCircle,
+  Database,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ServiceAlert {
@@ -109,6 +118,247 @@ function clearDockerPause() {
 const RESTART_COOLDOWN_MS = 30_000;
 // Time window in which max 3 attempts are allowed
 const RESTART_WINDOW_MS = 5 * 60 * 1000;
+
+const RAG_STATUS_POLL_MS = 30_000;
+// Flip the badge to "offline" only after this many consecutive fetch
+// failures — keeps a single dropped poll from flickering red for 30s.
+const RAG_FETCH_FAIL_THRESHOLD = 2;
+
+type RagBadgeColor = 'green' | 'amber' | 'red' | 'gray';
+type RagMode = 'HTTP' | 'PERSISTENT' | 'UNINITIALIZED';
+
+interface RagCollectionStatus {
+  name: string;
+  count: number | null;
+}
+
+interface RagStatusPayload {
+  mode: RagMode | (string & {});
+  host: string;
+  port: number;
+  collections: RagCollectionStatus[];
+  total_docs: number;
+  healthy: boolean;
+}
+
+const DOT_CLASSES: Record<RagBadgeColor, string> = {
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  gray: 'bg-zinc-500',
+};
+
+const RING_CLASSES: Record<RagBadgeColor, string> = {
+  green: 'ring-green-500/40',
+  amber: 'ring-amber-500/40',
+  red: 'ring-red-500/40',
+  gray: 'ring-zinc-500/40',
+};
+
+// Coerce a raw fetch payload into a safe shape — backend is trusted but
+// React must not crash if the response loses a field. Returns null if the
+// payload is not an object.
+function normalizeRagStatus(raw: unknown): RagStatusPayload | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const collectionsIn = Array.isArray(r.collections) ? r.collections : [];
+  const collections: RagCollectionStatus[] = collectionsIn
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+    .map(c => ({
+      name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
+      count: typeof c.count === 'number' ? c.count : null,
+    }));
+  return {
+    mode: typeof r.mode === 'string' ? r.mode : 'UNINITIALIZED',
+    host: typeof r.host === 'string' ? r.host : '',
+    port: typeof r.port === 'number' ? r.port : 0,
+    collections,
+    total_docs: typeof r.total_docs === 'number' ? r.total_docs : 0,
+    healthy: r.healthy === true,
+  };
+}
+
+/**
+ * CB-2046: RAG status card.
+ *
+ * Always-visible compact card surfacing the active ChromaDB backend so
+ * silent fallback to the embedded SQLite path (the bug that motivated
+ * CB-2039) is impossible to miss going forward.
+ *
+ * Color logic:
+ *   - mode=HTTP & healthy        → green  (container path, expected)
+ *   - mode=PERSISTENT            → amber  (silent fallback — needs attention)
+ *   - mode=HTTP & !healthy       → amber  (container reachable but degraded)
+ *   - mode=UNINITIALIZED / fetch → red    (RAG offline)
+ *
+ * Polls /api/system/rag/status every 30s. Collapsed by default; click the
+ * header to expand and see top-3 collections by count.
+ *
+ * Hidden on viewports < sm (640px) to avoid overlapping the bottom-right
+ * alert popup, which has its own footprint there.
+ */
+function RagStatusCard() {
+  const [status, setStatus] = useState<RagStatusPayload | null>(null);
+  const [offline, setOffline] = useState<boolean>(false);
+  const [expanded, setExpanded] = useState<boolean>(false);
+  const failCountRef = useRef<number>(0);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system/rag/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = normalizeRagStatus(await res.json());
+      if (data === null) throw new Error('malformed response');
+      setStatus(data);
+      failCountRef.current = 0;
+      setOffline(false);
+    } catch (err) {
+      console.error(
+        '[RagStatusCard] fetch failed:',
+        err instanceof Error ? err.message : String(err),
+      );
+      failCountRef.current += 1;
+      if (failCountRef.current >= RAG_FETCH_FAIL_THRESHOLD) setOffline(true);
+    }
+  }, []);
+
+  const fetchStatusRef = useRef(fetchStatus);
+  fetchStatusRef.current = fetchStatus;
+
+  useEffect(() => {
+    const initial = setTimeout(() => fetchStatusRef.current(), 1000);
+    const interval = setInterval(() => fetchStatusRef.current(), RAG_STATUS_POLL_MS);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, []);
+
+  let badgeColor: RagBadgeColor = 'gray';
+  let modeLabel = 'RAG …';
+  let unhealthyHint: string | null = null;
+
+  if (offline) {
+    badgeColor = 'red';
+    modeLabel = 'RAG offline';
+    unhealthyHint = 'status endpoint unreachable';
+  } else if (status) {
+    if (status.mode === 'HTTP' && status.healthy) {
+      badgeColor = 'green';
+      modeLabel = 'RAG HTTP';
+    } else if (status.mode === 'HTTP' && !status.healthy) {
+      badgeColor = 'amber';
+      modeLabel = 'RAG HTTP';
+      unhealthyHint = 'degraded — heartbeat or list_collections failed';
+    } else if (status.mode === 'PERSISTENT') {
+      badgeColor = 'amber';
+      modeLabel = 'RAG fallback';
+      unhealthyHint = 'silent fallback to embedded SQLite';
+    } else {
+      badgeColor = 'red';
+      modeLabel = 'RAG offline';
+      unhealthyHint = 'client uninitialized';
+    }
+  }
+
+  const totalDocs = status?.total_docs ?? 0;
+
+  const topCollections: RagCollectionStatus[] = status
+    ? [...status.collections]
+        .sort((a, b) => {
+          const ca = a.count ?? -1;
+          const cb = b.count ?? -1;
+          if (cb !== ca) return cb - ca;
+          return a.name.localeCompare(b.name);
+        })
+        .slice(0, 3)
+    : [];
+
+  const isPersistent = status?.mode === 'PERSISTENT';
+  const endpointLabel = isPersistent ? 'Path' : 'Endpoint';
+  const endpointDisplay = status
+    ? status.mode === 'HTTP'
+      ? `${status.host}:${status.port}`
+      : isPersistent
+      ? status.host || 'embedded'
+      : '—'
+    : '—';
+
+  return (
+    <div className="hidden sm:block fixed bottom-4 left-4 z-40 max-w-xs">
+      <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-lg shadow-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setExpanded(prev => !prev)}
+          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800/80 transition-colors text-left"
+          title={unhealthyHint || `${modeLabel} • ${totalDocs} docs`}
+          aria-expanded={expanded}
+        >
+          <Database className="h-4 w-4 text-zinc-400 shrink-0" />
+          <span
+            className={cn(
+              'h-2 w-2 rounded-full ring-2 shrink-0',
+              DOT_CLASSES[badgeColor],
+              RING_CLASSES[badgeColor],
+            )}
+            aria-hidden="true"
+          />
+          <span className="text-zinc-100 text-xs font-medium truncate">
+            {modeLabel}
+          </span>
+          <span className="text-zinc-400 text-xs ml-auto shrink-0">
+            {totalDocs.toLocaleString()} docs
+          </span>
+          {expanded ? (
+            <ChevronUp className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+          )}
+        </button>
+
+        {expanded && (
+          <div className="border-t border-zinc-800 px-3 py-2 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-500">{endpointLabel}</span>
+              <span className="text-zinc-300 font-mono truncate ml-2">
+                {endpointDisplay}
+              </span>
+            </div>
+
+            {unhealthyHint && (
+              <div className="text-amber-400 text-xs leading-snug">
+                {unhealthyHint}
+              </div>
+            )}
+
+            <div className="text-xs">
+              <div className="text-zinc-500 mb-1">Top collections</div>
+              {topCollections.length === 0 ? (
+                <div className="text-zinc-600 italic">none</div>
+              ) : (
+                <ul className="space-y-1">
+                  {topCollections.map(col => (
+                    <li
+                      key={col.name}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="text-zinc-300 font-mono truncate">
+                        {col.name}
+                      </span>
+                      <span className="text-zinc-400 shrink-0">
+                        {col.count === null ? '—' : col.count.toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function ServiceMonitor() {
   const [alerts, setAlerts] = useState<ServiceAlert[]>([]);
@@ -732,17 +982,20 @@ export function ServiceMonitor() {
   // Docker pause indicator — show when watchdog is paused for VM operations
   if (dockerPaused) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-        <div className="backdrop-blur-sm border rounded-lg px-4 py-2 flex items-center gap-2 bg-cyan-900/90 border-cyan-700 text-cyan-200">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span className="font-medium text-sm">Watchdog paused — waiting for Docker</span>
+      <>
+        <RagStatusCard />
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+          <div className="backdrop-blur-sm border rounded-lg px-4 py-2 flex items-center gap-2 bg-cyan-900/90 border-cyan-700 text-cyan-200">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <span className="font-medium text-sm">Watchdog paused — waiting for Docker</span>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (activeAlerts.length === 0) {
-    return null;
+    return <RagStatusCard />;
   }
 
   // Determine header style and text based on watchdog statuses
@@ -775,7 +1028,9 @@ export function ServiceMonitor() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+    <>
+      <RagStatusCard />
+      <div className="fixed bottom-4 right-4 z-50 max-w-sm">
       {/* Header */}
       <div
         className={cn(
@@ -901,6 +1156,7 @@ export function ServiceMonitor() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

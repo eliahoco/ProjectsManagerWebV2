@@ -11,10 +11,17 @@ __pycache__/
 
 # Data files
 *.db
+*.db-shm
+*.db-wal
+*.db.pre-*
 *.sqlite3
 data/
 logs/
 .next/
+
+# Local agent / runtime state
+.playwright-mcp/
+.claude/scheduled_tasks.lock
 
 # OS files
 .DS_Store

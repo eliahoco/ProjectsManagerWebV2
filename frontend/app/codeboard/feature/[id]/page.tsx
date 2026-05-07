@@ -16,6 +16,7 @@ import type { FeatureSearchFilters } from '@/components/codeboard';
 import { EpicSearchBar, applyEpicSearchFilters, DEFAULT_EPIC_SEARCH_FILTERS, RelevanceBadge, highlightEpicMatch } from '@/components/codeboard/EpicSearchBar';
 import type { EpicSearchFilters } from '@/components/codeboard/EpicSearchBar';
 import { cn } from '@/lib/utils';
+import { isExecutableType } from '@/lib/codeboard';
 import { highlightMatch } from '@/components/codeboard/IssueSearchBar';
 import { useAutoPilot } from '@/contexts/AutoPilotContext';
 
@@ -913,15 +914,15 @@ export default function FeatureDetailPage() {
     setActiveTerminalIssueId(prev => prev === issueId ? null : issueId);
   }, []);
 
-  // Get all executable tasks (TASKs and SUBTASKs that are not DONE)
+  // Get all executable items (TASK / SUBTASK / BUG that are not DONE)
   // If items are selected, only include selected items
   const getExecutableTasks = useMemo(() => {
     const tasks: Issue[] = [];
 
     function collectTasks(nodes: TreeNode[]) {
       for (const node of nodes) {
-        // Only collect TASKs and SUBTASKs that are not done
-        if ((node.type === 'TASK' || node.type === 'SUBTASK') && node.status !== 'DONE') {
+        // Only collect executable issue types (TASK, SUBTASK, BUG) that are not done
+        if (isExecutableType(node.type) && node.status !== 'DONE') {
           // If we have selections, only include selected items
           if (selected.size === 0 || selected.has(node.id)) {
             tasks.push(node);
@@ -1038,7 +1039,7 @@ export default function FeatureDetailPage() {
     const allIssues = issuesData?.items || [];
     const itemsToUpdate = selected.size > 0
       ? allIssues.filter(i => selected.has(i.id) && i.status !== 'DONE' && i.status !== 'CANCELLED')
-      : allIssues.filter(i => (i.type === 'TASK' || i.type === 'SUBTASK') && i.status !== 'DONE' && i.status !== 'CANCELLED');
+      : allIssues.filter(i => isExecutableType(i.type) && i.status !== 'DONE' && i.status !== 'CANCELLED');
 
     if (itemsToUpdate.length === 0) {
       alert('No items to mark as Done');
@@ -1121,7 +1122,7 @@ export default function FeatureDetailPage() {
     const allIssues = issuesData?.items || [];
     const itemsToUpdate = selected.size > 0
       ? allIssues.filter(i => selected.has(i.id) && i.status !== 'COMPLETED_WAITING_QA' && i.status !== 'DONE' && i.status !== 'CANCELLED')
-      : allIssues.filter(i => (i.type === 'TASK' || i.type === 'SUBTASK') && i.status !== 'COMPLETED_WAITING_QA' && i.status !== 'DONE' && i.status !== 'CANCELLED');
+      : allIssues.filter(i => isExecutableType(i.type) && i.status !== 'COMPLETED_WAITING_QA' && i.status !== 'DONE' && i.status !== 'CANCELLED');
 
     if (itemsToUpdate.length === 0) {
       alert('No items to mark as Waiting for QA');

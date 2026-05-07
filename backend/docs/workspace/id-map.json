@@ -1,0 +1,1664 @@
+{
+  "F": {
+    "key": "CB-2384",
+    "id": "efb8f723-074b-4111-b875-de54eac00824",
+    "title": "AI Project Workspace \u2014 Studio + Backlog + Crew Map",
+    "type": "FEATURE"
+  },
+  "E1": {
+    "key": "CB-2385",
+    "id": "23613554-f359-4f34-92fe-2e7218ce2e4d",
+    "title": "[E1] Foundation \u2014 Data model + shared services",
+    "type": "EPIC"
+  },
+  "E1.S1": {
+    "key": "CB-2386",
+    "id": "cb340c8b-cc87-4091-b464-09d2174c188b",
+    "title": "[E1.S1] Studio data model",
+    "type": "STORY"
+  },
+  "E1.S1.T1": {
+    "key": "CB-2387",
+    "id": "e83853dd-9b70-4a72-84f3-2a534f6b559f",
+    "title": "[E1.S1.T1] SQLAlchemy: StudioConversation/Message/Artifact/AgentActivity/InterAgentMessage",
+    "type": "TASK"
+  },
+  "E1.S1.T2": {
+    "key": "CB-2388",
+    "id": "3da29224-cb6b-4cf0-9908-6795d0a575f9",
+    "title": "[E1.S1.T2] SQLAlchemy: AgentTemplate + AgentInstance (template/instance split)",
+    "type": "TASK"
+  },
+  "E1.S1.T3": {
+    "key": "CB-2389",
+    "id": "4ce3ff49-b655-44a3-b765-2005fc17f204",
+    "title": "[E1.S1.T3] Prisma mirror \u2014 Studio models",
+    "type": "TASK"
+  },
+  "E1.S1.T4": {
+    "key": "CB-2390",
+    "id": "d5ff4c97-85a1-494f-acc6-973fabb2247d",
+    "title": "[E1.S1.T4] Migration script + idempotent seed (Jonny + 6 default skills as templates)",
+    "type": "TASK"
+  },
+  "E1.S2": {
+    "key": "CB-2391",
+    "id": "5496cfd8-eb4b-4a5a-9f6a-6f1bfe51df2c",
+    "title": "[E1.S2] Backlog data model",
+    "type": "STORY"
+  },
+  "E1.S2.T1": {
+    "key": "CB-2392",
+    "id": "bc690bb7-6343-4be2-91b7-30170ac3d9ef",
+    "title": "[E1.S2.T1] SQLAlchemy: FeatureRequest + Comment + Activity",
+    "type": "TASK"
+  },
+  "E1.S2.T2": {
+    "key": "CB-2393",
+    "id": "e7bdf424-2b86-4159-a417-b875ce9a8bdd",
+    "title": "[E1.S2.T2] Prisma mirror \u2014 Backlog models",
+    "type": "TASK"
+  },
+  "E1.S2.T3": {
+    "key": "CB-2394",
+    "id": "ac292261-8155-47c1-b063-cf6eb8e40e3b",
+    "title": "[E1.S2.T3] Migration + seed (port CB-2381 as first FeatureRequest)",
+    "type": "TASK"
+  },
+  "E1.S3": {
+    "key": "CB-2395",
+    "id": "2a94db8f-04cd-4bde-a878-41813edf96d8",
+    "title": "[E1.S3] Crew Map data model",
+    "type": "STORY"
+  },
+  "E1.S3.T1": {
+    "key": "CB-2396",
+    "id": "b22e302e-cb36-4691-bf35-7bd482af4c00",
+    "title": "[E1.S3.T1] SQLAlchemy: CrewAssignment + CrewSkillUsage",
+    "type": "TASK"
+  },
+  "E1.S3.T2": {
+    "key": "CB-2397",
+    "id": "c6c59e3d-0144-4d37-8f1e-3a4f3a6bd535",
+    "title": "[E1.S3.T2] Prisma mirror \u2014 Crew Map models",
+    "type": "TASK"
+  },
+  "E1.S3.T3": {
+    "key": "CB-2398",
+    "id": "b62144c1-a647-4812-8bf0-d7605fea4ef7",
+    "title": "[E1.S3.T3] Migration",
+    "type": "TASK"
+  },
+  "E1.S4": {
+    "key": "CB-2399",
+    "id": "341042ed-91e9-4d9e-a891-38287c64d925",
+    "title": "[E1.S4] Shared services skeleton (agent_dispatcher + studio_orchestrator + SSE)",
+    "type": "STORY"
+  },
+  "E1.S4.T1": {
+    "key": "CB-2400",
+    "id": "8eb3b044-a5a5-4037-a687-f8a4a113c586",
+    "title": "[E1.S4.T1] services/agent_dispatcher.py \u2014 typed verbs + GroupQueue mutex + chain-depth",
+    "type": "TASK"
+  },
+  "E1.S4.T1.ST1": {
+    "key": "CB-2401",
+    "id": "3c8bf507-8535-4697-be72-f19d467941d3",
+    "title": "[E1.S4.T1.ST1] notify(from, to, payload)",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T1.ST2": {
+    "key": "CB-2402",
+    "id": "33201ddb-7713-4485-8324-e64db55c3ce8",
+    "title": "[E1.S4.T1.ST2] request(from, to, payload) \u2014 blocking",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T1.ST3": {
+    "key": "CB-2403",
+    "id": "a3a0844b-8391-4551-9253-41e189cb85a2",
+    "title": "[E1.S4.T1.ST3] delegate(from, to, payload)",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T1.ST4": {
+    "key": "CB-2404",
+    "id": "75c9cd44-db12-4239-a495-04156e70f936",
+    "title": "[E1.S4.T1.ST4] broadcast(from, group, payload)",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T1.ST5": {
+    "key": "CB-2405",
+    "id": "a2a2c14e-fc25-4ec8-bb1a-b0f30496814e",
+    "title": "[E1.S4.T1.ST5] Per-agent mutex via asyncio.Lock",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T1.ST6": {
+    "key": "CB-2406",
+    "id": "cc807787-07df-4e72-9b94-4ff9c9f3b339",
+    "title": "[E1.S4.T1.ST6] max_chain_depth=3 enforcement + audit log row",
+    "type": "SUBTASK"
+  },
+  "E1.S4.T2": {
+    "key": "CB-2407",
+    "id": "1f2fda85-876f-4d02-8dab-77fada485812",
+    "title": "[E1.S4.T2] services/studio_orchestrator.py \u2014 multi-session manager",
+    "type": "TASK"
+  },
+  "E1.S4.T3": {
+    "key": "CB-2408",
+    "id": "d18feb92-4be9-4b54-a514-42bd06ec2b58",
+    "title": "[E1.S4.T3] SSE multiplexer \u2014 per-conversation EventSource channel",
+    "type": "TASK"
+  },
+  "E1.S4.T4": {
+    "key": "CB-2409",
+    "id": "37a728da-925b-489c-9745-c19b214d1c37",
+    "title": "[E1.S4.T4] Crew assignment writer \u2014 every dispatch creates CrewAssignment row",
+    "type": "TASK"
+  },
+  "E1.S5": {
+    "key": "CB-2410",
+    "id": "df9bdd3c-de1e-49c7-ad12-b73ad41c0099",
+    "title": "[E1.S5] Audit log + Visibility Principle enforcement",
+    "type": "STORY"
+  },
+  "E1.S5.T1": {
+    "key": "CB-2411",
+    "id": "18e13275-4b81-40c5-80fe-ce51fb797a6a",
+    "title": "[E1.S5.T1] Pre-flight check: dispatcher MUST persist before continuing",
+    "type": "TASK"
+  },
+  "E1.S5.T2": {
+    "key": "CB-2412",
+    "id": "1b7708bc-6cb2-4ffb-944c-18657a0748e6",
+    "title": "[E1.S5.T2] StudioInterAgentMessage write-through-persisted",
+    "type": "TASK"
+  },
+  "E1.S5.T3": {
+    "key": "CB-2413",
+    "id": "bf23a486-8c88-4532-88b6-538c0e249d85",
+    "title": "[E1.S5.T3] Test: assert no orphan dispatches",
+    "type": "TASK"
+  },
+  "E2": {
+    "key": "CB-2414",
+    "id": "743504d2-b3d0-42fb-bee2-5d7871a15f32",
+    "title": "[E2] Studio \u2014 Chat-based feature planning view",
+    "type": "EPIC"
+  },
+  "E2.S1": {
+    "key": "CB-2415",
+    "id": "698ec24c-303f-4d77-9d79-79e7e97bcffe",
+    "title": "[E2.S1] Studio shell + routing",
+    "type": "STORY"
+  },
+  "E2.S1.T1": {
+    "key": "CB-2416",
+    "id": "876a60ca-1f79-4b10-b723-79d5c1e0e00b",
+    "title": "[E2.S1.T1] /app/workspace/studio/page.tsx shell with <Workspace.Provider>",
+    "type": "TASK"
+  },
+  "E2.S1.T2": {
+    "key": "CB-2417",
+    "id": "d79391e4-3859-4cf9-85e4-58c2003ff508",
+    "title": "[E2.S1.T2] <StudioTopBar /> \u2014 project picker, [+ New Conv], settings",
+    "type": "TASK"
+  },
+  "E2.S1.T3": {
+    "key": "CB-2418",
+    "id": "4b6cc457-708c-4d08-871d-1cb6a87fb2a9",
+    "title": "[E2.S1.T3] URL-state encoding ?project=X&conv=Y&tab=N",
+    "type": "TASK"
+  },
+  "E2.S2": {
+    "key": "CB-2419",
+    "id": "f33bc3a5-1388-4ead-b60f-9489130f06fc",
+    "title": "[E2.S2] Conversation tabs",
+    "type": "STORY"
+  },
+  "E2.S2.T1": {
+    "key": "CB-2420",
+    "id": "fc7afff3-d04c-4722-9bdf-970fb936443b",
+    "title": "[E2.S2.T1] <ConversationTabs /> \u2014 Inter Variable 510, #7170ff active underline",
+    "type": "TASK"
+  },
+  "E2.S2.T2": {
+    "key": "CB-2421",
+    "id": "67cb9032-f76b-469d-9a7b-4d3059f3daa2",
+    "title": "[E2.S2.T2] Live indicator dot per tab",
+    "type": "TASK"
+  },
+  "E2.S2.T3": {
+    "key": "CB-2422",
+    "id": "b66f5a82-4bc7-4b42-b286-97e5af285764",
+    "title": "[E2.S2.T3] startTransition on tab switch",
+    "type": "TASK"
+  },
+  "E2.S2.T4": {
+    "key": "CB-2423",
+    "id": "bdaa2ce5-46eb-4915-b184-c1c530db654a",
+    "title": "[E2.S2.T4] Right-click context menu \u2014 rename, close, duplicate, archive",
+    "type": "TASK"
+  },
+  "E2.S2.T5": {
+    "key": "CB-2424",
+    "id": "e9a310e6-d834-4ab5-9002-dd221f0044a0",
+    "title": "[E2.S2.T5] Tab persistence across reload",
+    "type": "TASK"
+  },
+  "E2.S3": {
+    "key": "CB-2425",
+    "id": "d674493c-5a7c-46de-82f9-cc10961ec5b8",
+    "title": "[E2.S3] Chat pane",
+    "type": "STORY"
+  },
+  "E2.S3.T1": {
+    "key": "CB-2426",
+    "id": "db300dda-355d-4d90-8694-526deb27a281",
+    "title": "[E2.S3.T1] <Chat.MessageList /> with content-visibility: auto virtualization",
+    "type": "TASK"
+  },
+  "E2.S3.T2": {
+    "key": "CB-2427",
+    "id": "8e3ce8c2-6ada-491e-a951-086c6e9eb77a",
+    "title": "[E2.S3.T2] Role badges (user/Jonny/skill) with stable colors",
+    "type": "TASK"
+  },
+  "E2.S3.T3": {
+    "key": "CB-2428",
+    "id": "61d0e47c-65fc-4246-b3e7-5041fa744dd8",
+    "title": "[E2.S3.T3] Agent invocation card (collapsible 'calling architect\u2026')",
+    "type": "TASK"
+  },
+  "E2.S3.T4": {
+    "key": "CB-2429",
+    "id": "8a2a7508-deb2-4943-a625-990562ecd98b",
+    "title": "[E2.S3.T4] useRef token buffer + 50ms flush for streaming render",
+    "type": "TASK"
+  },
+  "E2.S3.T5": {
+    "key": "CB-2430",
+    "id": "c17a92f3-6819-4f50-b03f-257b9c6e777d",
+    "title": "[E2.S3.T5] Markdown rendering with rehype-pretty-code syntax highlighting",
+    "type": "TASK"
+  },
+  "E2.S3.T6": {
+    "key": "CB-2431",
+    "id": "5a65f7c6-28b5-49b9-bb07-f0ab4af4ac18",
+    "title": "[E2.S3.T6] Inline citations (when agent quotes a CodeBoard issue)",
+    "type": "TASK"
+  },
+  "E2.S3.T7": {
+    "key": "CB-2432",
+    "id": "a0fc35d7-4208-4d16-8f4a-a2ccc3d8005e",
+    "title": "[E2.S3.T7] Chat input \u2014 multiline + Cmd+Enter submit + slash-commands",
+    "type": "TASK"
+  },
+  "E2.S4": {
+    "key": "CB-2433",
+    "id": "0f3a950f-1236-4882-b08b-490d8f3590a3",
+    "title": "[E2.S4] Agent activity panel (live crew)",
+    "type": "STORY"
+  },
+  "E2.S4.T1": {
+    "key": "CB-2434",
+    "id": "e5d643ed-33a3-4743-bf6d-891664d5043d",
+    "title": "[E2.S4.T1] <Chat.AgentStatus /> reads SSE for inTool boolean",
+    "type": "TASK"
+  },
+  "E2.S4.T2": {
+    "key": "CB-2435",
+    "id": "09435bbb-aa14-430b-8f5c-89179e0128c0",
+    "title": "[E2.S4.T2] Status badge variants \u2014 idle/thinking/tool-use/done",
+    "type": "TASK"
+  },
+  "E2.S4.T3": {
+    "key": "CB-2436",
+    "id": "72e5b4b9-f930-460f-a229-85f35599e6f0",
+    "title": "[E2.S4.T3] Stable visual identity per agent (icon + color)",
+    "type": "TASK"
+  },
+  "E2.S4.T4": {
+    "key": "CB-2437",
+    "id": "58095b2a-a287-4892-bad7-07546a0db81b",
+    "title": "[E2.S4.T4] Reduced-motion compliance",
+    "type": "TASK"
+  },
+  "E2.S5": {
+    "key": "CB-2438",
+    "id": "1cfff9d4-746d-4b1b-b19a-8e90e3dafcd6",
+    "title": "[E2.S5] Action bar \u2014 Send/Send-to-Backlog/Pause/Save/Discard",
+    "type": "STORY"
+  },
+  "E2.S5.T1": {
+    "key": "CB-2439",
+    "id": "5f62a776-4986-48df-940e-e55813ea8254",
+    "title": "[E2.S5.T1] <Chat.Actions /> \u2014 five buttons",
+    "type": "TASK"
+  },
+  "E2.S5.T2": {
+    "key": "CB-2440",
+    "id": "028c409b-a534-438c-85fa-b00e07fe1af6",
+    "title": "[E2.S5.T2] Pause action emits agent_dispatcher.pause(conversationId)",
+    "type": "TASK"
+  },
+  "E2.S5.T3": {
+    "key": "CB-2441",
+    "id": "61575225-76e5-41d5-8d0a-f8fe2b895f6e",
+    "title": "[E2.S5.T3] Save action \u2014 snapshot to localStorage + DB",
+    "type": "TASK"
+  },
+  "E2.S5.T4": {
+    "key": "CB-2442",
+    "id": "4970d2ce-d0c8-423f-b823-97329f348b56",
+    "title": "[E2.S5.T4] Discard action \u2014 confirmation modal",
+    "type": "TASK"
+  },
+  "E2.S6": {
+    "key": "CB-2443",
+    "id": "177811eb-34aa-413b-a96e-964407be8095",
+    "title": "[E2.S6] Preview pane \u2014 split-view artifact renderer",
+    "type": "STORY"
+  },
+  "E2.S6.T1": {
+    "key": "CB-2444",
+    "id": "8fefcb0d-712a-4ba8-b323-9ffde7a6e628",
+    "title": "[E2.S6.T1] <PreviewPane /> shell with detect-and-reveal",
+    "type": "TASK"
+  },
+  "E2.S6.T1.ST1": {
+    "key": "CB-2445",
+    "id": "ced1c475-0dc5-4ff9-b129-f3d973a0f951",
+    "title": "[E2.S6.T1.ST1] Detect logic \u2014 slide in on StudioArtifact event",
+    "type": "SUBTASK"
+  },
+  "E2.S6.T1.ST2": {
+    "key": "CB-2446",
+    "id": "d01986bb-43e8-45c6-b4b9-da91501b577a",
+    "title": "[E2.S6.T1.ST2] CSS transition enter 250ms / exit 150ms (interruptible)",
+    "type": "SUBTASK"
+  },
+  "E2.S6.T1.ST3": {
+    "key": "CB-2447",
+    "id": "658df6e0-2ccf-4a66-a11c-ad543f6cac1f",
+    "title": "[E2.S6.T1.ST3] Resize handle \u2014 role=separator + ArrowLeft/Right",
+    "type": "SUBTASK"
+  },
+  "E2.S6.T1.ST4": {
+    "key": "CB-2448",
+    "id": "e6fbc451-f37a-4c15-9c42-b83603fe293e",
+    "title": "[E2.S6.T1.ST4] Focus moves into pane on reveal, returns on close",
+    "type": "SUBTASK"
+  },
+  "E2.S6.T2": {
+    "key": "CB-2449",
+    "id": "4edc1e5a-ef13-43a8-8e2a-79e1a9ef2b6b",
+    "title": "[E2.S6.T2] Markdown renderer tab",
+    "type": "TASK"
+  },
+  "E2.S6.T3": {
+    "key": "CB-2450",
+    "id": "ff10d56c-e087-4f43-b028-ff6e1f22b2d0",
+    "title": "[E2.S6.T3] Mermaid renderer tab (dynamic import)",
+    "type": "TASK"
+  },
+  "E2.S6.T4": {
+    "key": "CB-2451",
+    "id": "03dff03e-f32c-4186-a831-d3b5547e9b3b",
+    "title": "[E2.S6.T4] Code viewer tab with diff mode (shiki)",
+    "type": "TASK"
+  },
+  "E2.S6.T5": {
+    "key": "CB-2452",
+    "id": "64169f37-8751-4022-b200-b2646c8f2f65",
+    "title": "[E2.S6.T5] HTML preview iframe (sandboxed)",
+    "type": "TASK"
+  },
+  "E2.S6.T6": {
+    "key": "CB-2453",
+    "id": "0e9594b1-6bd7-4a02-843d-433a2978520b",
+    "title": "[E2.S6.T6] Tab switcher \u2014 MD / Mermaid / Code / HTML",
+    "type": "TASK"
+  },
+  "E2.S6.T7": {
+    "key": "CB-2454",
+    "id": "72b70449-f9af-4bc3-a551-d990b48a1283",
+    "title": "[E2.S6.T7] Stagger animation 50-100ms per block, cap 400ms",
+    "type": "TASK"
+  },
+  "E2.S7": {
+    "key": "CB-2455",
+    "id": "e0d07a97-eb81-4366-b9a4-213a737cdb01",
+    "title": "[E2.S7] Send-to-Backlog handoff",
+    "type": "STORY"
+  },
+  "E2.S7.T1": {
+    "key": "CB-2456",
+    "id": "6137a659-7fec-464f-92fa-8338b99c0061",
+    "title": "[E2.S7.T1] 'Send to Backlog' button \u2192 confirmation modal",
+    "type": "TASK"
+  },
+  "E2.S7.T2": {
+    "key": "CB-2457",
+    "id": "91e64dcf-5273-48dd-941a-268308141992",
+    "title": "[E2.S7.T2] Conversation transcript \u2192 FeatureRequest payload (Jonny prompt)",
+    "type": "TASK"
+  },
+  "E2.S7.T3": {
+    "key": "CB-2458",
+    "id": "1090c26a-eb72-4e4a-b4e2-894bf19280a4",
+    "title": "[E2.S7.T3] Edit-before-send modal \u2014 pre-filled fields",
+    "type": "TASK"
+  },
+  "E2.S7.T4": {
+    "key": "CB-2459",
+    "id": "e01cfb92-e9cb-4952-bd11-b7b96265284f",
+    "title": "[E2.S7.T4] POST /api/feature-backlog + toast + redirect",
+    "type": "TASK"
+  },
+  "E2.S7.T5": {
+    "key": "CB-2460",
+    "id": "ee6a9c4c-a725-4215-914b-7466f9ebc9ba",
+    "title": "[E2.S7.T5] Source conversation linked back from FeatureRequest",
+    "type": "TASK"
+  },
+  "E2.S8": {
+    "key": "CB-2461",
+    "id": "88b5fb98-7fb1-44be-9293-b0061dacc326",
+    "title": "[E2.S8] Hibernation + resume",
+    "type": "STORY"
+  },
+  "E2.S8.T1": {
+    "key": "CB-2462",
+    "id": "1fca363d-f931-44d0-ba7f-9f7db54f5c5e",
+    "title": "[E2.S8.T1] Idle detection \u2014 30 min no activity \u2192 hibernate",
+    "type": "TASK"
+  },
+  "E2.S8.T2": {
+    "key": "CB-2463",
+    "id": "ec8751bf-a7b0-4c64-89a2-2ee53acbb520",
+    "title": "[E2.S8.T2] Resume on tab focus \u2014 re-spawn + replay last 5 messages",
+    "type": "TASK"
+  },
+  "E2.S8.T3": {
+    "key": "CB-2464",
+    "id": "590a07f8-1c0f-4005-9118-94908b303678",
+    "title": "[E2.S8.T3] Snapshot state every N messages to PLANNING_STATE.md",
+    "type": "TASK"
+  },
+  "E3": {
+    "key": "CB-2465",
+    "id": "c5ae891e-7c84-4541-a6c4-5e168890539c",
+    "title": "[E3] Backlog \u2014 pre-CodeBoard staging board",
+    "type": "EPIC"
+  },
+  "E3.S1": {
+    "key": "CB-2466",
+    "id": "530e8738-e403-4681-943a-2e271bcb3b36",
+    "title": "[E3.S1] Backlog API",
+    "type": "STORY"
+  },
+  "E3.S1.T1": {
+    "key": "CB-2467",
+    "id": "0a461f0b-a110-46f2-af3e-960f72d29ac8",
+    "title": "[E3.S1.T1] CRUD endpoints /api/feature-backlog (list, get, create, update, delete, archive)",
+    "type": "TASK"
+  },
+  "E3.S1.T2": {
+    "key": "CB-2468",
+    "id": "56c094a2-c657-4a45-9f1a-e40db401c726",
+    "title": "[E3.S1.T2] Search + filter endpoint",
+    "type": "TASK"
+  },
+  "E3.S1.T3": {
+    "key": "CB-2469",
+    "id": "9d1e871c-539c-4603-ad73-0308b8e98270",
+    "title": "[E3.S1.T3] Sort by updated/priority/scheduledFor",
+    "type": "TASK"
+  },
+  "E3.S2": {
+    "key": "CB-2470",
+    "id": "650a57c8-338b-4734-ad1c-6dd4118447bb",
+    "title": "[E3.S2] Backlog list view",
+    "type": "STORY"
+  },
+  "E3.S2.T1": {
+    "key": "CB-2471",
+    "id": "5f4703a4-fa10-4f65-90ce-3766efe734c7",
+    "title": "[E3.S2.T1] /app/workspace/backlog/page.tsx shell",
+    "type": "TASK"
+  },
+  "E3.S2.T2": {
+    "key": "CB-2472",
+    "id": "bd6f406d-a230-428a-aa02-5d994ffd29aa",
+    "title": "[E3.S2.T2] <BacklogCard /> \u2014 title, priority, status, schedule, tags, source link",
+    "type": "TASK"
+  },
+  "E3.S2.T3": {
+    "key": "CB-2473",
+    "id": "e638ff57-27f3-4061-8747-4e9871e2d133",
+    "title": "[E3.S2.T3] Filter bar \u2014 controlled URL state",
+    "type": "TASK"
+  },
+  "E3.S2.T4": {
+    "key": "CB-2474",
+    "id": "65308886-adce-4159-9d49-b43fe4385bd0",
+    "title": "[E3.S2.T4] Sort dropdown",
+    "type": "TASK"
+  },
+  "E3.S2.T5": {
+    "key": "CB-2475",
+    "id": "35383a34-e07c-4270-ba20-218480c06294",
+    "title": "[E3.S2.T5] Empty state + onboarding hint",
+    "type": "TASK"
+  },
+  "E3.S3": {
+    "key": "CB-2476",
+    "id": "b1f59b70-726d-4ff4-aa49-87acaa9cafe2",
+    "title": "[E3.S3] Edit modal",
+    "type": "STORY"
+  },
+  "E3.S3.T1": {
+    "key": "CB-2477",
+    "id": "6e9fbf6b-2d78-40d9-9e1f-cd49d71b5a8e",
+    "title": "[E3.S3.T1] <BacklogEditModal /> shell",
+    "type": "TASK"
+  },
+  "E3.S3.T2": {
+    "key": "CB-2478",
+    "id": "e3587f2e-0307-4537-8605-143f353919f4",
+    "title": "[E3.S3.T2] Priority pill picker",
+    "type": "TASK"
+  },
+  "E3.S3.T3": {
+    "key": "CB-2479",
+    "id": "d908196d-77f4-4e9b-ad45-98b573e3ae57",
+    "title": "[E3.S3.T3] Status pill picker",
+    "type": "TASK"
+  },
+  "E3.S3.T4": {
+    "key": "CB-2480",
+    "id": "686176c0-bf31-48a1-b672-2a34e54eef8e",
+    "title": "[E3.S3.T4] Tag multi-select with autocomplete",
+    "type": "TASK"
+  },
+  "E3.S3.T5": {
+    "key": "CB-2481",
+    "id": "8f8081d8-2ad9-44dd-96d6-a1d80e9072bc",
+    "title": "[E3.S3.T5] Owner picker",
+    "type": "TASK"
+  },
+  "E3.S3.T6": {
+    "key": "CB-2482",
+    "id": "396183ba-a576-4d79-86f3-28df2fca2912",
+    "title": "[E3.S3.T6] Schedule picker \u2014 radio + date/cron + human preview",
+    "type": "TASK"
+  },
+  "E3.S3.T6.ST1": {
+    "key": "CB-2483",
+    "id": "1da5fc6a-b680-482d-a596-8a5aaca3963a",
+    "title": "[E3.S3.T6.ST1] One-shot date+time picker",
+    "type": "SUBTASK"
+  },
+  "E3.S3.T6.ST2": {
+    "key": "CB-2484",
+    "id": "aa59932e-19c6-4b25-a378-e426b0799760",
+    "title": "[E3.S3.T6.ST2] Cron expression input + croniter validation",
+    "type": "SUBTASK"
+  },
+  "E3.S3.T6.ST3": {
+    "key": "CB-2485",
+    "id": "d484af10-7f78-4f9d-93e0-857bd6e6bc49",
+    "title": "[E3.S3.T6.ST3] Human-readable preview",
+    "type": "SUBTASK"
+  },
+  "E3.S4": {
+    "key": "CB-2486",
+    "id": "0eaec162-d18e-48bd-8d30-ccaf696f0253",
+    "title": "[E3.S4] Card actions",
+    "type": "STORY"
+  },
+  "E3.S4.T1": {
+    "key": "CB-2487",
+    "id": "733d0270-b30c-4420-8f48-80aea73651da",
+    "title": "[E3.S4.T1] 'Open in Studio' deep link",
+    "type": "TASK"
+  },
+  "E3.S4.T2": {
+    "key": "CB-2488",
+    "id": "25e8be72-1bc7-4a41-9811-6473dc0b0d33",
+    "title": "[E3.S4.T2] 'Promote to Studio' (manual entries) \u2014 pre-fill new conversation",
+    "type": "TASK"
+  },
+  "E3.S4.T3": {
+    "key": "CB-2489",
+    "id": "9498617b-c6b4-4b17-8574-c62e820fbe47",
+    "title": "[E3.S4.T3] 'Send to CodeBoard + AutoPilot' \u2014 triggers E5",
+    "type": "TASK"
+  },
+  "E3.S4.T4": {
+    "key": "CB-2490",
+    "id": "a7e3b11c-1720-473b-967f-41ab366faf46",
+    "title": "[E3.S4.T4] 'Schedule' inline action",
+    "type": "TASK"
+  },
+  "E3.S5": {
+    "key": "CB-2491",
+    "id": "f3a49b7d-0476-41b2-a137-10b7cf068d2e",
+    "title": "[E3.S5] Comments + activity log",
+    "type": "STORY"
+  },
+  "E3.S5.T1": {
+    "key": "CB-2492",
+    "id": "504abad2-7b72-4292-89c8-abe32bc7f90a",
+    "title": "[E3.S5.T1] <BacklogComments /> threaded",
+    "type": "TASK"
+  },
+  "E3.S5.T2": {
+    "key": "CB-2493",
+    "id": "b68c859e-0d40-42b7-adce-1008ed76d743",
+    "title": "[E3.S5.T2] Activity feed",
+    "type": "TASK"
+  },
+  "E4": {
+    "key": "CB-2494",
+    "id": "8e6c72b9-cc48-43a5-abec-efbd9691c4e1",
+    "title": "[E4] Crew Map \u2014 Obsidian-style agent graph",
+    "type": "EPIC"
+  },
+  "E4.S1": {
+    "key": "CB-2495",
+    "id": "27e825fb-e9fc-4162-90d6-1b386f0742b6",
+    "title": "[E4.S1] Graph data aggregator",
+    "type": "STORY"
+  },
+  "E4.S1.T1": {
+    "key": "CB-2496",
+    "id": "29975db8-c831-441a-af8a-c5c6270f38b0",
+    "title": "[E4.S1.T1] services/crew_map_service.py \u2014 assemble graph",
+    "type": "TASK"
+  },
+  "E4.S1.T2": {
+    "key": "CB-2497",
+    "id": "8b054593-30a9-49dc-87ce-a57a718590a8",
+    "title": "[E4.S1.T2] API /api/crew-map?projectId=X",
+    "type": "TASK"
+  },
+  "E4.S1.T3": {
+    "key": "CB-2498",
+    "id": "2683a641-5eda-4708-824c-3720fcd76d59",
+    "title": "[E4.S1.T3] API /api/crew-map/feature/{id} subgraph",
+    "type": "TASK"
+  },
+  "E4.S1.T4": {
+    "key": "CB-2499",
+    "id": "3570613a-5f1c-48eb-bc3c-6dccaa5090c8",
+    "title": "[E4.S1.T4] SSE channel /api/crew-map/events",
+    "type": "TASK"
+  },
+  "E4.S2": {
+    "key": "CB-2500",
+    "id": "51fb660d-e057-4ab3-b26d-cf651088ed52",
+    "title": "[E4.S2] Graph rendering",
+    "type": "STORY"
+  },
+  "E4.S2.T1": {
+    "key": "CB-2501",
+    "id": "bfdaaca5-5d29-4b26-80e8-d2f571f0c276",
+    "title": "[E4.S2.T1] /app/workspace/crew-map/page.tsx shell",
+    "type": "TASK"
+  },
+  "E4.S2.T2": {
+    "key": "CB-2502",
+    "id": "dd9b7364-e15f-440e-b7dd-ea09adc3635c",
+    "title": "[E4.S2.T2] Install + integrate react-flow",
+    "type": "TASK"
+  },
+  "E4.S2.T3": {
+    "key": "CB-2503",
+    "id": "51a4a886-da33-4b4e-9997-62a07da2eccd",
+    "title": "[E4.S2.T3] Custom node renderers (5 types)",
+    "type": "TASK"
+  },
+  "E4.S2.T3.ST1": {
+    "key": "CB-2504",
+    "id": "d39cb517-0b71-4757-b500-bb7952bbc522",
+    "title": "[E4.S2.T3.ST1] <ProjectNode /> circle with project icon",
+    "type": "SUBTASK"
+  },
+  "E4.S2.T3.ST2": {
+    "key": "CB-2505",
+    "id": "b9c86ed3-9adb-44ce-bb99-76ad13b53c1d",
+    "title": "[E4.S2.T3.ST2] <FeatureNode /> color-by-priority circle",
+    "type": "SUBTASK"
+  },
+  "E4.S2.T3.ST3": {
+    "key": "CB-2506",
+    "id": "4739192e-bd8e-4591-a120-7b3bcbf52e49",
+    "title": "[E4.S2.T3.ST3] <OrchestratorNode /> crown \ud83d\udc51 icon, gold border",
+    "type": "SUBTASK"
+  },
+  "E4.S2.T3.ST4": {
+    "key": "CB-2507",
+    "id": "7b6dc6b6-ccd2-4c01-a536-8550b7b4eaec",
+    "title": "[E4.S2.T3.ST4] <SkillNode /> agent icon + pulse if active",
+    "type": "SUBTASK"
+  },
+  "E4.S2.T3.ST5": {
+    "key": "CB-2508",
+    "id": "7a960781-b52e-4eda-ad66-94f771582b67",
+    "title": "[E4.S2.T3.ST5] <ConversationNode /> diamond shape, deep-link",
+    "type": "SUBTASK"
+  },
+  "E4.S2.T4": {
+    "key": "CB-2509",
+    "id": "4c0e2a59-fc8b-4632-b2be-faed80177716",
+    "title": "[E4.S2.T4] Edge styles \u2014 solid/dashed/animated",
+    "type": "TASK"
+  },
+  "E4.S2.T5": {
+    "key": "CB-2510",
+    "id": "e74b16fb-c43c-4669-825c-201d2e86863b",
+    "title": "[E4.S2.T5] Edge labels (orchestrates/audits/implements/reviews/documents)",
+    "type": "TASK"
+  },
+  "E4.S2.T6": {
+    "key": "CB-2511",
+    "id": "5a8b9c03-36b3-4b28-9094-3a073ab72788",
+    "title": "[E4.S2.T6] Force-directed layout + viewport persistence",
+    "type": "TASK"
+  },
+  "E4.S3": {
+    "key": "CB-2512",
+    "id": "aa51cc10-ed5f-4900-9bdb-e161a31d3e13",
+    "title": "[E4.S3] Filters + interaction",
+    "type": "STORY"
+  },
+  "E4.S3.T1": {
+    "key": "CB-2513",
+    "id": "6f5f216a-c72d-4f07-8b86-29a4840baacf",
+    "title": "[E4.S3.T1] Filter bar (project/feature/agent/status)",
+    "type": "TASK"
+  },
+  "E4.S3.T2": {
+    "key": "CB-2514",
+    "id": "5c52dbdf-d71b-426a-95e2-b417071257c3",
+    "title": "[E4.S3.T2] Click-to-filter \u2014 node click filters subgraph",
+    "type": "TASK"
+  },
+  "E4.S3.T3": {
+    "key": "CB-2515",
+    "id": "1c1786b8-e545-4111-8604-ba6cf422e513",
+    "title": "[E4.S3.T3] Search bar \u2014 fuzzy match",
+    "type": "TASK"
+  },
+  "E4.S3.T4": {
+    "key": "CB-2516",
+    "id": "bd3731a9-a860-4509-aede-c59c67b7d8c3",
+    "title": "[E4.S3.T4] Reset view + zoom-to-fit",
+    "type": "TASK"
+  },
+  "E4.S4": {
+    "key": "CB-2517",
+    "id": "c1f6e404-2497-48e2-944d-c960c37d1d1f",
+    "title": "[E4.S4] Detail panel",
+    "type": "STORY"
+  },
+  "E4.S4.T1": {
+    "key": "CB-2518",
+    "id": "d65e3313-edfc-417c-8c9b-585a1714014d",
+    "title": "[E4.S4.T1] <NodeDetailPanel /> slide-in",
+    "type": "TASK"
+  },
+  "E4.S4.T2": {
+    "key": "CB-2519",
+    "id": "08e10af1-89bf-4b91-8824-2a2de8f9cc2f",
+    "title": "[E4.S4.T2] Per-node-type detail variants",
+    "type": "TASK"
+  },
+  "E4.S4.T3": {
+    "key": "CB-2520",
+    "id": "799f87c0-ae57-4e7f-8de6-37d2b0699f19",
+    "title": "[E4.S4.T3] Skills used + invocation count + last-used",
+    "type": "TASK"
+  },
+  "E4.S4.T4": {
+    "key": "CB-2521",
+    "id": "602d5244-3ad7-47e4-8bc5-7601137e7916",
+    "title": "[E4.S4.T4] 'Open in Studio/Backlog/CodeBoard' deep links",
+    "type": "TASK"
+  },
+  "E4.S5": {
+    "key": "CB-2522",
+    "id": "7c3db00a-29e7-46d8-870d-c73d930b5f4c",
+    "title": "[E4.S5] Live updates",
+    "type": "STORY"
+  },
+  "E4.S5.T1": {
+    "key": "CB-2523",
+    "id": "14c4b92e-b7d6-4d8d-bf6b-eaec7bf65134",
+    "title": "[E4.S5.T1] SSE subscription + state reducer",
+    "type": "TASK"
+  },
+  "E4.S5.T2": {
+    "key": "CB-2524",
+    "id": "c39f9023-3eef-4d02-aa6c-fb7bc19a69b6",
+    "title": "[E4.S5.T2] Active node pulse animation (CSS keyframe, 2 Hz)",
+    "type": "TASK"
+  },
+  "E4.S5.T3": {
+    "key": "CB-2525",
+    "id": "d7450a97-a2fd-4484-a920-c029a91ec91e",
+    "title": "[E4.S5.T3] New assignment slide-in (200ms fade)",
+    "type": "TASK"
+  },
+  "E4.S5.T4": {
+    "key": "CB-2526",
+    "id": "4defd097-6de9-4129-9b8b-c5a257272962",
+    "title": "[E4.S5.T4] Removed assignment fade-out (150ms)",
+    "type": "TASK"
+  },
+  "E5": {
+    "key": "CB-2527",
+    "id": "8badea37-c34b-42c5-84ac-31c961437dec",
+    "title": "[E5] Promote Pipeline \u2014 Backlog \u2192 CodeBoard \u2192 AutoPilot",
+    "type": "EPIC"
+  },
+  "E5.S1": {
+    "key": "CB-2528",
+    "id": "395cd285-da50-400c-a852-c173e3240333",
+    "title": "[E5.S1] Pipeline orchestrator (Blueprint state machine)",
+    "type": "STORY"
+  },
+  "E5.S1.T1": {
+    "key": "CB-2529",
+    "id": "e3889ae2-6e97-4490-894f-01c47b1c03db",
+    "title": "[E5.S1.T1] services/promote_pipeline.py \u2014 Blueprint state machine",
+    "type": "TASK"
+  },
+  "E5.S1.T1.ST1": {
+    "key": "CB-2530",
+    "id": "a6aa37a9-1777-4f7a-b870-e6d8f7c8235b",
+    "title": "[E5.S1.T1.ST1] State 1: validate FeatureRequest readiness (deterministic)",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST2": {
+    "key": "CB-2531",
+    "id": "43aa44dd-9f4f-4fea-9ee2-4f8c709e93fd",
+    "title": "[E5.S1.T1.ST2] State 2: invoke Jonny to generate hierarchy (agentic)",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST3": {
+    "key": "CB-2532",
+    "id": "899c4369-9338-4c80-a388-5171dcbcd038",
+    "title": "[E5.S1.T1.ST3] State 3: validate hierarchy (deterministic JSON schema)",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST4": {
+    "key": "CB-2533",
+    "id": "722137dc-3ee3-411d-a2a6-344109e283dd",
+    "title": "[E5.S1.T1.ST4] State 4: edit-before-send modal (always-mode user gate)",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST5": {
+    "key": "CB-2534",
+    "id": "37f60e33-580c-4a84-9df8-6c9893d83361",
+    "title": "[E5.S1.T1.ST5] State 5: bulk POST to /api/projects/{id}/issues",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST6": {
+    "key": "CB-2535",
+    "id": "e628958d-9154-47cf-bf82-8a18566b7d9e",
+    "title": "[E5.S1.T1.ST6] State 6: append to AutoPilot queue if priority>=HIGH",
+    "type": "SUBTASK"
+  },
+  "E5.S1.T1.ST7": {
+    "key": "CB-2536",
+    "id": "ce2902ac-fb32-4d5f-a512-738c51025767",
+    "title": "[E5.S1.T1.ST7] State 7: update FeatureRequest.status=PROMOTED + targetIssueId",
+    "type": "SUBTASK"
+  },
+  "E5.S2": {
+    "key": "CB-2537",
+    "id": "cf773342-832e-4f5a-a167-cc4181d61622",
+    "title": "[E5.S2] Hierarchy generator (Jonny prompt)",
+    "type": "STORY"
+  },
+  "E5.S2.T1": {
+    "key": "CB-2538",
+    "id": "12f7d060-58d5-4b74-bbf7-836df6476fa8",
+    "title": "[E5.S2.T1] Jonny prompt template \u2014 transcript \u2192 hierarchy",
+    "type": "TASK"
+  },
+  "E5.S2.T2": {
+    "key": "CB-2539",
+    "id": "0c2bf46f-da15-415e-bb5a-2151c9db6a50",
+    "title": "[E5.S2.T2] Sub-agent context isolation",
+    "type": "TASK"
+  },
+  "E5.S2.T3": {
+    "key": "CB-2540",
+    "id": "4df8d37a-1a8d-45f5-8e03-2a8a3983c539",
+    "title": "[E5.S2.T3] Distill to 1-2K-token compact artifact",
+    "type": "TASK"
+  },
+  "E5.S2.T4": {
+    "key": "CB-2541",
+    "id": "7cab4e97-9d89-4403-bf9a-ab18daa43fd0",
+    "title": "[E5.S2.T4] JSON schema validation",
+    "type": "TASK"
+  },
+  "E5.S3": {
+    "key": "CB-2542",
+    "id": "d4f38dc0-5a57-4035-8573-43fad935288f",
+    "title": "[E5.S3] Tools layer (consolidated)",
+    "type": "STORY"
+  },
+  "E5.S3.T1": {
+    "key": "CB-2543",
+    "id": "9bca323b-10d2-4d12-be74-a7d439dcdce3",
+    "title": "[E5.S3.T1] add_to_codeboard(hierarchy) \u2014 single tool, internal multi-issue POST",
+    "type": "TASK"
+  },
+  "E5.S3.T2": {
+    "key": "CB-2544",
+    "id": "6b431c92-0392-4589-96ec-3f9888379193",
+    "title": "[E5.S3.T2] send_to_autopilot(issueId, priority)",
+    "type": "TASK"
+  },
+  "E5.S3.T3": {
+    "key": "CB-2545",
+    "id": "c05c0700-e2ef-491a-a5eb-44d650e81fa6",
+    "title": "[E5.S3.T3] Tool descriptions follow Anthropic guidance",
+    "type": "TASK"
+  },
+  "E5.S3.T4": {
+    "key": "CB-2546",
+    "id": "02ec3f84-a2fb-4cab-92b7-3bf00d8154b8",
+    "title": "[E5.S3.T4] Actionable error messages",
+    "type": "TASK"
+  },
+  "E5.S4": {
+    "key": "CB-2547",
+    "id": "a52978ae-a9ef-452f-812d-3b47f8d23df4",
+    "title": "[E5.S4] Audit + rollback",
+    "type": "STORY"
+  },
+  "E5.S4.T1": {
+    "key": "CB-2548",
+    "id": "6a7a96f5-217d-4359-b8ec-370ab5258771",
+    "title": "[E5.S4.T1] Every state transition appended to FeatureRequestActivity",
+    "type": "TASK"
+  },
+  "E5.S4.T2": {
+    "key": "CB-2549",
+    "id": "9ce7434f-9d4e-42c0-8ebe-c7117a6678c8",
+    "title": "[E5.S4.T2] Rollback \u2014 partial push fails \u2192 DRAFT + cleanup orphans",
+    "type": "TASK"
+  },
+  "E5.S4.T3": {
+    "key": "CB-2550",
+    "id": "32bbb6ab-c321-4a38-b293-1eb5b073ad51",
+    "title": "[E5.S4.T3] Idempotency key \u2014 re-promote no-ops",
+    "type": "TASK"
+  },
+  "E6": {
+    "key": "CB-2551",
+    "id": "c08874a3-0bd7-4eb8-a993-69d1ef4c2c40",
+    "title": "[E6] Scheduler \u2014 one-shot + recurring feature triggers",
+    "type": "EPIC"
+  },
+  "E6.S1": {
+    "key": "CB-2552",
+    "id": "5a29fcc8-a964-494f-a755-9aa56f8b5c2b",
+    "title": "[E6.S1] Background worker",
+    "type": "STORY"
+  },
+  "E6.S1.T1": {
+    "key": "CB-2553",
+    "id": "ea158b71-fec9-4eb5-99e2-d85d7af338f6",
+    "title": "[E6.S1.T1] services/feature_scheduler.py \u2014 asyncio loop (60s tick)",
+    "type": "TASK"
+  },
+  "E6.S1.T2": {
+    "key": "CB-2554",
+    "id": "648e66c8-8af0-4809-b760-e81f4089095c",
+    "title": "[E6.S1.T2] Lifespan hook startup integration",
+    "type": "TASK"
+  },
+  "E6.S1.T3": {
+    "key": "CB-2555",
+    "id": "c13f7cdf-2cff-45c6-bdf4-ce640919f8d8",
+    "title": "[E6.S1.T3] Crash recovery \u2014 resume from last-tick row",
+    "type": "TASK"
+  },
+  "E6.S2": {
+    "key": "CB-2556",
+    "id": "0fee730a-80fe-4ca5-81c0-c4d83d1f88e0",
+    "title": "[E6.S2] Trigger logic",
+    "type": "STORY"
+  },
+  "E6.S2.T1": {
+    "key": "CB-2557",
+    "id": "c8089633-24e3-42f2-a446-8f0414ff7a7f",
+    "title": "[E6.S2.T1] One-shot \u2014 scheduledFor <= now",
+    "type": "TASK"
+  },
+  "E6.S2.T2": {
+    "key": "CB-2558",
+    "id": "274766df-a91a-4e9d-8708-3de124fee2f8",
+    "title": "[E6.S2.T2] Recurring \u2014 croniter parser + advance",
+    "type": "TASK"
+  },
+  "E6.S2.T3": {
+    "key": "CB-2559",
+    "id": "a612a880-541b-4a97-9884-fb41381b8255",
+    "title": "[E6.S2.T3] Skip rule \u2014 if status != SCHEDULED, no-op",
+    "type": "TASK"
+  },
+  "E6.S2.T4": {
+    "key": "CB-2560",
+    "id": "8e22a7e6-aeb4-48b0-bfd3-9d01f8e5761d",
+    "title": "[E6.S2.T4] Lock \u2014 same FeatureRequest cannot fire twice in same tick",
+    "type": "TASK"
+  },
+  "E6.S3": {
+    "key": "CB-2561",
+    "id": "f6bbd487-f862-4478-b228-3d214b0923bc",
+    "title": "[E6.S3] UI integration",
+    "type": "STORY"
+  },
+  "E6.S3.T1": {
+    "key": "CB-2562",
+    "id": "b2ca6b79-0d7f-442c-94aa-1ead2b90286e",
+    "title": "[E6.S3.T1] Schedule input validation (frontend + backend)",
+    "type": "TASK"
+  },
+  "E6.S3.T2": {
+    "key": "CB-2563",
+    "id": "bfff7ca4-5744-4c0d-846d-9b506adeb92a",
+    "title": "[E6.S3.T2] Live 'next firing' preview in edit modal",
+    "type": "TASK"
+  },
+  "E6.S3.T3": {
+    "key": "CB-2564",
+    "id": "665bde57-f81d-45a5-9b81-e21b7a6510ea",
+    "title": "[E6.S3.T3] Cancel-schedule action",
+    "type": "TASK"
+  },
+  "E7": {
+    "key": "CB-2565",
+    "id": "cf49f674-4e66-488d-a341-030fb7a3bd79",
+    "title": "[E7] Audits + Tests + Chrome QA + Full Regression Matrix",
+    "type": "EPIC"
+  },
+  "E7.S1": {
+    "key": "CB-2566",
+    "id": "b4d4cc5c-fcdd-4547-975c-4b08597c1ca1",
+    "title": "[E7.S1] code-reviewer pass on every diff",
+    "type": "STORY"
+  },
+  "E7.S1.T1": {
+    "key": "CB-2567",
+    "id": "03ca63c2-e998-4970-a8e2-49892e6063e5",
+    "title": "[E7.S1.T1] E1 backend reviewed",
+    "type": "TASK"
+  },
+  "E7.S1.T2": {
+    "key": "CB-2568",
+    "id": "8710cab1-8f69-44b2-ab2a-b3dd2fd4ed79",
+    "title": "[E7.S1.T2] E2 frontend reviewed",
+    "type": "TASK"
+  },
+  "E7.S1.T3": {
+    "key": "CB-2569",
+    "id": "43c539f6-d6f8-47ad-b5ef-f72270f351b8",
+    "title": "[E7.S1.T3] E3 backlog reviewed",
+    "type": "TASK"
+  },
+  "E7.S1.T4": {
+    "key": "CB-2570",
+    "id": "66d2be65-fca0-4ab7-b189-f08dca49f3a8",
+    "title": "[E7.S1.T4] E4 crew-map reviewed",
+    "type": "TASK"
+  },
+  "E7.S1.T5": {
+    "key": "CB-2571",
+    "id": "31b4f144-64fc-4cf6-8b5f-ca360ed03d79",
+    "title": "[E7.S1.T5] E5+E6 pipeline + scheduler reviewed",
+    "type": "TASK"
+  },
+  "E7.S2": {
+    "key": "CB-2572",
+    "id": "5947948d-8963-4f04-a353-027f16d4c6fa",
+    "title": "[E7.S2] security-auditor pass",
+    "type": "STORY"
+  },
+  "E7.S2.T1": {
+    "key": "CB-2573",
+    "id": "9a22a846-23b8-4a1c-90bb-9298390873f9",
+    "title": "[E7.S2.T1] Subprocess isolation (Studio Claude spawns)",
+    "type": "TASK"
+  },
+  "E7.S2.T2": {
+    "key": "CB-2574",
+    "id": "55064220-8da7-4f36-ad43-fb312a5f1556",
+    "title": "[E7.S2.T2] iframe sandbox HTML preview",
+    "type": "TASK"
+  },
+  "E7.S2.T3": {
+    "key": "CB-2575",
+    "id": "df5cef90-ebee-4085-8075-0ba38843f429",
+    "title": "[E7.S2.T3] Authz on Backlog APIs",
+    "type": "TASK"
+  },
+  "E7.S2.T4": {
+    "key": "CB-2576",
+    "id": "5a13e5d3-2850-43cc-9439-48e553c67e9c",
+    "title": "[E7.S2.T4] Promote pipeline idempotency + rollback safety",
+    "type": "TASK"
+  },
+  "E7.S2.T5": {
+    "key": "CB-2577",
+    "id": "cb9cb9a8-6aae-45ab-95a3-47f718e32e53",
+    "title": "[E7.S2.T5] SSE connection limits + reconnect backoff",
+    "type": "TASK"
+  },
+  "E7.S3": {
+    "key": "CB-2578",
+    "id": "6912eb00-417c-4df6-b94c-92f17ea0357c",
+    "title": "[E7.S3] Backend unit + integration tests",
+    "type": "STORY"
+  },
+  "E7.S3.T1": {
+    "key": "CB-2579",
+    "id": "c5135222-f056-4229-b3ab-901ac5e00f2b",
+    "title": "[E7.S3.T1] Studio orchestrator unit tests (multi-session, hibernate, resume)",
+    "type": "TASK"
+  },
+  "E7.S3.T2": {
+    "key": "CB-2580",
+    "id": "f7878001-ab3c-4136-ad52-25f646153f30",
+    "title": "[E7.S3.T2] Agent dispatcher tests (verbs, mutex, chain depth)",
+    "type": "TASK"
+  },
+  "E7.S3.T3": {
+    "key": "CB-2581",
+    "id": "f57318c9-2ce0-47f7-9817-3e77a0d3c36c",
+    "title": "[E7.S3.T3] Backlog API tests (CRUD, filter, sort)",
+    "type": "TASK"
+  },
+  "E7.S3.T4": {
+    "key": "CB-2582",
+    "id": "b71c155c-665d-4475-a170-dc98ba50fe99",
+    "title": "[E7.S3.T4] Crew map service tests (graph assembly, SSE)",
+    "type": "TASK"
+  },
+  "E7.S3.T5": {
+    "key": "CB-2583",
+    "id": "4bb788c3-0ec3-49db-8e70-beb00d38f71e",
+    "title": "[E7.S3.T5] Promote pipeline tests (state machine, rollback, idempotency)",
+    "type": "TASK"
+  },
+  "E7.S3.T6": {
+    "key": "CB-2584",
+    "id": "7d400e2c-9bff-4b25-a7b2-b34aa8a15afe",
+    "title": "[E7.S3.T6] Scheduler tests (one-shot, recurring, crash recovery, lock)",
+    "type": "TASK"
+  },
+  "E7.S4": {
+    "key": "CB-2585",
+    "id": "ee1c50f3-d159-43e1-b811-19a74ef6c59a",
+    "title": "[E7.S4] Frontend tests (Vitest + RTL)",
+    "type": "STORY"
+  },
+  "E7.S4.T1": {
+    "key": "CB-2586",
+    "id": "14d87248-4890-486b-8f6f-058b75267b01",
+    "title": "[E7.S4.T1] Studio chat pane, tabs, action bar",
+    "type": "TASK"
+  },
+  "E7.S4.T2": {
+    "key": "CB-2587",
+    "id": "1dced107-11c9-4278-a454-79ad59ea7b28",
+    "title": "[E7.S4.T2] Backlog cards, filters, edit modal",
+    "type": "TASK"
+  },
+  "E7.S4.T3": {
+    "key": "CB-2588",
+    "id": "fc52c0a1-85e5-47a8-aca5-52d2c3354668",
+    "title": "[E7.S4.T3] Crew Map detail panel, filters",
+    "type": "TASK"
+  },
+  "E7.S5": {
+    "key": "CB-2589",
+    "id": "e2f3101d-d1f0-4a76-8933-83f0769b4df4",
+    "title": "[E7.S5] Chrome visual QA + Playwright e2e",
+    "type": "STORY"
+  },
+  "E7.S5.T1": {
+    "key": "CB-2590",
+    "id": "f0081775-b2e5-43b5-b202-411fff194863",
+    "title": "[E7.S5.T1] Chrome QA: Studio shell + tab switch + chat send",
+    "type": "TASK"
+  },
+  "E7.S5.T2": {
+    "key": "CB-2591",
+    "id": "b765f695-4443-4ec9-996f-2fa703cdce57",
+    "title": "[E7.S5.T2] Chrome QA: Backlog list + edit modal + happy path",
+    "type": "TASK"
+  },
+  "E7.S5.T3": {
+    "key": "CB-2592",
+    "id": "25617dff-cd7b-41cf-9d8d-b4b7a480a166",
+    "title": "[E7.S5.T3] Chrome QA: Crew Map renders + click filter + detail panel",
+    "type": "TASK"
+  },
+  "E7.S5.T4": {
+    "key": "CB-2593",
+    "id": "960d982e-cedb-43d1-a3df-16d55641eca2",
+    "title": "[E7.S5.T4] Playwright e2e: Studio \u2192 Backlog \u2192 CodeBoard \u2192 AutoPilot",
+    "type": "TASK"
+  },
+  "E7.S6": {
+    "key": "CB-2594",
+    "id": "2ca650ac-d14f-4530-8dd5-69b34a0e6dc9",
+    "title": "[E7.S6] Full Regression Matrix \u2014 44 QA tasks",
+    "type": "STORY"
+  },
+  "E7.S6.T1": {
+    "key": "CB-2595",
+    "id": "61f3a582-87a5-40d8-ba32-e053918df4b6",
+    "title": "[E7.S6.T1] [QA] F-1: New conversation creates StudioConversation row",
+    "type": "TASK"
+  },
+  "E7.S6.T2": {
+    "key": "CB-2596",
+    "id": "bafe7b53-33f5-4002-9146-a2dc9c53749e",
+    "title": "[E7.S6.T2] [QA] F-2: Switching tabs preserves chat history per tab",
+    "type": "TASK"
+  },
+  "E7.S6.T3": {
+    "key": "CB-2597",
+    "id": "a028cd3b-8e1b-4926-b5b9-f47f5b9a931c",
+    "title": "[E7.S6.T3] [QA] F-3: Agent activity panel pulses during dispatch, idle when done",
+    "type": "TASK"
+  },
+  "E7.S6.T4": {
+    "key": "CB-2598",
+    "id": "d65afb79-3581-4c59-9db3-a495e78757db",
+    "title": "[E7.S6.T4] [QA] F-4: Visibility test \u2014 fake dispatch attempt rejected",
+    "type": "TASK"
+  },
+  "E7.S6.T5": {
+    "key": "CB-2599",
+    "id": "6045bafb-12dd-49f1-b599-e1b45e3a1e5b",
+    "title": "[E7.S6.T5] [QA] F-5: Preview pane reveals on artifact, hides on dismiss",
+    "type": "TASK"
+  },
+  "E7.S6.T6": {
+    "key": "CB-2600",
+    "id": "7f0471c1-f562-4b76-87a2-3a5d28fffccf",
+    "title": "[E7.S6.T6] [QA] F-6: Mermaid renders in preview",
+    "type": "TASK"
+  },
+  "E7.S6.T7": {
+    "key": "CB-2601",
+    "id": "5bf32ace-83db-4be6-be69-7e3b6ccb38f9",
+    "title": "[E7.S6.T7] [QA] F-7: HTML preview iframe is sandboxed",
+    "type": "TASK"
+  },
+  "E7.S6.T8": {
+    "key": "CB-2602",
+    "id": "8dd13ec5-670c-406c-9603-e1549678e1c0",
+    "title": "[E7.S6.T8] [QA] F-8: Send-to-Backlog modal pre-fills title + description",
+    "type": "TASK"
+  },
+  "E7.S6.T9": {
+    "key": "CB-2603",
+    "id": "a0ff8089-c577-4f1a-ace6-6dafb4456287",
+    "title": "[E7.S6.T9] [QA] F-9: New FeatureRequest appears in Backlog list immediately",
+    "type": "TASK"
+  },
+  "E7.S6.T10": {
+    "key": "CB-2604",
+    "id": "a0d9acba-389c-4c8b-af6a-f35102f2a735",
+    "title": "[E7.S6.T10] [QA] F-10: Hibernation 30 min \u2192 resume replays last 5 messages",
+    "type": "TASK"
+  },
+  "E7.S6.T11": {
+    "key": "CB-2605",
+    "id": "d2806901-6c79-4abd-956a-f1f5dd302d89",
+    "title": "[E7.S6.T11] [QA] B-1: Backlog filter by project narrows list",
+    "type": "TASK"
+  },
+  "E7.S6.T12": {
+    "key": "CB-2606",
+    "id": "5fd7d4fc-f6af-40d4-9f1b-46012baa3ef1",
+    "title": "[E7.S6.T12] [QA] B-2: Priority pill change persists on reload",
+    "type": "TASK"
+  },
+  "E7.S6.T13": {
+    "key": "CB-2607",
+    "id": "250256f3-0240-43c4-9a62-153dc4dc5de9",
+    "title": "[E7.S6.T13] [QA] B-3: One-shot schedule (+60s) fires correctly",
+    "type": "TASK"
+  },
+  "E7.S6.T14": {
+    "key": "CB-2608",
+    "id": "c9b56707-5847-45e6-8069-b1dffe550b7d",
+    "title": "[E7.S6.T14] [QA] B-4: Recurring (every minute) fires twice without dup",
+    "type": "TASK"
+  },
+  "E7.S6.T15": {
+    "key": "CB-2609",
+    "id": "58fabdae-7153-4a63-a4b1-3c4dbeebe043",
+    "title": "[E7.S6.T15] [QA] B-5: Cancel scheduled stops next firing",
+    "type": "TASK"
+  },
+  "E7.S6.T16": {
+    "key": "CB-2610",
+    "id": "10a51938-f8fa-45c0-9477-a5808c57ca67",
+    "title": "[E7.S6.T16] [QA] B-6: Send to CodeBoard creates correct hierarchy",
+    "type": "TASK"
+  },
+  "E7.S6.T17": {
+    "key": "CB-2611",
+    "id": "94051175-529e-4b2f-bd68-38440e0dfcd9",
+    "title": "[E7.S6.T17] [QA] B-7: Send to AutoPilot enqueues",
+    "type": "TASK"
+  },
+  "E7.S6.T18": {
+    "key": "CB-2612",
+    "id": "ddbe5835-4670-4c50-98fb-3b622b66a360",
+    "title": "[E7.S6.T18] [QA] B-8: Promote idempotency",
+    "type": "TASK"
+  },
+  "E7.S6.T19": {
+    "key": "CB-2613",
+    "id": "29b24d3d-ed81-4601-a465-35f44772c423",
+    "title": "[E7.S6.T19] [QA] B-9: Promote rollback \u2014 induced failure \u2192 no orphans",
+    "type": "TASK"
+  },
+  "E7.S6.T20": {
+    "key": "CB-2614",
+    "id": "33206954-f039-4d14-a459-2d9192f67005",
+    "title": "[E7.S6.T20] [QA] B-10: 'Open in Studio' deep-link works",
+    "type": "TASK"
+  },
+  "E7.S6.T21": {
+    "key": "CB-2615",
+    "id": "3f1b94e4-b85d-4f93-816c-fe0b3a78fb73",
+    "title": "[E7.S6.T21] [QA] C-1: Crew Map renders all features",
+    "type": "TASK"
+  },
+  "E7.S6.T22": {
+    "key": "CB-2616",
+    "id": "333ead94-ad45-4bbd-8a70-e788f2eac348",
+    "title": "[E7.S6.T22] [QA] C-2: Active agent node pulses during F-3",
+    "type": "TASK"
+  },
+  "E7.S6.T23": {
+    "key": "CB-2617",
+    "id": "2b25164b-6c9f-4aff-bc46-0015a1ca452e",
+    "title": "[E7.S6.T23] [QA] C-3: Click feature node filters subgraph",
+    "type": "TASK"
+  },
+  "E7.S6.T24": {
+    "key": "CB-2618",
+    "id": "b707927b-d7f3-4b31-9038-13d869ec1c4e",
+    "title": "[E7.S6.T24] [QA] C-4: Click skill node \u2192 invocation count + last-used",
+    "type": "TASK"
+  },
+  "E7.S6.T25": {
+    "key": "CB-2619",
+    "id": "641eb575-abb5-4f1b-9a3d-c17ae2f81809",
+    "title": "[E7.S6.T25] [QA] C-5: Edge label 'orchestrates' renders Jonny\u2192Skill",
+    "type": "TASK"
+  },
+  "E7.S6.T26": {
+    "key": "CB-2620",
+    "id": "631352a8-3e18-44d8-ad42-c61b3fb41f4b",
+    "title": "[E7.S6.T26] [QA] C-6: New assignment animates into graph",
+    "type": "TASK"
+  },
+  "E7.S6.T27": {
+    "key": "CB-2621",
+    "id": "7eb643ec-e3eb-4796-9f7d-8f424de22cf3",
+    "title": "[E7.S6.T27] [QA] A-1: aria-live='polite' on streaming text container",
+    "type": "TASK"
+  },
+  "E7.S6.T28": {
+    "key": "CB-2622",
+    "id": "a5714920-1626-44ec-ad5f-3ed87d8ead69",
+    "title": "[E7.S6.T28] [QA] A-2: Resize handle keyboard-operable",
+    "type": "TASK"
+  },
+  "E7.S6.T29": {
+    "key": "CB-2623",
+    "id": "9d0494c7-cc7a-467d-a6bf-891117376195",
+    "title": "[E7.S6.T29] [QA] A-3: Reduced-motion disables pulse animations",
+    "type": "TASK"
+  },
+  "E7.S6.T30": {
+    "key": "CB-2624",
+    "id": "82329db5-b801-432e-990d-44a3ba44bd56",
+    "title": "[E7.S6.T30] [QA] A-4: 200% zoom collapses split pane",
+    "type": "TASK"
+  },
+  "E7.S6.T31": {
+    "key": "CB-2625",
+    "id": "7e614e20-7e2a-4215-92be-d2fd7da1fc81",
+    "title": "[E7.S6.T31] [QA] P-1: 50 messages render at <16ms/frame",
+    "type": "TASK"
+  },
+  "E7.S6.T32": {
+    "key": "CB-2626",
+    "id": "124aeda6-7efe-4836-bf83-5f34ff35b365",
+    "title": "[E7.S6.T32] [QA] P-2: Crew Map 100 nodes renders <1s",
+    "type": "TASK"
+  },
+  "E7.S6.T33": {
+    "key": "CB-2627",
+    "id": "75a0fb46-7716-4421-b46a-a21d6b2b77e6",
+    "title": "[E7.S6.T33] [QA] P-3: Tab switch <150ms perceived",
+    "type": "TASK"
+  },
+  "E7.S6.T34": {
+    "key": "CB-2628",
+    "id": "194f4fa2-4fa9-4d93-9bd4-1eeba1c42c98",
+    "title": "[E7.S6.T34] [QA] P-4: Schedule controls <400ms (Doherty)",
+    "type": "TASK"
+  },
+  "E7.S6.T35": {
+    "key": "CB-2629",
+    "id": "404a0af5-b0cb-4050-84be-74dd15930ce7",
+    "title": "[E7.S6.T35] [QA] S-1: SSRF closed on Studio orchestrator backend URL",
+    "type": "TASK"
+  },
+  "E7.S6.T36": {
+    "key": "CB-2630",
+    "id": "66241989-6c78-4618-8c68-0cf2fc6a8ae1",
+    "title": "[E7.S6.T36] [QA] S-2: HTML preview iframe escape blocked",
+    "type": "TASK"
+  },
+  "E7.S6.T37": {
+    "key": "CB-2631",
+    "id": "d5f02cb2-ecad-4d8f-a025-c053357a81d5",
+    "title": "[E7.S6.T37] [QA] S-3: Chain depth=4 dispatch rejected",
+    "type": "TASK"
+  },
+  "E7.S6.T38": {
+    "key": "CB-2632",
+    "id": "ec73a7d0-463d-4244-8a35-8d6bc4a8d14d",
+    "title": "[E7.S6.T38] [QA] S-4: Two tabs same skill \u2192 second blocks (mutex)",
+    "type": "TASK"
+  },
+  "E7.S6.T39": {
+    "key": "CB-2633",
+    "id": "fb044f1a-dcf8-4e79-8f70-8be9d6cbd925",
+    "title": "[E7.S6.T39] [QA] S-5: Inter-agent audit log \u2014 every dispatch has DB row",
+    "type": "TASK"
+  },
+  "E7.S6.T40": {
+    "key": "CB-2634",
+    "id": "fad3d7ca-d986-423f-85e0-36fac2e62b59",
+    "title": "[E7.S6.T40] [QA] I-1: AutoPilot crash mid-promote \u2192 recovery resumes",
+    "type": "TASK"
+  },
+  "E7.S6.T41": {
+    "key": "CB-2635",
+    "id": "aac10cda-6d62-4751-98cd-f93a91db009b",
+    "title": "[E7.S6.T41] [QA] I-2: ChromaDB offline during Studio session \u2192 graceful degrade",
+    "type": "TASK"
+  },
+  "E7.S6.T42": {
+    "key": "CB-2636",
+    "id": "dc1977e0-a44f-4338-8d9d-6f032e563697",
+    "title": "[E7.S6.T42] [QA] I-3: Backend restart with active conversations \u2192 SSE reconnects",
+    "type": "TASK"
+  },
+  "E7.S6.T43": {
+    "key": "CB-2637",
+    "id": "7d512de1-32f5-49a7-8b3d-9762f57ed5b9",
+    "title": "[E7.S6.T43] [QA] I-4: Theme switcher Linear-dark \u2194 Anthropic-light persists",
+    "type": "TASK"
+  },
+  "E7.S6.T44": {
+    "key": "CB-2638",
+    "id": "ad82e003-1631-48c6-8edf-4a75ddc0eb86",
+    "title": "[E7.S6.T44] [QA] I-5: Feature flag off \u2192 /workspace redirects to /codeboard",
+    "type": "TASK"
+  },
+  "E8": {
+    "key": "CB-2639",
+    "id": "03566913-829d-4b11-a10d-74a59e4e1ec3",
+    "title": "[E8] Rollout + Docs + Migration + Soak",
+    "type": "EPIC"
+  },
+  "E8.S1": {
+    "key": "CB-2640",
+    "id": "fa9fa2db-7abf-4b68-8ede-d26d65db9a10",
+    "title": "[E8.S1] Migration",
+    "type": "STORY"
+  },
+  "E8.S1.T1": {
+    "key": "CB-2641",
+    "id": "7a607d0c-52a1-43b7-aede-617c82c303a3",
+    "title": "[E8.S1.T1] Generate Prisma migrations + commit",
+    "type": "TASK"
+  },
+  "E8.S1.T2": {
+    "key": "CB-2642",
+    "id": "ca87bad3-38d3-49ec-8149-b866b1c9ee4f",
+    "title": "[E8.S1.T2] Idempotent backfill \u2014 port CB-2381 + 5 sample features",
+    "type": "TASK"
+  },
+  "E8.S1.T3": {
+    "key": "CB-2643",
+    "id": "440c7690-5686-4adf-adda-96c29a9f79f4",
+    "title": "[E8.S1.T3] MIGRATION_NOTES.md update",
+    "type": "TASK"
+  },
+  "E8.S2": {
+    "key": "CB-2644",
+    "id": "539288c3-a9c0-4d91-89a7-dcc47e076356",
+    "title": "[E8.S2] Documentation",
+    "type": "STORY"
+  },
+  "E8.S2.T1": {
+    "key": "CB-2645",
+    "id": "e7e1f6dc-7ed3-41f2-8a75-80198609a593",
+    "title": "[E8.S2.T1] CLAUDE.md update \u2014 Workspace flow section",
+    "type": "TASK"
+  },
+  "E8.S2.T2": {
+    "key": "CB-2646",
+    "id": "d9ec818d-76a6-4e55-bb65-22065824c656",
+    "title": "[E8.S2.T2] New runbook: workspace-operations.md",
+    "type": "TASK"
+  },
+  "E8.S2.T3": {
+    "key": "CB-2647",
+    "id": "52cf6000-1cf4-4ad3-aa37-3a173af88601",
+    "title": "[E8.S2.T3] User guide: ai-project-workspace.md",
+    "type": "TASK"
+  },
+  "E8.S2.T4": {
+    "key": "CB-2648",
+    "id": "176d4b3f-6ca2-42c3-b417-0bf6c55956fb",
+    "title": "[E8.S2.T4] API reference",
+    "type": "TASK"
+  },
+  "E8.S3": {
+    "key": "CB-2649",
+    "id": "58c583ae-69d7-4430-861e-5bf6ae50033d",
+    "title": "[E8.S3] Feature flag wrap",
+    "type": "STORY"
+  },
+  "E8.S3.T1": {
+    "key": "CB-2650",
+    "id": "9105dd4c-1cfc-492c-9c18-6facd6b3dc69",
+    "title": "[E8.S3.T1] WORKSPACE_ENABLED env var + runtime toggle endpoint",
+    "type": "TASK"
+  },
+  "E8.S3.T2": {
+    "key": "CB-2651",
+    "id": "5f8e663c-0580-4be0-b83c-70d9f13e73f1",
+    "title": "[E8.S3.T2] Settings page toggle",
+    "type": "TASK"
+  },
+  "E8.S3.T3": {
+    "key": "CB-2652",
+    "id": "239e1113-9827-48f0-8343-6ebbc948b93e",
+    "title": "[E8.S3.T3] Redirect /workspace \u2192 /codeboard if disabled",
+    "type": "TASK"
+  },
+  "E8.S4": {
+    "key": "CB-2653",
+    "id": "1c5a382f-afa3-41cd-aeea-bc7f5f92f8f0",
+    "title": "[E8.S4] Soak window",
+    "type": "STORY"
+  },
+  "E8.S4.T1": {
+    "key": "CB-2654",
+    "id": "027f99c3-2b07-4ef1-a66d-e9c53846ba1a",
+    "title": "[E8.S4.T1] 7-day production soak",
+    "type": "TASK"
+  },
+  "E8.S4.T2": {
+    "key": "CB-2655",
+    "id": "b71c525a-1c2a-4b15-acb5-938250ad5e68",
+    "title": "[E8.S4.T2] Daily metrics check",
+    "type": "TASK"
+  },
+  "E8.S4.T3": {
+    "key": "CB-2656",
+    "id": "afcb7a44-f52a-4a3f-ba55-045d3fb80123",
+    "title": "[E8.S4.T3] Bug triage + fixes during soak",
+    "type": "TASK"
+  },
+  "E8.S4.T4": {
+    "key": "CB-2657",
+    "id": "7efd6c4d-5ea3-4169-8e87-3c0a05917870",
+    "title": "[E8.S4.T4] Soak summary doc + decision",
+    "type": "TASK"
+  },
+  "E8.S5": {
+    "key": "CB-2658",
+    "id": "2d2290d1-6673-4e38-b9e3-c3bcdee4f24c",
+    "title": "[E8.S5] Promote out of feature flag",
+    "type": "STORY"
+  },
+  "E8.S5.T1": {
+    "key": "CB-2659",
+    "id": "cace8713-372a-4951-9bdb-92865975f3cc",
+    "title": "[E8.S5.T1] Remove flag once soak green",
+    "type": "TASK"
+  },
+  "E8.S5.T2": {
+    "key": "CB-2660",
+    "id": "1f09b7b6-eed2-4f86-95d3-4b0bad20c06a",
+    "title": "[E8.S5.T2] Final commit + tag",
+    "type": "TASK"
+  }
+}

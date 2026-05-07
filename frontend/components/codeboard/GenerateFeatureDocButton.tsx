@@ -19,6 +19,12 @@ import { useToast } from '@/components/ui/toast';
 
 interface GenerateFeatureDocButtonProps {
   issueId: string;
+  /**
+   * Project the feature belongs to. Required by the backend (CB-2117) so
+   * the generate endpoint is scoped to ``(issueId, projectId)``. Pass the
+   * value off the loaded issue — the button is disabled until it arrives.
+   */
+  projectId: string | undefined;
   existingDoc: FeatureDocumentationData | null | undefined;
   /** Optional: called after successful generation so parents can react. */
   onGenerated?: (doc: FeatureDocumentationData) => void;
@@ -27,6 +33,7 @@ interface GenerateFeatureDocButtonProps {
 
 export function GenerateFeatureDocButton({
   issueId,
+  projectId,
   existingDoc,
   onGenerated,
   className,
@@ -36,10 +43,12 @@ export function GenerateFeatureDocButton({
 
   const hasDoc = !!existingDoc;
   const isPending = generate.isPending;
+  const canGenerate = !!projectId && !isPending;
 
   async function handleClick() {
+    if (!projectId) return;
     try {
-      const result = await generate.mutateAsync({ issueId });
+      const result = await generate.mutateAsync({ issueId, projectId });
       toast.success(
         hasDoc ? 'Documentation regenerated' : 'Documentation generated',
         `Feature documentation for ${result.featureKey} is ready.`,
@@ -58,7 +67,7 @@ export function GenerateFeatureDocButton({
       variant={hasDoc ? 'outline' : 'default'}
       size="sm"
       onClick={handleClick}
-      disabled={isPending}
+      disabled={!canGenerate}
       className={className}
       aria-label={hasDoc ? 'Regenerate feature documentation' : 'Generate feature documentation'}
     >

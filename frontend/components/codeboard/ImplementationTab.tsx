@@ -44,6 +44,12 @@ import {
 
 interface ImplementationTabProps {
   issueId: string | undefined;
+  /**
+   * Project the issue belongs to. Required by the backend (CB-2117) so
+   * documentation lookups are scoped to ``(issueId, projectId)``. The
+   * underlying hooks stay disabled until both ids are present.
+   */
+  projectId: string | undefined;
   className?: string;
 }
 
@@ -430,10 +436,11 @@ function NoteCard({ note }: NoteCardProps) {
 
 interface AddNoteFormProps {
   issueId: string;
+  projectId: string;
   onClose: () => void;
 }
 
-function AddNoteForm({ issueId, onClose }: AddNoteFormProps) {
+function AddNoteForm({ issueId, projectId, onClose }: AddNoteFormProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<NoteCategory>('GENERAL');
@@ -454,6 +461,7 @@ function AddNoteForm({ issueId, onClose }: AddNoteFormProps) {
     try {
       await createNote.mutateAsync({
         issueId,
+        projectId,
         data: {
           title: trimmedTitle,
           content: trimmedContent,
@@ -585,11 +593,15 @@ function AddNoteForm({ issueId, onClose }: AddNoteFormProps) {
 
 interface NotesSectionProps {
   issueId: string;
+  projectId: string;
 }
 
-function NotesSection({ issueId }: NotesSectionProps) {
+function NotesSection({ issueId, projectId }: NotesSectionProps) {
   const [adding, setAdding] = useState(false);
-  const { data: notes, isLoading, isError, error } = useImplementationNotes(issueId);
+  const { data: notes, isLoading, isError, error } = useImplementationNotes(
+    issueId,
+    projectId,
+  );
 
   // Defensive sort — backend orders DESC but the contract is documented here.
   const sortedNotes = useMemo(() => {
@@ -620,7 +632,11 @@ function NotesSection({ issueId }: NotesSectionProps) {
     >
       <div className="space-y-3">
         {adding && (
-          <AddNoteForm issueId={issueId} onClose={() => setAdding(false)} />
+          <AddNoteForm
+            issueId={issueId}
+            projectId={projectId}
+            onClose={() => setAdding(false)}
+          />
         )}
 
         {isLoading && (
@@ -665,13 +681,17 @@ function NotesSection({ issueId }: NotesSectionProps) {
   );
 }
 
-export function ImplementationTab({ issueId, className }: ImplementationTabProps) {
+export function ImplementationTab({
+  issueId,
+  projectId,
+  className,
+}: ImplementationTabProps) {
   const {
     data: summaries,
     isLoading,
     isError,
     error,
-  } = useExecutionSummaries(issueId);
+  } = useExecutionSummaries(issueId, projectId);
 
   const latest = summaries?.[0];
   const files = useMemo(
@@ -683,7 +703,7 @@ export function ImplementationTab({ issueId, className }: ImplementationTabProps
     [latest?.componentsModified],
   );
 
-  if (!issueId) {
+  if (!issueId || !projectId) {
     return (
       <div className={cn('p-6 text-sm text-zinc-500', className)}>
         Select an issue to view its implementation.
@@ -743,7 +763,7 @@ export function ImplementationTab({ issueId, className }: ImplementationTabProps
             changes, and architecture notes will appear here.
           </p>
         </div>
-        <NotesSection issueId={issueId} />
+        <NotesSection issueId={issueId} projectId={projectId} />
       </div>
     );
   }
@@ -789,7 +809,7 @@ export function ImplementationTab({ issueId, className }: ImplementationTabProps
         body={latest.lessonsLearned}
       />
 
-      <NotesSection issueId={issueId} />
+      <NotesSection issueId={issueId} projectId={projectId} />
     </div>
   );
 }

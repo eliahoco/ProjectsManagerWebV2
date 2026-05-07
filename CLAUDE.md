@@ -129,6 +129,24 @@ FEATURE → EPIC → STORY → TASK → SUBTASK
 - `FloatingAgentStatusBar` overlays AutoPilot modal (z-[60])
 - Auto-marks issues as `COMPLETED_WAITING_QA` on successful execution
 
+### AutoPilot Queue (CB-1951)
+- `services/autopilot_queue_service.py` orchestrates sequential task execution
+- **Persistent state:** every queue + task + event is write-through-persisted
+  to `AutoPilotQueueRecord` / `AutoPilotTaskRecord` / `AutoPilotEvent` tables
+  (mirrors in `models/autopilot.py` and `frontend/prisma/schema.prisma`)
+- **Crash recovery:** lifespan startup hook calls `rehydrate_from_db()` —
+  RUNNING tasks become failed(crash_recovery), queue → paused(crash_recovery),
+  user must manually resume via `/api/execute/queue/recovery-status`
+- **Token-exhaustion auto-pause:** when `is_token_exhaustion(session)` matches,
+  queue → WAITING_RESET; `_schedule_auto_resume(reset_time)` arms an asyncio
+  timer that fires at `reset_time + 60s` (cancellable on manual resume / abort)
+- **Circuit breaker:** `_AUTO_RESUME_MAX_ATTEMPTS=3` consecutive auto-resumes
+  → downgrade to `pauseReason='manual'`, require explicit user action
+- **Audit log:** every state transition appends to `AutoPilotEvent` with
+  redacted error text (Bearer/sk-/api_key= patterns stripped) and 8 KB cap
+- **Operational runbook:** `backend/docs/AUTOPILOT_RUNBOOK.md`
+- **Migration notes:** `backend/MIGRATION_NOTES.md`
+
 ## Key Patterns
 
 ### React Query Hooks (frontend)

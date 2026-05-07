@@ -1602,3 +1602,9 @@ OK i wnat to go thouight some of the feautures for exemple the service watchdog 
 
 ---
 
+## 2026-05-04 07:54:14
+
+anything happnaed to the app? i can't reach the UI
+
+---
+

@@ -80,6 +80,19 @@ export interface QueueStatus {
   started_at: string | null;
   completed_at: string | null;
   last_error: string | null;
+  /** Why the queue is paused — available on waiting_reset / paused statuses. */
+  pause_reason: 'token_exhaustion' | 'crash_recovery' | 'manual' | null;
+  /** ISO timestamp of next scheduled auto-resume (when pause_reason === 'token_exhaustion'). */
+  reset_time: string | null;
+  /** Number of consecutive auto-resume attempts (circuit breaker). */
+  auto_resume_attempts: number;
+}
+
+/** Minimal record returned by GET /api/execute/queue/recovery-status. */
+export interface RecoveredQueueInfo {
+  id: string;
+  feature_key: string;
+  project_id: string;
 }
 
 /** Legacy queue item format — still used by FeatureExecutionPanel to build the initial queue. */
@@ -112,6 +125,12 @@ export interface AutoPilotState {
   };
   lastError: string | null;
   queueStatus: string | null;
+  /** Why the queue is currently paused (from backend). */
+  pauseReason: 'token_exhaustion' | 'crash_recovery' | 'manual' | null;
+  /** ISO timestamp when auto-resume is scheduled (token exhaustion path). */
+  resetTime: string | null;
+  /** Queues that were recovered after a backend restart. */
+  recoveredQueues: RecoveredQueueInfo[];
 }
 
 export interface StartAutoPilotParams {
@@ -131,6 +150,10 @@ export interface AutoPilotContextValue {
   skipCurrentTask: () => Promise<void>;
   waitForReset: (resetTime?: string) => Promise<void>;
   switchModel: (provider: string, model?: string) => Promise<void>;
+  /** Removes a queue from the in-memory recovered list and calls the backend clear-recovery endpoint. */
+  clearRecoveredQueue: (queueId: string) => Promise<void>;
+  /** Directly set recovered queues — used by AutoPilotFloatingBar after fetching recovery-status. */
+  setRecoveredQueues: (queues: RecoveredQueueInfo[]) => void;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────
@@ -171,6 +194,9 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
   const [queueStatus, setQueueStatus] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isWaitingReset, setIsWaitingReset] = useState(false);
+  const [pauseReason, setPauseReason] = useState<'token_exhaustion' | 'crash_recovery' | 'manual' | null>(null);
+  const [resetTime, setResetTime] = useState<string | null>(null);
+  const [recoveredQueues, setRecoveredQueues] = useState<RecoveredQueueInfo[]>([]);
 
   // Ref for SSE cleanup
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -196,6 +222,8 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
     setFeatureId(data.feature_id);
     setIsPaused(data.status === 'paused');
     setIsWaitingReset(data.status === 'waiting_reset');
+    setPauseReason(data.pause_reason ?? null);
+    setResetTime(data.reset_time ?? null);
 
     // If terminal states, mark inactive
     if (data.status === 'completed' || data.status === 'aborted') {
@@ -439,6 +467,8 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
       await postQueue(`${API_BASE}/queue/${queueId}/resume`);
       setIsPaused(false);
       setIsWaitingReset(false);
+      setPauseReason(null);
+      setResetTime(null);
       setLastError(null);
     } catch (error) {
       console.error('[AutoPilot] Resume failed:', error);
@@ -479,6 +509,8 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
       setIsActive(false);
       setIsPaused(false);
       setIsWaitingReset(false);
+      setPauseReason(null);
+      setResetTime(null);
       setLastError(null);
       setQueueStatus('aborted');
 
@@ -508,11 +540,22 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
         model: model || null,
       });
       setIsWaitingReset(false);
+      setPauseReason(null);
+      setResetTime(null);
       setLastError(null);
     } catch (error) {
       console.error('[AutoPilot] Switch model failed:', error);
     }
   }, [queueId]);
+
+  const clearRecoveredQueueFn = useCallback(async (qId: string) => {
+    setRecoveredQueues(prev => prev.filter(q => q.id !== qId));
+    try {
+      await postQueue(`${API_BASE}/queue/${qId}/clear-recovery`);
+    } catch (error) {
+      console.error('[AutoPilot] Clear recovery failed:', error);
+    }
+  }, []);
 
   // ── Context value ──
 
@@ -530,6 +573,9 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
     progress,
     lastError,
     queueStatus,
+    pauseReason,
+    resetTime,
+    recoveredQueues,
   };
 
   return (
@@ -542,6 +588,8 @@ export function AutoPilotProvider({ children }: { children: ReactNode }) {
       skipCurrentTask: skipCurrentTaskFn,
       waitForReset: waitForResetFn,
       switchModel: switchModelFn,
+      clearRecoveredQueue: clearRecoveredQueueFn,
+      setRecoveredQueues,
     }}>
       {children}
     </AutoPilotContext.Provider>

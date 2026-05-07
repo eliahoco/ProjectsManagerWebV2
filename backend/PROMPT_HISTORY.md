@@ -742,3 +742,564 @@ do what is better more stable and must be done, no shortcuts or workarounds Jonn
 
 ---
 
+## 2026-05-01 23:45:25
+
+what is the feature number you just worked on?
+
+---
+
+## 2026-05-01 23:46:38
+
+OK but most of them are on the bakclog, from the codebord i don't see you really worked to resolve it, you worked on some bugs bug not on every thing
+
+---
+
+## 2026-05-02 23:47:41
+
+<task-notification>
+<task-id>bl3kv80x2</task-id>
+<tool-use-id>toolu_01ErNfbWHJu86PoSR7K1rswP</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/bl3kv80x2.output</output-file>
+<status>completed</status>
+<summary>Background command "Run skill/agent monitor" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-05-03 00:34:37
+
+2050 is burning tokens? wat is the isse with it?
+
+---
+
+## 2026-05-03 00:36:36
+
+that is strange as i see it runing on the codeboard
+
+---
+
+## 2026-05-03 00:40:26
+
+1951 is an empty feature record there is no agile planning behine it
+
+---
+
+## 2026-05-03 00:41:26
+
+jonny this is not a full planning.. what's going on with your bible
+
+---
+
+## 2026-05-03 00:47:04
+
+what are you talking about jonny, what is that? we were discussing the codeboard, you started to plan CB-1951 — Proposed hierarchy and i told you the plannin gis not good enoghe. jonny focus please
+
+---
+
+## 2026-05-03 00:51:36
+
+OK look I will not run it though the project manager, you will run it from here but you must must must work acording to Jonys bible, work in a chronological and resnnble proccess way and make sure to follow all the instractions like it is running from the project manager, including the status change, the documantation, everything
+now i'm missing here atchitecture of the solution, i'm missing here QA and full regression testing planning, i want to see the agent assigned to each task story and epic, and i want to see full full agents with different skills collaboration
+
+---
+
+## 2026-05-03 00:54:29
+
+btw the QA regression testing you need to build and push to the QABoard in the project manager and update the pass/failed status for each
+
+---
+
+## 2026-05-03 00:57:20
+
+go jonny on this whole planning  let's go jonny, push to the codebord and let's start, i want you to stop when you reach 80% of the wekkly credits, make sure you document eveything that is important
+
+---
+
+## 2026-05-03 00:59:04
+
+please just write an unreleated not that we need at some point to go back to this thing
+Run summary
+
+  ┌─────────────────┬────────────────────────────────────────────────────────────────┐
+  │                 │                                                                │
+  ├─────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Tasks completed │ 7/29 (CB-2041, 2042, 2043, 2045, 2046, 2048, 2049 → all CWQ)   │
+  ├─────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Last running    │ CB-2050 (now stuck IN_PROGRESS — same recovery needed)         │
+  ├─────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Cause of stop   │ Backend crash at 23:47, watchdog restart wiped in-memory queue │
+  ├─────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Failures        │ 0 — every task that finished, finished cleanly                 │
+  ├─────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Avg time/task   │ ~6-8 minutes                                                   │
+  └─────────────────┴────────────────────────────────────────────────────────────────┘
+
+  Agent + Skill usage per task (the monitor result)
+
+  ┌─────────┬───────┬───────┬─────────────┬──────────┬───────────┬────────┬───────┬──────────┐
+  │  Task   │ Jonny │ Atlas │ Agent calls │ code-rev │ sec-audit │ py-pro │ react │ debugger │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2041 │  ✅   │  ❌   │      0      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2042 │  ✅   │  ❌   │      2      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2043 │  ✅   │  ❌   │      2      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2045 │  ❌   │  ❌   │      2      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2046 │  ✅   │  ❌   │      2      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2048 │  ✅   │  ❌   │      1      │    ✅    │    ✅     │   ❌   │  ❌   │    ❌    │
+  ├─────────┼───────┼───────┼─────────────┼──────────┼───────────┼────────┼───────┼──────────┤
+  │ CB-2049 │  ✅   │  ❌   │      1      │    ❌    │    ✅     │   ✅   │  ❌   │    ❌    │
+  └─────────┴───────┴───────┴─────────────┴──────────┴───────────┴────────┴───────┴──────────┘
+
+  What's good
+
+  - ✅ Jonny fired 6/7 (86%) — discipline is mostly working
+  - ✅ security-auditor ran 7/7 — every task got a security check
+  - ✅ code-reviewer ran 6/7 — strong code review coverage
+  - ✅ python-pro picked up automatically on CB-2049 — domain routing works
+
+  Gaps
+
+  - ❌ Atlas never fired (0/7) — second-brain lookup not being triggered
+  - ❌ Jonny missed CB-2045 — discipline isn't 100% deterministic (CB-1950 is the fix for this)
+  - ❌ code-reviewer missed CB-2049 — same task that ran python-pro instead, mutually exclusive picks
+  - ❌ No debugger / react-specialist — never invoked even when relevant. May be fine for these tasks, but worth
+  confirming
+
+---
+
+## 2026-05-03 01:02:41
+
+are you continue working on 1951?
+
+---
+
+## 2026-05-03 01:03:45
+
+resume of course i didn't mean to stop you at all
+
+---
+
+## 2026-05-03 09:52:07
+
+accedently pleaes continue from where i stopped you
+
+---
+
+## 2026-05-03 09:59:07
+
+<task-notification>
+<task-id>a54922f9a743c2904</task-id>
+<tool-use-id>toolu_01PXUzMh4mCFL6i5ANLKzgdG</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a54922f9a743c2904.output</output-file>
+<status>completed</status>
+<summary>Agent "Security audit CB-1951 E1" completed</summary>
+<result>I have enough context for the audit. Let me also quickly check whether the rehydration code/_persist_async could create issue.
+
+I've reviewed all the relevant files. Note: the system reminders about Gamma MCP and Auto Mode have been acknowledged but are not directly relevant to this audit task. Here is the security audit report.
+
+---
+
+# Security Audit — CB-1951 EPIC E1 (AutoPilot Queue Persistence)
+
+## Findings
+
+### LOW — A09 Logging+Monitoring: `error_msg` slicing may leak partial secrets into audit log
+- **File:** `backend/services/autopilot_queue_service.py:655, 680, 702, 723`
+- **Description:** `_persist(... "error": error_msg[:500])` writes the first 500 chars of an arbitrary error string from the LLM/CLI session into `AutoPilotEvent.payload`. `error_msg` originates from `task.error`, which is populated from `session.error` (terminal_service) — that string can contain echoed prompts, partial stack traces, env-var values, or provider HTTP responses including auth headers/tokens.
+- **Exploit scenario:** A failed Claude API call returns an error body containing a redacted-but-not-fully-masked Authorization header, which is then persisted to the audit DB and later exposed via the planned E2/E5 SSE stream or recovery-status endpoint.
+- **Suggested fix:** Add a small redactor in `_persist` (or in `record_event`) that strips common token patterns (`sk-…`, `Bearer …`, `api_key=…`, long base64 blobs) before the JSON dump. At minimum, log only `error_msg.split("\n")[0][:200]` instead of 500 chars of raw text.
+
+### LOW — A02 Cryptographic Failures: `project_path` and `feature_key` stored verbatim in `config` JSON
+- **File:** `backend/utils/autopilot_repository.py:77-85`
+- **Description:** `config_json` includes `project_path` (absolute filesystem path, may include user names) and `feature_key`. Not a secret per se, but `project_path` is later used as a shell argument by `terminal_service.start_execution` after rehydration. No tokens/keys are stored — confirmed by inspection. Risk is informational disclosure of host filesystem layout via the audit log.
+- **Exploit scenario:** A read-only viewer of the AutoPilotEvent stream learns absolute paths on the server, useful for downstream LFI/path-traversal recon.
+- **Suggested fix:** Acceptable as-is for an internal tool, but document that `config` is not a public-readable column. If E2 exposes this via API, redact `project_path` to its basename in the response schema.
+
+### INFO — A04 Insecure Design: Rehydration trusts persisted `project_path` without re-validation
+- **File:** `backend/utils/autopilot_repository.py:155-194` + future use site (E2)
+- **Description:** `mark_running_tasks_failed_on_recovery` only flips statuses — safe. However, the rehydrated `project_path` from `config` JSON will eventually be passed back to `terminal_service.start_execution`, which already validates the path. A forged DB row (attacker with DB write access) could try to point at `/etc` etc., but that requires DB compromise — defense-in-depth only.
+- **Exploit scenario:** Attacker with SQLite write access plants a malicious `project_path` to coerce the next AutoPilot resume into operating on a sensitive directory.
+- **Suggested fix:** When E2 implements rehydrate, verify `project_path` matches the live `Project.path` row for `projectId` before resuming. Cheap and closes the gap.
+
+### INFO — A08 Software/Data Integrity: `_persist_async` fire-and-forget can mask divergence
+- **File:** `backend/services/autopilot_queue_service.py:775-796`
+- **Description:** `loop.create_task(self._persist(...))` is unawaited; `_persist` swallows all exceptions (line 768). If two control calls race (e.g. pause then immediately resume), the create_task ordering is not strictly serialized, so the persisted `status` may briefly lag the in-memory state. Not exploitable — in-memory remains source of truth for the live executor. After E2 surfaces persisted state via API, a stale read window of &lt;1s exists.
+- **Suggested fix:** Acceptable. If E5 adds an SSE based on the DB, document the eventual-consistency window. Alternatively serialize persists with an `asyncio.Lock` per queue.
+
+### INFO — A03 Injection / A01 Access Control / A05 Misconfiguration — no findings
+- All DB writes go through SQLAlchemy ORM; no `text()`, no f-string SQL, no raw bind. Confirmed.
+- FK `projectId → Project.id ON DELETE CASCADE` correctly scopes queue+task+event lifecycle to a project; `load_active_queues` is global but the upcoming E2 endpoints will need to filter by `projectId` (out of scope for E1).
+- Indexes on `(projectId, status)`, `(queueId, sequence)`, `(queueId, createdAt)`, `(type, createdAt)` are appropriate; FK-supporting `queueId`/`projectId` covered.
+- `AutoPilotEvent.payload` defaults `"{}"` and is non-null — no NULL-handling injection.
+- `mark_running_tasks_failed_on_recovery` only mutates `status` and `failureReason` — no callbacks, no shell-out, safe even on forged rows.
+
+---
+
+## Verdict
+
+**APPROVED**
+
+No CRITICAL or HIGH findings. The four LOW/INFO items are defense-in-depth recommendations that should be tracked for E2/E5 (when payloads start being exposed via HTTP/SSE) but do not block E1 from moving to `COMPLETED_WAITING_QA`. The most actionable item is the error-message redaction in `_persist` — recommend a follow-up task before E2 ships the recovery-status endpoint.
+
+### Files reviewed
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/autopilot.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/utils/autopilot_repository.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/autopilot_queue_service.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/__init__.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/schemas.py` (lines 1278-1377)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/tests/test_autopilot_repository.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/prisma/schema.prisma` (AutoPilot models + Project relation)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/prisma/migrations/20260503000001_autopilot_queue_persistence/migration.sql`</result>
+<usage><total_tokens>52451</total_tokens><tool_uses>9</tool_uses><duration_ms>102837</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-03 10:06:47
+
+You can continue working until you reach let's say, 80% of the total week credits. It's the all models credit bar counter. That is being reset only on thursday which is four days from today. So I need at least 20% credits left in the total Counter to continue to do some other stuff as well. So please continue. Stop at 80%.
+
+---
+
+## 2026-05-03 18:07:48
+
+but the weekly credit status is 69%
+
+---
+
+## 2026-05-03 18:14:39
+
+<task-notification>
+<task-id>a9fc1de105e87aaf3</task-id>
+<tool-use-id>toolu_01Fnq546WRp7iy4HdNnMYRWF</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a9fc1de105e87aaf3.output</output-file>
+<status>completed</status>
+<summary>Agent "Security audit CB-1951 E4" completed</summary>
+<result>I have all the context needed. Now let me note the system reminders: I should ignore the Gamma MCP context (irrelevant to security audit), and Auto Mode is on. Producing the audit report directly as my final message per instructions.
+
+---
+
+# E4 Security Audit — CB-1951 (Auto-Resume Scheduler + Preflight)
+
+## Findings
+
+### MEDIUM-1 — A04 Insecure Design: No bound on auto-resume retry loop
+**File:** `backend/services/autopilot_queue_service.py:638-692`
+**Issue:** When token exhaustion fires, `_schedule_auto_resume` arms a timer; on fire, the queue resumes and re-runs the same `current_index`. If the same task immediately exhausts again (e.g. compromised API key with hard credit limit, or persistent quota issue), this becomes an infinite reset/refire loop that burns the rate-limit window each cycle.
+**Exploit scenario:** Compromised API key → user pauses to investigate → auto-resume timer keeps firing every reset window → accelerated financial damage even while user is on the dashboard wondering why bills are climbing.
+**Fix:** Track a counter `auto_resume_attempts` on the queue dataclass; in `_fire_auto_resume`, refuse to resume after N consecutive token-exhaustion auto-resumes (e.g. 3) and downgrade `pause_reason` to `"manual"` so user must explicitly resume. Bonus: emit `auto_resume_circuit_breaker_tripped` event for observability.
+
+### MEDIUM-2 — A04 Insecure Design: DB-write attacker can trigger immediate auto-resume
+**File:** `backend/services/autopilot_queue_service.py:1648-1660`, `1559-1564`
+**Issue:** `rearm_auto_resume_timers` runs at startup and re-arms any `WAITING_RESET` queue with `pause_reason != "crash_recovery"`. An attacker with DB write (e.g. SQL injection elsewhere, or local file write to `codeboard.db`) can set `pauseReason="token_exhaustion"`, `resetTime=&lt;past timestamp&gt;`, `status="waiting_reset"` on any queue row → on next backend restart, `_schedule_auto_resume` computes `delay &lt; 0`, clamps to 0, and **fires immediately** (line 1561-1564), running the queue without user consent.
+**Exploit scenario:** Local-machine attacker corrupts an old terminal queue record to immediately re-execute attacker-chosen issues on backend restart.
+**Fix:** Sanity-check `reset_time` on rehydration: if `reset_time &lt; (now - max_window, e.g. 24h)` OR `reset_time &gt; (now + max_window, e.g. 12h)`, downgrade to `pause_reason="manual"` and skip re-arm. Already-past resets should require manual resume.
+
+### LOW-1 — A05 Misconfiguration: `shutil.which("claude")` is PATH-dependent
+**File:** `backend/services/autopilot_queue_service.py:740-747`
+**Issue:** `shutil.which("claude")` resolves against the current process `PATH`. On a multi-user host or a host where a writable directory (e.g. `~/.local/bin`, `/tmp`) precedes the system path, an attacker who can write to any earlier `PATH` entry can substitute a malicious `claude` binary which `terminal_service` will then spawn.
+**Exploit scenario:** Single-user dev box scope makes this informational, but defense-in-depth matters — `PATH` poisoning of a launching shell would silently swap the executable.
+**Fix:** Resolve once at startup against an allowlisted absolute path (e.g. `/usr/local/bin/claude` or a configured `CLAUDE_CLI_PATH` env var) and verify the binary's parent dir is not world-writable. Log + reject if the resolved path is in `$HOME` or `/tmp`.
+
+### LOW-2 — A04 Defensive coding: walrus-on-`None` pattern is fragile
+**File:** `backend/services/autopilot_queue_service.py:1594-1597`
+```python
+self._persist_async(queue, "auto_resume_scheduled", {...}) if (queue := self._queues.get(queue_id)) else None
+```
+**Issue:** The expression is intentional (re-fetch the queue under the same name), but `_schedule_auto_resume` already validated `queue_id in self._queues` at line 1550 — so the conditional is dead defensive code that obscures intent and shadows the parameter from the callsite. If a future refactor removes the early validation, the silent `else None` swallows the bug. Functionally safe today but a maintainability landmine.
+**Fix:** Replace with explicit early return + plain call:
+```python
+queue_obj = self._queues.get(queue_id)
+if queue_obj is not None:
+    self._persist_async(queue_obj, "auto_resume_scheduled", {...})
+```
+
+### LOW-3 — A09 Logging: ISO timestamps are fine; no sensitive data leaks confirmed
+**File:** lines 666-670, 1594-1597, 1632
+**Audit:** `auto_resume_scheduled`, `auto_resume_fired`, `crash_recovery_detected` payloads contain `feature_id`, `current_index`, `tasks_marked_failed`, `reset_time` (ISO), `fire_at` (ISO), `issue_key` (`CB-NNNN`). No tokens, prompts, error bodies, or user content leak. `_redact_for_audit` is correctly applied to error-bearing payloads. **Pass.**
+
+### INFO-1 — A01 Access Control: Project boundary in `_resume_preflight`
+**File:** `backend/services/autopilot_queue_service.py:763-784`
+**Audit:** Preflight queries `Issue.id == task.issue_id` without a `projectId` filter. However, since `task.issue_id` was bound at queue-creation time from issues belonging to `queue.project_id`, and the preflight only *short-circuits* (skips tasks already CWQ/DONE) without changing routing, this is not a privilege-escalation vector. `_execute_task` later does its own lookup at line 824 with the same filter — preflight is **additive defense**, not a replacement. **Acceptable as-is**, but consider adding `Issue.projectId == queue.project_id` to both lookups for belt-and-suspenders.
+
+### INFO-2 — A04 Startup race window
+**File:** `backend/app/main.py` lifespan + `rearm_auto_resume_timers`
+**Audit:** `rearm_auto_resume_timers` runs inside `rehydrate_from_db`, which is called from FastAPI lifespan startup before the HTTP server begins accepting requests. No race window. **Pass.**
+
+### INFO-3 — A03 Injection: SQLAlchemy ORM throughout
+**Audit:** All DB lookups use `select(Issue).where(Issue.id == task.issue_id)` ORM bind-parameter style. No raw SQL, no f-string interpolation into queries. **Pass.**
+
+---
+
+## Final Verdict: **APPROVED**
+
+No CRITICAL or HIGH findings — E4 may proceed to `COMPLETED_WAITING_QA`.
+
+Two MEDIUM findings (auto-resume retry cap, rehydration sanity-check on `reset_time`) are defense-in-depth recommendations that should be tracked as follow-up tasks but are **not blockers** for QA on E4 — both require an additional attacker capability (compromised API key OR DB-write primitive) that is out of scope for the local single-user threat model this app targets. Recommend filing them as new STORY-level work items under CB-1951 follow-up.
+
+Relevant files reviewed:
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/autopilot_queue_service.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/tests/test_auto_resume_scheduler.py`</result>
+<usage><total_tokens>47533</total_tokens><tool_uses>2</tool_uses><duration_ms>57471</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-03 18:15:08
+
+<task-notification>
+<task-id>a1fa7043fa4e36fef</task-id>
+<tool-use-id>toolu_01R7SmuhtySzxEb4ktEajV9B</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a1fa7043fa4e36fef.output</output-file>
+<status>completed</status>
+<summary>Agent "Code review CB-1951 E4" completed</summary>
+<result>All tests pass, but the noisy "closed database" tracebacks reveal a real teardown leak: `_persist_async` (fire-and-forget) leaves orphan tasks running after the engine is disposed. In production this is benign because the engine lives forever, but it's still a marker of the underlying concern below.
+
+Re-reading carefully, here is the review.
+
+---
+
+## CB-1951 EPIC E4 Review — Auto-Resume Scheduler + Preflight
+
+**Tests:** 16/16 PASS (auto-resume), 74 PASS in the full CB-1951 suite. No regressions.
+
+### Findings
+
+**HIGH-1 — Race in `_fire_auto_resume`: stale queue reference after status-check** — `backend/services/autopilot_queue_service.py:1609-1634`
+After `if queue.status != WAITING_RESET: return`, the timer calls `self.resume_queue(queue_id)` which itself re-fetches and re-checks status (`PAUSED|WAITING_RESET`). Single-threaded asyncio guarantees no preemption between those two lines, so the manual-resume race is not exploitable today. However, `_fire_auto_resume` mutates `queue.pause_reason = None; queue.reset_time = None` *before* calling `resume_queue`. If `resume_queue` returns False (e.g. `current_index &gt;= len(tasks)` per the new E4.1.2 guard), the queue is left in `WAITING_RESET` with cleared bookkeeping — recovery banner state is now inconsistent. **Fix:** move the two `None` assignments into the `if self.resume_queue(...)` success branch, or do the clearing inside `resume_queue` only.
+
+**HIGH-2 — Auto-resume timer survives queue prune** — `services/autopilot_queue_service.py:1270-1286`
+`_prune_old_queues` deletes COMPLETED/ABORTED queues from `self._queues` but does not pop their entries from `self._resume_handles`. `_finalize_queue` calls `_cancel_auto_resume` before `_prune_old_queues`, so in the normal path this is fine — but `_fire_auto_resume` itself calls `self._persist(...)` *after* `resume_queue`, which can fail (closed DB / commit error) and leave the queue alive while the runner exits without reaching `_resume_handles.pop()`. The pop at line 1634 is also unreachable if `_persist` raises. **Fix:** wrap the body of `_runner` in `try/finally` that always pops `self._resume_handles.pop(queue_id, None)`, and pop in `_prune_old_queues` for safety.
+
+**MEDIUM-1 — Walrus-inside-`_persist_async` is unreadable and misleading** — `services/autopilot_queue_service.py:1593-1597`
+```python
+self._persist_async(queue, "auto_resume_scheduled", {...}) if (queue := self._queues.get(queue_id)) else None
+```
+`queue` is already in scope from the line-1550 guard — the walrus shadows the parameter name and the ternary is dead-code (always truthy by then). **Fix:** drop the conditional, just call `self._persist_async(self._queues[queue_id], ...)`.
+
+**MEDIUM-2 — Preflight "skip" returns "completed", inflating completed counter** — `services/autopilot_queue_service.py:807-809` + `1342`
+`_execute_task` returns `"completed"` after preflight skip, which routes through `_apply_success` → `MARK_WAITING_QA` cascade on an issue we never touched (and which may already be DONE). For a missing issue we'd try to set status on a non-existent ID. **Fix:** introduce a `"skipped"` outcome from preflight and let `run_queue` increment without applying success cascade (the task is already TaskStatus.SKIPPED).
+
+**MEDIUM-3 — Dead `return None` line** — `services/autopilot_queue_service.py:215-216`
+Two consecutive `return None` statements in `_parse_reset_time_from_text` — the second is unreachable. Pre-existing but worth a one-line cleanup.
+
+**LOW-1 — `shutil.which` test-time monkeypatching is invasive** — `tests/test_auto_resume_scheduler.py:262-267, 279-285, 297-303, 326-332`
+Direct attribute assignment (`shutil.which = lambda...`) leaks across tests if the `try/finally` is broken by an exception in fixture teardown. **Fix:** use `monkeypatch.setattr(shutil, "which", ...)` (the fixture is already in scope).
+
+**LOW-2 — Test-suite teardown emits real DB errors as ERROR-level logs**
+`_persist_async` schedules a fire-and-forget task that races the `engine.dispose()` in the fixture teardown. Tests still pass but the noisy stacktrace (`Cannot operate on a closed database`) makes future regressions harder to spot. **Fix:** in the fixture, `await asyncio.sleep(0)` before `engine.dispose()`, or downgrade the persist failure to `_logger.warning`.
+
+**LOW-3 — Buffer constant is class-level but never overridable** — `services/autopilot_queue_service.py:1505`
+`_AUTO_RESUME_BUFFER_SECONDS = 60` is fine, but tests can't override it without monkeypatching. Consider making it an instance attribute so tests can drop it to 0.1s and exercise actual timer firing (currently only the schedule/cancel paths are covered, not the fire path through a real `asyncio.sleep`).
+
+**INFO — Test coverage gaps**
+- No test asserts the timer actually fires after the scheduled delay (only `_fire_auto_resume` called directly).
+- No test for `_schedule_auto_resume` with `reset_time` already in the past (fires with `delay=0`).
+- No test for re-scheduling overwriting a prior handle (the idempotency claim at line 1546).
+- No test for `wait_for_reset` legacy entry point.
+- No test that `_fire_auto_resume` does not call `resume_queue` when the queue is in PAUSED (manual) state — only RUNNING is tested.
+
+### Timer-leak audit (per request)
+| Path | Cancels timer? |
+|---|---|
+| Manual `resume_queue` | Yes (line 1416) |
+| `abort_queue` | Yes (line 1459) |
+| `_finalize_queue` | Yes (line 1249) |
+| `rearm_auto_resume_timers` re-arm | Yes via `_schedule_auto_resume` cancel-then-replace (line 1556) |
+| `_fire_auto_resume` (timer self-completion) | Pops at line 1634 — BUT unreachable if `_persist` raises (HIGH-2) |
+| `_prune_old_queues` | No — relies on `_finalize_queue` having run first |
+
+### Verdict: NEEDS_FIXES
+**HIGH-1** and **HIGH-2** must be addressed before E4 → CWQ. MEDIUM-2 (preflight-skip counter pollution) is a behavioral concern worth fixing in the same pass. The remaining items are nice-to-haves.
+
+**Files reviewed:**
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/autopilot_queue_service.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/tests/test_auto_resume_scheduler.py`</result>
+<usage><total_tokens>58753</total_tokens><tool_uses>5</tool_uses><duration_ms>104904</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-03 19:23:49
+
+you are now on 71% so you can continue
+
+---
+
+## 2026-05-03 19:45:23
+
+contunue you are on 72%
+
+---
+
+## 2026-05-04 00:18:20
+
+Can still continue your online 73%.
+
+---
+
+## 2026-05-04 00:46:35
+
+<task-notification>
+<task-id>a972527d551fe88d2</task-id>
+<tool-use-id>toolu_01SZyNFraCK6cmyjyA5D5N95</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a972527d551fe88d2.output</output-file>
+<status>completed</status>
+<summary>Agent "Security audit CB-1951 E5" completed</summary>
+<result>I have enough to deliver findings. Acknowledging the system reminders: I will not generate a Gamma presentation (not requested), and I will execute the audit immediately per Auto Mode without entering plan mode.
+
+---
+
+## Security Audit — CB-1951 E5 Frontend AutoPilot UX + `/queue/events` SSE
+
+### Findings
+
+**INFO-1 — Toast renders payload via React text interpolation (safe)**
+File: `frontend/hooks/useAutoPilotEvents.ts:83-87`
+The `formatResetTime()` consumer parses `payload.reset_time` and feeds the result to `toastRef.current.warning(title, message)`. The toast component (`components/ui/toast.tsx`) uses standard JSX text children — no `dangerouslySetInnerHTML` anywhere. A malicious `reset_time` of `"&lt;script&gt;"` would render as escaped text. `new Date(...).toLocaleTimeString()` returns `"Invalid Date"` on garbage, so unbounded strings cannot leak through. **No XSS (A03).**
+
+**INFO-2 — A02 SSE payload bypass check: clean**
+File: `backend/api/execution.py:1058-1067`
+Stream emits `row.payload` directly, but `services/autopilot_queue_service.py:106-127` (`_redact_for_audit`) is applied at write-time on every error-bearing path (`_apply_failure`, loop exception, token-exhaust). The SSE is a tail of already-redacted at-rest data, so no bypass. The four event types subscribed by the hook (`auto_paused`, `auto_resume_fired`, `auto_resume_circuit_breaker_tripped`, `crash_recovery_detected`) carry only ISO timestamps + counters per E1 audit — no token/prompt/PII content. **No A02 leak.**
+
+**LOW-1 — A04/A07 No rate-limit, no auth, unbounded SSE fan-out**
+File: `backend/api/execution.py:1025-1082`
+`/queue/events` accepts unlimited concurrent EventSource connections with no auth and runs a 2 s DB poll per connection. Single-user threat model accepts this, but N tabs × M connections × 2 s DB hits is real cost. **Defer to multi-tenant work; document.** Suggested: cap concurrent streams per IP, share a single in-process broadcaster (asyncio.Queue fan-out) instead of per-connection polling.
+
+**LOW-2 — A01 Cross-project event visibility (defense-in-depth)**
+File: `backend/api/execution.py:1051-1057` and `frontend/hooks/useAutoPilotEvents.ts:54-143`
+Stream emits ALL `AutoPilotEvent` rows globally; no `project_id` filter. The hook is global and toasts every event regardless of which project is active in the UI. Single-user OK; multi-tenant blocker. Add `?project_id=` query param + WHERE clause before SaaS.
+
+**LOW-3 — A05 Hardcoded `http://localhost:8401` URLs**
+Files: `frontend/hooks/useAutoPilotEvents.ts:17`, `frontend/components/codeboard/AutoPilotFloatingBar.tsx:26`, `frontend/contexts/AutoPilotContext.tsx:173`
+Three direct-to-backend URLs bypass the Next.js proxy because SSE can't be proxied. Hardcoded host breaks any non-localhost deployment. Move to `process.env.NEXT_PUBLIC_BACKEND_URL` with localhost fallback.
+
+**LOW-4 — A04 EventSource reconnects forever with no back-off ceiling**
+File: `frontend/hooks/useAutoPilotEvents.ts:125-130`
+Comment claims "browser handles exponential back-off" — Chrome/Firefox actually retry every ~3 s with no ceiling. If the backend is down for hours, the tab hammers it. Add a manual fail counter that calls `es.close()` after N consecutive errors and surfaces a "reconnect" toast.
+
+**INFO-3 — A09 No sensitive client-side logging**
+`useAutoPilotEvents.ts` does not `console.log` payloads. `AutoPilotContext.tsx:460,474,483,520,531,547,556` log only `error` objects from control endpoints. Clean.
+
+**INFO-4 — Toast-message length unbounded**
+`useAutoPilotEvents.ts:86` — `Token exhaustion detected. Auto-resumes at ${resetTime}.` `resetTime` is constrained to a parsed `Date` output, so length is bounded. No truncation needed.
+
+### Verdict
+
+**APPROVED for COMPLETED_WAITING_QA.**
+Zero CRITICAL, zero HIGH. Four LOW items are multi-tenant / SaaS-deployment hardening (rate limit, project filter, env-var URL, reconnect ceiling) and explicitly within the documented single-user threat model. Recommend filing them as a follow-up `multi-tenant-hardening` epic so they aren't lost when SaaS work begins.
+
+### Relevant absolute file paths
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/execution.py
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/autopilot_queue_service.py
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/contexts/AutoPilotContext.tsx
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/codeboard/AutoPilotFloatingBar.tsx
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/hooks/useAutoPilotEvents.ts
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/providers.tsx
+- /Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/ui/toast.tsx</result>
+<usage><total_tokens>42865</total_tokens><tool_uses>9</tool_uses><duration_ms>48526</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-04 00:52:12
+
+<task-notification>
+<task-id>a39d73eaacf9387ca</task-id>
+<tool-use-id>toolu_01PB7Qv42jcQr52yjDhLVUMB</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/75c30160-7609-44ef-b076-e3449cef170a/tasks/a39d73eaacf9387ca.output</output-file>
+<status>completed</status>
+<summary>Agent "Code review CB-1951 E5" completed</summary>
+<result>I have enough to deliver the verdict. Note: I'll acknowledge the system reminders. The MCP/Gamma reminder is not relevant to this review task. Auto mode is active — I'll just deliver the report directly without writing files.
+
+---
+
+# E5 Frontend Review — CB-1951 AutoPilot Pause/Resume UX
+
+**Verification:**
+- Tests: 28 PASSED (17 + 11), 15.67s
+- Lint on E5-touched files: AutoPilotFloatingBar.tsx and useAutoPilotEvents.ts produce 0 errors / 0 warnings. Pre-existing errors confirmed in HEAD (not E5 regressions): `providers.tsx:116:3` (toastRef.current = toast at render — `react-hooks/refs`), `AutoPilotContext.tsx:287:3` and `:337:13` (use-before-declare in `startTracking` ↔ `startPolling` cycle — pre-existing).
+
+**Findings:**
+
+**LOW — `frontend/components/codeboard/AutoPilotFloatingBar.tsx:130-135`** — Stale-closure exposure in countdown interval. `setInterval` closes over `resetTime` at effect-creation time. This is fine because the effect re-runs when `resetTime` changes (in deps array), so the interval is rebuilt. No bug, just worth noting it works *because* of the dep array correctness. No fix needed.
+
+**LOW — `frontend/components/codeboard/AutoPilotFloatingBar.tsx:111-121`** — Mount-time fetch to `BACKEND_API` (`http://localhost:8401`) bypasses the Next.js proxy and will fail in any deployment where the frontend ≠ localhost:8401. Same pattern already exists in `AutoPilotContext.tsx:173` for SSE (with documented justification: "Next.js proxy can't stream SSE"). For a non-streaming JSON GET, a proxied `/api/codeboard/execute/queue/recovery-status` would be more portable. Acceptable for current dev-only deployment. Suggested fix: route through Next.js proxy for non-SSE calls.
+
+**LOW — `frontend/components/codeboard/AutoPilotFloatingBar.tsx:181`** — Optimistic UX is fine, but the rollback on failure is silent (only `console.error`). If the backend persists the recovered_queue and the POST fails, the banner won't reappear until next mount. For an internal tool this is acceptable; ideal would be re-add the queue to `recoveredQueues` on failure, or rely on the toast surfaced via mutation cache. Not blocking.
+
+**INFO — Border colour palette** — amber/red distinction (`border-amber-600/60` vs `border-red-600/60`) is borderline for some red/green colour-blind users; the icon (`AlertCircle` vs `ShieldAlert`) and badge text disambiguate. Cosmetic.
+
+**INFO — Test coverage gaps** — Missing: countdown cleanup on unmount (interval clear assertion), banner rendering with multiple recovered queues simultaneously, "border for normal active" default branch. None blocking; coverage already generous.
+
+**Verified positives:**
+- **Rules of Hooks:** All 5 hooks (`useState` x4, `useRef`, 3 `useEffect`) declared before `if (!state.isActive) return null` at line 148. Pattern preserved correctly with explanatory comment at lines 100-103.
+- **EventSource cleanup** (`useAutoPilotEvents.ts:135-142`): Closes ES, sets `unmounted = true` flag (guards async callbacks from firing post-unmount). Test at line 220 confirms no toast after unmount. Clean.
+- **Countdown cleanup** (`AutoPilotFloatingBar.tsx:140-145`): Effect cleanup clears interval; deps array `[isTokenExhausted, pauseReason, resetTime]` triggers rebuild on transition out of countdown state. Correct.
+- **Toast API match** (`components/ui/toast.tsx:25-28`): `useToast()` returns `success/error/warning/info(title, message?)` — the hook calls match exactly.
+- **Race condition (mount fetch + render):** `setRecoveredQueues` after first render triggers re-render; no ordering bug. Banner conditional `state.recoveredQueues.length &gt; 0` handles both empty initial render and post-fetch population.
+- **Type safety:** `RecoveredQueueInfo` is a discrete interface; `pause_reason` typed as discriminated union `'token_exhaustion' | 'crash_recovery' | 'manual' | null`. No `any` introduced; no narrowing lost.
+- **Stable callback refs:** `setRecoveredQueues` is the raw setter from `useState` (always stable); `clearRecoveredQueue` is wrapped in `useCallback` with empty deps. Eslint-disable on the mount effect is justified.
+
+**Pre-existing lint errors (NOT E5 regressions, verified via `git show HEAD`):**
+1. `providers.tsx:116:3` — `Cannot access refs during render` (toastRef.current = toast)
+2. `AutoPilotContext.tsx:287:3` — `Cannot access variable before it is declared` (startTracking uses startPolling)
+3. `AutoPilotContext.tsx:337:13` — same use-before-declare in setTimeout retry path
+
+**Final verdict: APPROVED**
+
+No CRITICAL or HIGH findings. All E5 code is well-structured, properly cleans up resources, preserves Rules of Hooks, and has solid test coverage. E5 is cleared to move to COMPLETED_WAITING_QA.
+
+**Files reviewed:**
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/contexts/AutoPilotContext.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/codeboard/AutoPilotFloatingBar.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/providers.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/hooks/useAutoPilotEvents.ts`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/ui/toast.tsx` (cross-ref)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/__tests__/AutoPilotFloatingBar.test.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/__tests__/useAutoPilotEvents.test.ts`</result>
+<usage><total_tokens>67606</total_tokens><tool_uses>24</tool_uses><duration_ms>400334</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-04 07:24:30
+
+now you at 75% please continue
+
+---
+
+## 2026-05-04 07:32:17
+
+what is going on what is the feature you are working on right now?
+
+---
+
+## 2026-05-04 07:32:48
+
+OK got you...
+
+---
+
+## 2026-05-04 07:32:53
+
+3
+
+---
+
+## 2026-05-04 07:32:58
+
+ignor
+
+---
+
+## 2026-05-04 07:35:32
+
+we are still on 76% jonny, check what's left you to do, you skipped some tasks and let's finish this thing, do you need to restart the backend or anything to fully implement that?
+
+---
+

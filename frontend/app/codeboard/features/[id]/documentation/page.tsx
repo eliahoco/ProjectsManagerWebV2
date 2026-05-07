@@ -51,12 +51,18 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
     isLoading: docLoading,
     isError: docError,
     error: docErrorObj,
-  } = useFeatureDocumentation(issueId);
+  } = useFeatureDocumentation(issueId, issue?.projectId);
 
   // Loading state
   if (issueLoading || docLoading) {
     return (
-      <PageShell issueId={issueId} issueKey={null} title={null} doc={null}>
+      <PageShell
+        issueId={issueId}
+        projectId={undefined}
+        issueKey={null}
+        title={null}
+        doc={null}
+      >
         <div
           role="status"
           aria-live="polite"
@@ -72,7 +78,13 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
   // Issue fetch error
   if (issueError || !issue) {
     return (
-      <PageShell issueId={issueId} issueKey={null} title={null} doc={null}>
+      <PageShell
+        issueId={issueId}
+        projectId={undefined}
+        issueKey={null}
+        title={null}
+        doc={null}
+      >
         <ErrorCard message="Could not load the issue. It may have been deleted or you may not have access." />
       </PageShell>
     );
@@ -81,7 +93,13 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
   // Type guard — only FEATURE issues have feature documentation
   if (issue.type !== 'FEATURE') {
     return (
-      <PageShell issueId={issueId} issueKey={issue.key} title={issue.title} doc={null}>
+      <PageShell
+        issueId={issueId}
+        projectId={issue.projectId}
+        issueKey={issue.key}
+        title={issue.title}
+        doc={null}
+      >
         <ErrorCard
           message={`Feature documentation is only available for FEATURE-type issues. This issue is type "${issue.type}".`}
           action={
@@ -101,7 +119,13 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
   // Documentation fetch error (not a 404 — those return null)
   if (docError) {
     return (
-      <PageShell issueId={issueId} issueKey={issue.key} title={issue.title} doc={null}>
+      <PageShell
+        issueId={issueId}
+        projectId={issue.projectId}
+        issueKey={issue.key}
+        title={issue.title}
+        doc={null}
+      >
         <ErrorCard
           message={
             docErrorObj instanceof Error
@@ -114,12 +138,18 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
   }
 
   return (
-    <PageShell issueId={issueId} issueKey={issue.key} title={issue.title} doc={doc ?? null}>
+    <PageShell
+      issueId={issueId}
+      projectId={issue.projectId}
+      issueKey={issue.key}
+      title={issue.title}
+      doc={doc ?? null}
+    >
       {doc ? (
         <FeatureDocumentationView doc={doc} />
       ) : (
         /* T2.3.2 — Empty state */
-        <EmptyState issueId={issueId} />
+        <EmptyState issueId={issueId} projectId={issue.projectId} />
       )}
     </PageShell>
   );
@@ -131,13 +161,21 @@ export default function FeatureDocumentationPage({ params }: PageProps) {
 
 interface PageShellProps {
   issueId: string;
+  projectId: string | undefined;
   issueKey: string | null;
   title: string | null;
   doc: import('@/hooks/useCodeBoard').FeatureDocumentationData | null;
   children: React.ReactNode;
 }
 
-function PageShell({ issueId, issueKey, title, doc, children }: PageShellProps) {
+function PageShell({
+  issueId,
+  projectId,
+  issueKey,
+  title,
+  doc,
+  children,
+}: PageShellProps) {
   return (
     <div className="min-h-screen bg-zinc-950 p-4 md:p-6">
       <div className="mx-auto max-w-4xl space-y-4">
@@ -166,6 +204,7 @@ function PageShell({ issueId, issueKey, title, doc, children }: PageShellProps) 
           {issueKey && (
             <GenerateFeatureDocButton
               issueId={issueId}
+              projectId={projectId}
               existingDoc={doc}
             />
           )}
@@ -182,7 +221,13 @@ function PageShell({ issueId, issueKey, title, doc, children }: PageShellProps) 
 // Empty state (T2.3.2)
 // ---------------------------------------------------------------------------
 
-function EmptyState({ issueId }: { issueId: string }) {
+function EmptyState({
+  issueId,
+  projectId,
+}: {
+  issueId: string;
+  projectId: string | undefined;
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-16 text-center">
       <Sparkles className="h-10 w-10 text-zinc-600" aria-hidden="true" />
@@ -195,7 +240,11 @@ function EmptyState({ issueId }: { issueId: string }) {
           documentation from execution history, tasks, and QA results for this feature.
         </p>
       </div>
-      <GenerateFeatureDocButton issueId={issueId} existingDoc={null} />
+      <GenerateFeatureDocButton
+        issueId={issueId}
+        projectId={projectId}
+        existingDoc={null}
+      />
     </div>
   );
 }

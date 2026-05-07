@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Issue, IssueStatus, ISSUE_TYPES, STATUS_COLUMNS, PRIORITIES } from '@/types/codeboard';
 import { cn } from '@/lib/utils';
+import { isExecutableType } from '@/lib/codeboard';
 
 // Feature selection question types - CB-840
 type WorkType = 'any' | 'fresh' | 'in_progress' | 'quick_wins';
@@ -108,7 +109,7 @@ interface FeatureProgress {
 // Calculate progress for a feature based on its descendants
 function calculateFeatureProgress(feature: Issue, allIssues: Issue[]): FeatureProgress {
   const descendants = getDescendants(feature.id, allIssues);
-  const executableItems = descendants.filter(i => i.type === 'TASK' || i.type === 'SUBTASK');
+  const executableItems = descendants.filter(i => isExecutableType(i.type));
 
   const total = executableItems.length;
   const done = executableItems.filter(i => i.status === 'DONE').length;

@@ -1161,8 +1161,13 @@ class ImplementationNoteCreate(BaseModel):
     model). The validators enforce "valid JSON array of strings" so
     downstream consumers can `json.loads` without try/except, and per-item
     caps + URL-scheme rejection on `references` close the dormant XSS path
-    that existed when the only constraint was the outer `max_length` cap
-    (the endpoint is unauthenticated — see security audit H1/H2).
+    that existed when the only constraint was the outer `max_length` cap.
+
+    The endpoint has no per-user auth; CB-2117 closed the resulting IDOR by
+    requiring a ``projectId`` query param, scoping every issue lookup to
+    ``(id, projectId)`` so a missing/wrong projectId returns the same 404
+    as a missing id. Rate-limiting + per-user authz are tracked separately
+    as Option 3 of the CB-2117 fix.
     """
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(..., min_length=1, max_length=100_000)

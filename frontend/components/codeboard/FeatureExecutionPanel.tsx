@@ -27,6 +27,7 @@ import { useIssueDescendants } from '@/hooks/useCodeBoard';
 import { useAutoPilot } from '@/contexts/AutoPilotContext';
 import type { AutoPilotQueueItem } from '@/contexts/AutoPilotContext';
 import { cn } from '@/lib/utils';
+import { isExecutableType } from '@/lib/codeboard';
 import { AutoPilotConfigModal } from './AutoPilotConfigModal';
 
 interface FeatureExecutionPanelProps {
@@ -115,15 +116,15 @@ export function FeatureExecutionPanel({
   // Items already completed
   const completedItems = useMemo(() => {
     return featureIssues.filter(i =>
-      (i.type === 'TASK' || i.type === 'SUBTASK') &&
+      isExecutableType(i.type) &&
       (i.status === 'DONE' || i.status === 'COMPLETED_WAITING_QA')
     );
   }, [featureIssues]);
 
-  // Executable items (TASKs and SUBTASKs only)
+  // Executable items (TASKs, SUBTASKs, and BUGs)
   const executableItems = useMemo(() => {
     return featureIssues.filter(i => {
-      if (i.type !== 'TASK' && i.type !== 'SUBTASK') return false;
+      if (!isExecutableType(i.type)) return false;
       if (i.status === 'CANCELLED') return false;
       if (showTaskActionSelector) return true;
       const action = taskActions.get(i.id);
@@ -152,10 +153,10 @@ export function FeatureExecutionPanel({
 
   // Apply task actions → set selection
   const applyTaskActions = useCallback(() => {
-    const allLeafTasks = featureIssues.filter(i =>
-      (i.type === 'TASK' || i.type === 'SUBTASK') && i.status !== 'CANCELLED'
+    const allExecutableLeaves = featureIssues.filter(i =>
+      isExecutableType(i.type) && i.status !== 'CANCELLED'
     );
-    const ids = allLeafTasks
+    const ids = allExecutableLeaves
       .filter(i => taskActions.get(i.id) !== 'skip')
       .map(i => i.id);
     setSelectedIds(new Set(ids));
@@ -235,7 +236,7 @@ export function FeatureExecutionPanel({
     const children = hierarchy.get(issue.id) || [];
     const hasChildren = children.length > 0;
     const isExpanded = expandedIds.has(issue.id);
-    const isExecutable = issue.type === 'TASK' || issue.type === 'SUBTASK';
+    const isExecutable = isExecutableType(issue.type);
     const isSelected = selectedIds.has(issue.id);
     const isDone = issue.status === 'DONE';
     const isWaitingQA = issue.status === 'COMPLETED_WAITING_QA';
@@ -560,7 +561,7 @@ export function FeatureExecutionPanel({
         <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-700 bg-zinc-900/50">
           <div className="text-sm text-zinc-500">
             <Clock className="w-4 h-4 inline mr-1" />
-            {executableItems.length} executable tasks
+            {executableItems.length} executable items
           </div>
           {!isExecuting ? (
             <div className="flex items-center gap-3">

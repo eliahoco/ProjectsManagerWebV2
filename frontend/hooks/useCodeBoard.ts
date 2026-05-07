@@ -1187,32 +1187,45 @@ export interface CreateImplementationNoteData {
   author?: string;
 }
 
+// CB-2117: every documentation endpoint now requires a `projectId` query
+// param. The hooks below stay disabled until BOTH issueId AND projectId are
+// known so we never fire a request that the backend would reject with 422.
+function _docPath(path: string, projectId: string): string {
+  return `${path}?projectId=${encodeURIComponent(projectId)}`;
+}
+
 // Fetch execution summaries for an issue
-export function useExecutionSummaries(issueId: string | undefined) {
+export function useExecutionSummaries(
+  issueId: string | undefined,
+  projectId: string | undefined,
+) {
   return useQuery<ExecutionSummaryData[]>({
-    queryKey: ['execution-summaries', issueId],
+    queryKey: ['execution-summaries', issueId, projectId],
     queryFn: async () => {
-      if (!issueId) return [];
+      if (!issueId || !projectId) return [];
       return apiFetch<ExecutionSummaryData[]>(
-        `${API_BASE}/issues/${issueId}/documentation`
+        _docPath(`${API_BASE}/issues/${issueId}/documentation`, projectId),
       );
     },
-    enabled: !!issueId,
+    enabled: !!issueId && !!projectId,
     staleTime: 30_000,
   });
 }
 
 // Fetch implementation notes for an issue
-export function useImplementationNotes(issueId: string | undefined) {
+export function useImplementationNotes(
+  issueId: string | undefined,
+  projectId: string | undefined,
+) {
   return useQuery<ImplementationNoteData[]>({
-    queryKey: ['implementation-notes', issueId],
+    queryKey: ['implementation-notes', issueId, projectId],
     queryFn: async () => {
-      if (!issueId) return [];
+      if (!issueId || !projectId) return [];
       return apiFetch<ImplementationNoteData[]>(
-        `${API_BASE}/issues/${issueId}/documentation/notes`
+        _docPath(`${API_BASE}/issues/${issueId}/documentation/notes`, projectId),
       );
     },
-    enabled: !!issueId,
+    enabled: !!issueId && !!projectId,
     staleTime: 30_000,
   });
 }
@@ -1224,13 +1237,15 @@ export function useCreateImplementationNote() {
   return useMutation({
     mutationFn: async ({
       issueId,
+      projectId,
       data,
     }: {
       issueId: string;
+      projectId: string;
       data: CreateImplementationNoteData;
     }) => {
       return apiFetch<ImplementationNoteData>(
-        `${API_BASE}/issues/${issueId}/documentation/notes`,
+        _docPath(`${API_BASE}/issues/${issueId}/documentation/notes`, projectId),
         {
           method: 'POST',
           body: JSON.stringify(data),
@@ -1239,7 +1254,7 @@ export function useCreateImplementationNote() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['implementation-notes', variables.issueId],
+        queryKey: ['implementation-notes', variables.issueId, variables.projectId],
       });
     },
   });
@@ -1283,20 +1298,23 @@ export interface FeatureDocumentationData {
  * Returns null when the backend responds 404 (not yet generated).
  * Throws on 400 (issue is not FEATURE type) or other errors.
  */
-export function useFeatureDocumentation(issueId: string | undefined) {
+export function useFeatureDocumentation(
+  issueId: string | undefined,
+  projectId: string | undefined,
+) {
   return useQuery<FeatureDocumentationData | null>({
-    queryKey: ['feature-documentation', issueId],
+    queryKey: ['feature-documentation', issueId, projectId],
     queryFn: async () => {
-      if (!issueId) return null;
+      if (!issueId || !projectId) return null;
       return apiFetch<FeatureDocumentationData | null>(
-        `${API_BASE}/features/${issueId}/documentation`,
+        _docPath(`${API_BASE}/features/${issueId}/documentation`, projectId),
       ).catch((err: unknown) => {
         // 404 means not generated yet — return null rather than throwing.
         if (err instanceof APIError && err.statusCode === 404) return null;
         throw err;
       });
     },
-    enabled: !!issueId,
+    enabled: !!issueId && !!projectId,
     staleTime: 30_000,
   });
 }
@@ -1310,15 +1328,32 @@ export function useGenerateFeatureDocumentation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ issueId }: { issueId: string }) => {
+    mutationFn: async ({
+      issueId,
+      projectId,
+    }: {
+      issueId: string;
+      projectId: string;
+    }) => {
       return apiFetch<FeatureDocumentationData>(
-        `${API_BASE}/features/${issueId}/documentation/generate`,
-        { method: 'POST' },
+        _docPath(`${API_BASE}/features/${issueId}/documentation/generate`, projectId),
+        {
+          method: 'POST',
+          // CB-2375 — backend LLM aggregation routinely runs 30–35s; the
+          // 30s default and the proxy 15s default both surfaced 504s in UI.
+          // Match the proxy override in `app/api/codeboard/[...path]/timeouts.ts`.
+          timeout: 120_000,
+        },
       );
     },
-    onSuccess: (_, variables) => {
+    // CB-2376 — invalidate regardless of success/error. The backend may
+    // persist the doc row and still surface a non-2xx (e.g. proxy 504 from
+    // CB-2375); `onSettled` guarantees the next GET refetches the row the
+    // backend actually committed, instead of leaving the UI on the
+    // pre-generate cache.
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['feature-documentation', variables.issueId],
+        queryKey: ['feature-documentation', variables.issueId, variables.projectId],
       });
     },
   });

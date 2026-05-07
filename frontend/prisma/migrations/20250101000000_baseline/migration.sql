@@ -1,0 +1,1 @@
+-- Prisma Migrate baseline: marks existing DB as starting point

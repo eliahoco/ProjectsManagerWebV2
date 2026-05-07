@@ -1,0 +1,71 @@
+"""CB-2043: RAGService.describe_mode() must surface the active RAG backend.
+
+Silent fallback to the embedded SQLite store (`backend/data/chroma/`) is how
+we ended up running on stale local embeddings for weeks. The startup log line
+fed by `describe_mode()` makes that fallback impossible to miss going forward.
+"""
+
+import os
+from unittest.mock import MagicMock, patch
+
+import chromadb
+import pytest
+
+from services.rag_service import PERSISTENT_FALLBACK_PATH, RAGService
+
+
+def test_describe_mode_uninitialized_before_init():
+    rag = RAGService()
+    assert rag.describe_mode() == "RAG mode=UNINITIALIZED"
+
+
+def test_describe_mode_http_after_successful_init(monkeypatch):
+    """After _init_client_blocking succeeds, mode=HTTP with host/port/count."""
+    from app.config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "CHROMA_HOST", "chromadb")
+    monkeypatch.setattr(app_settings, "CHROMA_PORT", 8000)
+
+    fake_socket = MagicMock()
+    fake_socket.close = MagicMock()
+    fake_client = MagicMock()
+    fake_client.heartbeat = MagicMock(return_value=1)
+    fake_client.list_collections = MagicMock(
+        return_value=[MagicMock(), MagicMock(), MagicMock()]
+    )
+
+    rag = RAGService()
+    with patch("services.rag_service.socket.create_connection", return_value=fake_socket), \
+         patch.object(chromadb, "HttpClient", return_value=fake_client):
+        rag._init_client_blocking()
+
+    line = rag.describe_mode()
+    assert line == "RAG mode=HTTP host=chromadb port=8000 collections=3"
+
+
+def test_describe_mode_persistent_after_fallback():
+    """After _fallback_to_persistent, mode=PERSISTENT with abspath + count."""
+    fake_persistent = MagicMock()
+    fake_persistent.list_collections = MagicMock(return_value=[MagicMock()])
+
+    rag = RAGService()
+    with patch.object(chromadb, "PersistentClient", return_value=fake_persistent):
+        rag._fallback_to_persistent()
+
+    expected_path = os.path.abspath(PERSISTENT_FALLBACK_PATH)
+    line = rag.describe_mode()
+    assert line == f"RAG mode=PERSISTENT path={expected_path} collections=1"
+
+
+def test_describe_mode_swallows_collection_count_failure():
+    """list_collections errors must never block the startup log line."""
+    fake_persistent = MagicMock()
+    fake_persistent.list_collections = MagicMock(side_effect=RuntimeError("boom"))
+
+    rag = RAGService()
+    with patch.object(chromadb, "PersistentClient", return_value=fake_persistent):
+        rag._fallback_to_persistent()
+
+    line = rag.describe_mode()
+    assert line.startswith("RAG mode=PERSISTENT path=")
+    assert line.endswith("collections=?")

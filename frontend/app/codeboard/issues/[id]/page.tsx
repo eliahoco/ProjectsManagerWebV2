@@ -78,7 +78,10 @@ export default function IssueDetailPage({ params }: PageProps) {
     issue?.key || null
   );
   const { data: linkedCommits } = useLinkedCommits(issue?.id || null);
-  const { data: executionSummaries } = useExecutionSummaries(issue?.id);
+  const { data: executionSummaries } = useExecutionSummaries(
+    issue?.id,
+    issue?.projectId,
+  );
   const hasImplementation = (executionSummaries?.length ?? 0) > 0;
 
   // If summaries vanish (e.g. cache invalidation) while user is on the tab,
@@ -514,7 +517,7 @@ export default function IssueDetailPage({ params }: PageProps) {
 
               {activeTab === 'implementation' && (
                 <div className="space-y-4">
-                  <ImplementationTab issueId={issue.id} />
+                  <ImplementationTab issueId={issue.id} projectId={issue.projectId} />
                 </div>
               )}
 

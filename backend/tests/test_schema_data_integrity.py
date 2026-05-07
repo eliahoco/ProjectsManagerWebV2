@@ -7,11 +7,12 @@ isolated in-memory database.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError
 
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
+from models.grouping import IssueGroup, IssueGroupMember
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation
 from models.git import CommitLink, GitSyncState
@@ -506,6 +507,95 @@ class TestIssueLinkIntegrity:
         assert fetched.toIssueId == "issue-2"
         assert fetched.linkType == "BLOCKS"
 
+    async def test_duplicate_issue_link_fails(self, seeded_session):
+        """Duplicate (fromIssueId, toIssueId, linkType) should raise IntegrityError (CB-1959)."""
+        issue2 = make_issue(id="issue-2", key="CB-2", sequence=2, title="Issue 2")
+        seeded_session.add(issue2)
+        await seeded_session.flush()
+
+        seeded_session.add(IssueLink(
+            id="link-a", fromIssueId="test-issue-1", toIssueId="issue-2", linkType="RELATES_TO",
+        ))
+        await seeded_session.flush()
+
+        seeded_session.add(IssueLink(
+            id="link-b", fromIssueId="test-issue-1", toIssueId="issue-2", linkType="RELATES_TO",
+        ))
+        with pytest.raises(IntegrityError):
+            await seeded_session.flush()
+        await seeded_session.rollback()
+
+    async def test_different_link_type_allowed(self, seeded_session):
+        """Same issue pair with a different linkType is allowed (CB-1959)."""
+        issue2 = make_issue(id="issue-2", key="CB-2", sequence=2, title="Issue 2")
+        seeded_session.add(issue2)
+        await seeded_session.flush()
+
+        seeded_session.add(IssueLink(
+            id="link-a", fromIssueId="test-issue-1", toIssueId="issue-2", linkType="RELATES_TO",
+        ))
+        seeded_session.add(IssueLink(
+            id="link-b", fromIssueId="test-issue-1", toIssueId="issue-2", linkType="BLOCKS",
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueLink).where(IssueLink.fromIssueId == "test-issue-1")
+        )
+        assert len(result.scalars().all()) == 2
+
+    async def test_issue_link_response_projects_summaries(self, seeded_session):
+        """IssueLinkResponse should embed fromIssue + toIssue summaries (CB-1960)."""
+        from sqlalchemy.orm import selectinload
+        from models.schemas import IssueLinkResponse, IssueSummary
+
+        issue2 = make_issue(
+            id="issue-2", key="CB-2", sequence=2, title="Second", status="IN_PROGRESS",
+        )
+        seeded_session.add(issue2)
+        await seeded_session.flush()
+
+        seeded_session.add(IssueLink(
+            id="link-proj", fromIssueId="test-issue-1", toIssueId="issue-2", linkType="BLOCKS",
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueLink)
+            .options(selectinload(IssueLink.fromIssue), selectinload(IssueLink.toIssue))
+            .where(IssueLink.id == "link-proj")
+        )
+        link = result.scalar_one()
+
+        projected = IssueLinkResponse.model_validate(link)
+        assert projected.fromIssue == IssueSummary(
+            id="test-issue-1", key="CB-1", title="Test Issue", status="BACKLOG",
+        )
+        assert projected.toIssue == IssueSummary(
+            id="issue-2", key="CB-2", title="Second", status="IN_PROGRESS",
+        )
+
+    async def test_issue_link_response_summaries_default_none(self, seeded_session):
+        """Without ORM hydration the projections must be None, never raise (CB-1960)."""
+        from models.schemas import IssueLinkResponse
+
+        issue2 = make_issue(id="issue-2", key="CB-2", sequence=2, title="Second")
+        seeded_session.add(issue2)
+        await seeded_session.flush()
+
+        link = IssueLink(
+            id="link-bare",
+            fromIssueId="test-issue-1",
+            toIssueId="issue-2",
+            linkType="RELATES_TO",
+            createdAt=datetime.now(timezone.utc),
+        )
+
+        projected = IssueLinkResponse.model_validate(link)
+        assert projected.fromIssue is None
+        assert projected.toIssue is None
+        assert projected.linkType == "RELATES_TO"
+
     async def test_delete_linked_issue_cascades(self, seeded_session):
         """Deleting a linked issue should cascade to the link."""
         issue2 = make_issue(id="issue-2", key="CB-2", sequence=2, title="Issue 2")
@@ -528,6 +618,456 @@ class TestIssueLinkIntegrity:
             select(IssueLink).where(IssueLink.id == "link-1")
         )
         assert result.scalar_one_or_none() is None
+
+
+# ============================================
+# Issue Group schema tests (CB-1963)
+# ============================================
+
+@pytest.mark.integration
+class TestIssueGroupSchemas:
+    """Validate Pydantic shape of IssueGroup* schemas added in CB-1963."""
+
+    async def test_issue_group_create_requires_title(self):
+        """IssueGroupCreate must reject empty / missing title."""
+        from pydantic import ValidationError
+        from models.schemas import IssueGroupCreate
+
+        with pytest.raises(ValidationError):
+            IssueGroupCreate(title="")
+
+        with pytest.raises(ValidationError):
+            IssueGroupCreate.model_validate({})
+
+        # Valid minimal payload — description and issueIds optional.
+        payload = IssueGroupCreate(title="Critical login flow")
+        assert payload.title == "Critical login flow"
+        assert payload.description is None
+        assert payload.issueIds is None
+
+    async def test_issue_group_create_caps_initial_member_list(self):
+        """`issueIds` is capped to keep create-with-members payloads bounded."""
+        from pydantic import ValidationError
+        from models.schemas import IssueGroupCreate
+
+        # Just under the cap is fine.
+        IssueGroupCreate(title="t", issueIds=[f"i-{n}" for n in range(500)])
+
+        # 501 entries blows the cap.
+        with pytest.raises(ValidationError):
+            IssueGroupCreate(title="t", issueIds=[f"i-{n}" for n in range(501)])
+
+    async def test_issue_group_create_dedupes_issue_ids(self):
+        """Duplicate ids must be collapsed — the DB UNIQUE(groupId, issueId)
+        would otherwise surface as a 500 from the service layer."""
+        from models.schemas import IssueGroupCreate
+
+        payload = IssueGroupCreate(
+            title="t", issueIds=["i-1", "i-2", "i-1", "  i-2  ", "i-3"],
+        )
+        # `  i-2  ` is stripped → matches "i-2" → deduped.
+        assert payload.issueIds == ["i-1", "i-2", "i-3"]
+
+    async def test_issue_group_create_rejects_oversized_issue_id(self):
+        """Each issueId is bounded — defends against ['x' * 1MB] payloads."""
+        from pydantic import ValidationError
+        from models.schemas import IssueGroupCreate
+
+        with pytest.raises(ValidationError):
+            IssueGroupCreate(title="t", issueIds=["x" * 65])
+
+        with pytest.raises(ValidationError):
+            IssueGroupCreate(title="t", issueIds=[""])
+
+    async def test_issue_group_create_rejects_oversized_description(self):
+        """description is capped at 10k chars to prevent multi-MB persistence."""
+        from pydantic import ValidationError
+        from models.schemas import IssueGroupCreate
+
+        # 10k exact is fine.
+        IssueGroupCreate(title="t", description="d" * 10_000)
+
+        with pytest.raises(ValidationError):
+            IssueGroupCreate(title="t", description="d" * 10_001)
+
+    async def test_issue_group_response_from_orm(self, seeded_session):
+        """IssueGroupResponse should hydrate from an ORM IssueGroup row."""
+        from models.schemas import IssueGroupResponse
+
+        group = IssueGroup(
+            id="grp-1",
+            projectId="test-project-1",
+            title="Auth flow cluster",
+            description="Login, signup, password reset",
+        )
+        seeded_session.add(group)
+        await seeded_session.commit()
+
+        fetched = (await seeded_session.execute(
+            select(IssueGroup).where(IssueGroup.id == "grp-1")
+        )).scalar_one()
+
+        # memberCount is service-supplied (no ORM column); default 0 must
+        # apply when from_attributes hydration finds no attribute.
+        projected = IssueGroupResponse.model_validate(fetched)
+        assert projected.id == "grp-1"
+        assert projected.projectId == "test-project-1"
+        assert projected.title == "Auth flow cluster"
+        assert projected.description == "Login, signup, password reset"
+        assert projected.memberCount == 0
+        assert projected.createdAt is not None
+        assert projected.updatedAt is not None
+
+        # Service-layer pattern: setattr the count onto the row, then validate.
+        # This is the production read path — locking it down so a future
+        # refactor that wires func.count into the ORM is forced through this
+        # test instead of silently breaking the response shape.
+        setattr(fetched, "memberCount", 7)
+        projected_with_count = IssueGroupResponse.model_validate(fetched)
+        assert projected_with_count.memberCount == 7
+
+    async def test_issue_group_member_response_projects_issue_summary(
+        self, seeded_session,
+    ):
+        """IssueGroupMemberResponse should embed IssueSummary when eager-loaded."""
+        from sqlalchemy.orm import selectinload
+        from models.schemas import IssueGroupMemberResponse, IssueSummary
+
+        group = IssueGroup(
+            id="grp-2", projectId="test-project-1", title="Cluster", description=None,
+        )
+        seeded_session.add(group)
+        await seeded_session.flush()
+
+        seeded_session.add(IssueGroupMember(
+            id="mem-1", groupId="grp-2", issueId="test-issue-1",
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueGroupMember)
+            .options(selectinload(IssueGroupMember.issue))
+            .where(IssueGroupMember.id == "mem-1")
+        )
+        member = result.scalar_one()
+
+        projected = IssueGroupMemberResponse.model_validate(member)
+        assert projected.id == "mem-1"
+        assert projected.groupId == "grp-2"
+        assert projected.issueId == "test-issue-1"
+        assert projected.issue == IssueSummary(
+            id="test-issue-1", key="CB-1", title="Test Issue", status="BACKLOG",
+        )
+
+    async def test_issue_group_member_response_summary_none_without_eager_load(
+        self, seeded_session,
+    ):
+        """Without selectinload the embedded `issue` projection must default to None.
+
+        Same contract as IssueLinkResponse (CB-1960): bare ORM rows must
+        validate without raising on the `lazy='raise_on_sql'` relationship.
+        """
+        from models.schemas import IssueGroupMemberResponse
+
+        member = IssueGroupMember(
+            id="mem-bare",
+            groupId="grp-bare",
+            issueId="test-issue-1",
+            createdAt=datetime.now(timezone.utc),
+        )
+
+        projected = IssueGroupMemberResponse.model_validate(member)
+        assert projected.id == "mem-bare"
+        assert projected.issue is None
+
+    async def test_group_aggregate_status_defaults(self):
+        """Empty groups should validate with breakdown={}, percent=0, dominant=None."""
+        from models.schemas import GroupAggregateStatus
+
+        empty = GroupAggregateStatus()
+        assert empty.statusBreakdown == {}
+        assert empty.completionPercent == 0.0
+        assert empty.dominantStatus is None
+
+        populated = GroupAggregateStatus(
+            statusBreakdown={"DONE": 2, "IN_PROGRESS": 1, "BACKLOG": 1},
+            completionPercent=50.0,
+            dominantStatus="DONE",
+        )
+        assert populated.completionPercent == 50.0
+        assert populated.dominantStatus == "DONE"
+
+    async def test_group_aggregate_status_clamps_completion_percent(self):
+        """completionPercent is bounded to [0, 100] — guard against helper bugs."""
+        from pydantic import ValidationError
+        from models.schemas import GroupAggregateStatus
+
+        with pytest.raises(ValidationError):
+            GroupAggregateStatus(completionPercent=-1.0)
+        with pytest.raises(ValidationError):
+            GroupAggregateStatus(completionPercent=100.1)
+
+    async def test_issue_group_detail_response_carries_members_and_aggregate(self):
+        """Detail response must accept members + aggregateStatus together."""
+        from models.schemas import (
+            IssueGroupDetailResponse,
+            IssueGroupMemberResponse,
+            GroupAggregateStatus,
+            IssueSummary,
+        )
+
+        now = datetime.now(timezone.utc)
+        detail = IssueGroupDetailResponse(
+            id="grp-3",
+            projectId="test-project-1",
+            title="Detail cluster",
+            description=None,
+            createdAt=now,
+            updatedAt=now,
+            members=[
+                IssueGroupMemberResponse(
+                    id="mem-x",
+                    groupId="grp-3",
+                    issueId="i-x",
+                    createdAt=now,
+                    issue=IssueSummary(id="i-x", key="CB-9", title="X", status="DONE"),
+                ),
+            ],
+            aggregateStatus=GroupAggregateStatus(
+                statusBreakdown={"DONE": 1},
+                completionPercent=100.0,
+                dominantStatus="DONE",
+            ),
+        )
+        assert len(detail.members) == 1
+        assert detail.aggregateStatus.completionPercent == 100.0
+        assert detail.members[0].issue.key == "CB-9"
+
+    async def test_paginated_group_response_shape(self):
+        """PaginatedGroupResponse mirrors PaginatedResponse for issues."""
+        from models.schemas import PaginatedGroupResponse, IssueGroupResponse
+
+        now = datetime.now(timezone.utc)
+        page = PaginatedGroupResponse(
+            items=[
+                IssueGroupResponse(
+                    id="grp-a",
+                    projectId="test-project-1",
+                    title="A",
+                    memberCount=3,
+                    createdAt=now,
+                    updatedAt=now,
+                ),
+            ],
+            total=1,
+            page=1,
+            pageSize=20,
+            totalPages=1,
+        )
+        assert len(page.items) == 1
+        assert page.items[0].memberCount == 3
+        assert page.totalPages == 1
+
+
+# ============================================
+# CB-1965: position field + ordering on IssueGroupMember
+# ============================================
+
+@pytest.mark.integration
+class TestIssueGroupMemberPosition:
+    """Validate the CB-1965 position contract end-to-end through the ORM."""
+
+    async def test_default_position_value_after_insert(self, seeded_session):
+        """An IssueGroupMember inserted without an explicit position must
+        land with position=0 from the DB-side default — protecting legacy
+        rows and any caller that forgets to call `next_member_position`."""
+        from models.grouping import IssueGroup, IssueGroupMember
+
+        seeded_session.add(IssueGroup(
+            id="grp-pos-default",
+            projectId="test-project-1",
+            title="Default position",
+        ))
+        await seeded_session.flush()
+
+        seeded_session.add(IssueGroupMember(
+            id="mem-default",
+            groupId="grp-pos-default",
+            issueId="test-issue-1",
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueGroupMember).where(IssueGroupMember.id == "mem-default")
+        )
+        member = result.scalar_one()
+        assert member.position == 0
+
+    async def test_next_member_position_helper_assigns_one_indexed_slots(
+        self, seeded_session,
+    ):
+        """`next_member_position` must return 1 on an empty group, then 2, 3,
+        … as members are added. This is the COALESCE(MAX, 0)+1 contract."""
+        from models.grouping import IssueGroup, IssueGroupMember, next_member_position
+
+        seeded_session.add(IssueGroup(
+            id="grp-next",
+            projectId="test-project-1",
+            title="Next-slot group",
+        ))
+        # Make a few extra issues to attach so we don't trip the
+        # IssueGroupMember UNIQUE(groupId, issueId).
+        from models.issue import Issue
+        for n in (2, 3, 4):
+            seeded_session.add(Issue(
+                id=f"issue-pos-{n}",
+                projectId="test-project-1",
+                key=f"CB-{1000 + n}",
+                title=f"Pos issue {n}",
+                type="TASK",
+                status="BACKLOG",
+                priority="MEDIUM",
+                sequence=1000 + n,
+            ))
+        await seeded_session.flush()
+
+        first = await next_member_position(seeded_session, "grp-next")
+        assert first == 1, "empty group must yield position 1"
+
+        seeded_session.add(IssueGroupMember(
+            id="mem-pos-1",
+            groupId="grp-next",
+            issueId="test-issue-1",
+            position=first,
+        ))
+        await seeded_session.flush()
+        assert await next_member_position(seeded_session, "grp-next") == 2
+
+        seeded_session.add(IssueGroupMember(
+            id="mem-pos-2",
+            groupId="grp-next",
+            issueId="issue-pos-2",
+            position=2,
+        ))
+        await seeded_session.flush()
+        assert await next_member_position(seeded_session, "grp-next") == 3
+
+    async def test_next_member_position_isolates_groups(self, seeded_session):
+        """Position numbering is per-group; one group's max must not bleed
+        into a sibling group's next slot."""
+        from models.grouping import IssueGroup, IssueGroupMember, next_member_position
+
+        for gid in ("grp-iso-a", "grp-iso-b"):
+            seeded_session.add(IssueGroup(
+                id=gid, projectId="test-project-1", title=gid,
+            ))
+        await seeded_session.flush()
+
+        seeded_session.add(IssueGroupMember(
+            id="mem-iso-a-1",
+            groupId="grp-iso-a",
+            issueId="test-issue-1",
+            position=7,  # arbitrary high value
+        ))
+        await seeded_session.commit()
+
+        # Group A continues from 8; group B starts at 1.
+        assert await next_member_position(seeded_session, "grp-iso-a") == 8
+        assert await next_member_position(seeded_session, "grp-iso-b") == 1
+
+    async def test_relationship_orders_members_by_position(self, seeded_session):
+        """`IssueGroup.members` must yield rows in ascending position order
+        regardless of insert order — that's the order_by on the relationship."""
+        from sqlalchemy.orm import selectinload
+        from models.grouping import IssueGroup, IssueGroupMember
+        from models.issue import Issue
+
+        seeded_session.add(IssueGroup(
+            id="grp-order",
+            projectId="test-project-1",
+            title="Ordered group",
+        ))
+        for n in (10, 11, 12):
+            seeded_session.add(Issue(
+                id=f"issue-order-{n}",
+                projectId="test-project-1",
+                key=f"CB-{2000 + n}",
+                title=f"Order issue {n}",
+                type="TASK",
+                status="BACKLOG",
+                priority="MEDIUM",
+                sequence=2000 + n,
+            ))
+        await seeded_session.flush()
+
+        # Insert OUT of position order to prove the relationship sorts.
+        seeded_session.add(IssueGroupMember(
+            id="mem-ord-3", groupId="grp-order", issueId="issue-order-12", position=3,
+        ))
+        seeded_session.add(IssueGroupMember(
+            id="mem-ord-1", groupId="grp-order", issueId="issue-order-10", position=1,
+        ))
+        seeded_session.add(IssueGroupMember(
+            id="mem-ord-2", groupId="grp-order", issueId="issue-order-11", position=2,
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueGroup)
+            .options(selectinload(IssueGroup.members))
+            .where(IssueGroup.id == "grp-order")
+        )
+        group = result.scalar_one()
+        positions = [m.position for m in group.members]
+        ids = [m.id for m in group.members]
+        assert positions == [1, 2, 3]
+        assert ids == ["mem-ord-1", "mem-ord-2", "mem-ord-3"]
+
+    async def test_relationship_breaks_position_ties_by_id(self, seeded_session):
+        """When two members share a position (the race that
+        `next_member_position` documents as tolerable), the relationship's
+        secondary sort on `id` must give a deterministic order — pinning
+        the API contract that callers can rely on a stable read order."""
+        from sqlalchemy.orm import selectinload
+        from models.grouping import IssueGroup, IssueGroupMember
+        from models.issue import Issue
+
+        seeded_session.add(IssueGroup(
+            id="grp-tie",
+            projectId="test-project-1",
+            title="Tied positions",
+        ))
+        for n in (20, 21):
+            seeded_session.add(Issue(
+                id=f"issue-tie-{n}",
+                projectId="test-project-1",
+                key=f"CB-{3000 + n}",
+                title=f"Tie issue {n}",
+                type="TASK",
+                status="BACKLOG",
+                priority="MEDIUM",
+                sequence=3000 + n,
+            ))
+        await seeded_session.flush()
+
+        # Two members SAME position; ids picked so lexicographic order is
+        # the opposite of insert order — a no-secondary-sort implementation
+        # would fail this assertion.
+        seeded_session.add(IssueGroupMember(
+            id="mem-tie-z", groupId="grp-tie", issueId="issue-tie-20", position=1,
+        ))
+        seeded_session.add(IssueGroupMember(
+            id="mem-tie-a", groupId="grp-tie", issueId="issue-tie-21", position=1,
+        ))
+        await seeded_session.commit()
+
+        result = await seeded_session.execute(
+            select(IssueGroup)
+            .options(selectinload(IssueGroup.members))
+            .where(IssueGroup.id == "grp-tie")
+        )
+        group = result.scalar_one()
+        assert [m.id for m in group.members] == ["mem-tie-a", "mem-tie-z"]
 
 
 # ============================================

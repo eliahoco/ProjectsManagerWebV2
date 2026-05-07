@@ -268,6 +268,12 @@ async def lifespan(app: FastAPI):
         rag._fallback_to_persistent()
         app.state.rag = rag
 
+    # CB-2043: surface the active RAG backend at startup. Silent fallback
+    # to the embedded SQLite store is how we ended up running on a stale
+    # `backend/data/chroma/chroma.sqlite3` for weeks — this line makes it
+    # impossible to miss in the boot log.
+    logger.info("[startup] %s", rag.describe_mode())
+
     # CB-1585: wire RAG into the documentation_generator singleton so the
     # post-execution hook can index ExecutionSummary embeddings in ChromaDB.
     # Done AFTER rag init and BEFORE the completion loop starts so the first
@@ -280,6 +286,19 @@ async def lifespan(app: FastAPI):
     # prompt. Same lifecycle/timing as the documentation_generator wiring.
     from services.qa_service import qa_service
     qa_service._rag = app.state.rag
+
+    # CB-1951 E2: rehydrate any AutoPilot queues that were running when the
+    # backend last crashed. Their status flips to paused/crash_recovery so
+    # the frontend can prompt the user to resume / skip / abort. This is a
+    # best-effort startup step — failures are logged but never block boot.
+    from services.autopilot_queue_service import autopilot_queue_service
+    recovered = await autopilot_queue_service.rehydrate_from_db()
+    if recovered:
+        logger.warning(
+            "[AutoPilot] Rehydrated %d queue(s) from previous crash: %s. "
+            "User must resume manually via the recovery banner.",
+            len(recovered), recovered,
+        )
 
     # Start background task for processing pending completions
     completion_task = asyncio.create_task(process_pending_completions())

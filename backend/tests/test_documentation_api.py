@@ -206,7 +206,7 @@ async def test_list_summaries_returns_newest_first(test_db, client):
         summary_text="second run",
     )
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation?projectId={issue.projectId}")
     assert resp.status_code == 200
     body = resp.json()
     assert isinstance(body, list)
@@ -222,14 +222,14 @@ async def test_list_summaries_empty_when_no_records(test_db, client):
     """Issue exists but has no summaries — must return [], not 404."""
     issue = await _create_issue(test_db)
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation?projectId={issue.projectId}")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 @pytest.mark.asyncio
 async def test_list_summaries_404_when_issue_missing(test_db, client):
-    resp = await client.get("/api/issues/does-not-exist/documentation")
+    resp = await client.get("/api/issues/does-not-exist/documentation?projectId=any-project")
     assert resp.status_code == 404
     body = resp.json()
     assert body["code"] == "NOT_FOUND"
@@ -251,7 +251,7 @@ async def test_latest_summary_returns_most_recent(test_db, client):
         summary_text="new",
     )
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation/latest")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation/latest?projectId={issue.projectId}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == newest.id
@@ -263,13 +263,13 @@ async def test_latest_summary_404_when_no_records(test_db, client):
     """Single-record endpoint: empty == not found."""
     issue = await _create_issue(test_db)
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation/latest")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation/latest?projectId={issue.projectId}")
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_latest_summary_404_when_issue_missing(test_db, client):
-    resp = await client.get("/api/issues/missing/documentation/latest")
+    resp = await client.get("/api/issues/missing/documentation/latest?projectId=any-project")
     assert resp.status_code == 404
 
 
@@ -281,7 +281,7 @@ async def test_list_notes_returns_records(test_db, client):
     note_a = await _add_note(test_db, issue.id, title="A", category="DECISION")
     note_b = await _add_note(test_db, issue.id, title="B", category="LESSON")
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation/notes")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}")
     assert resp.status_code == 200
     body = resp.json()
     assert {n["id"] for n in body} == {note_a.id, note_b.id}
@@ -292,14 +292,14 @@ async def test_list_notes_returns_records(test_db, client):
 async def test_list_notes_empty_when_no_records(test_db, client):
     issue = await _create_issue(test_db)
 
-    resp = await client.get(f"/api/issues/{issue.id}/documentation/notes")
+    resp = await client.get(f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 @pytest.mark.asyncio
 async def test_list_notes_404_when_issue_missing(test_db, client):
-    resp = await client.get("/api/issues/missing/documentation/notes")
+    resp = await client.get("/api/issues/missing/documentation/notes?projectId=any-project")
     assert resp.status_code == 404
 
 
@@ -316,8 +316,8 @@ async def test_summaries_scoped_to_issue(test_db, client):
         summary_text="for A",
     )
 
-    resp_a = await client.get(f"/api/issues/{issue_a.id}/documentation")
-    resp_b = await client.get(f"/api/issues/{issue_b.id}/documentation")
+    resp_a = await client.get(f"/api/issues/{issue_a.id}/documentation?projectId={issue_a.projectId}")
+    resp_b = await client.get(f"/api/issues/{issue_b.id}/documentation?projectId={issue_b.projectId}")
 
     assert resp_a.status_code == 200
     assert len(resp_a.json()) == 1
@@ -331,8 +331,8 @@ async def test_notes_scoped_to_issue(test_db, client):
     issue_b = await _create_issue(test_db)
     await _add_note(test_db, issue_a.id, title="only-A")
 
-    resp_a = await client.get(f"/api/issues/{issue_a.id}/documentation/notes")
-    resp_b = await client.get(f"/api/issues/{issue_b.id}/documentation/notes")
+    resp_a = await client.get(f"/api/issues/{issue_a.id}/documentation/notes?projectId={issue_a.projectId}")
+    resp_b = await client.get(f"/api/issues/{issue_b.id}/documentation/notes?projectId={issue_b.projectId}")
 
     assert resp_a.status_code == 200
     assert len(resp_a.json()) == 1
@@ -356,7 +356,7 @@ async def test_create_note_persists_and_returns_record(test_db, client):
     }
 
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json=payload,
     )
     assert resp.status_code == 201
@@ -371,7 +371,7 @@ async def test_create_note_persists_and_returns_record(test_db, client):
 
     # Round-trip via GET
     list_resp = await client.get(
-        f"/api/issues/{issue.id}/documentation/notes"
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}"
     )
     assert list_resp.status_code == 200
     ids = [n["id"] for n in list_resp.json()]
@@ -384,7 +384,7 @@ async def test_create_note_defaults_category_and_importance(test_db, client):
     payload = {"title": "Quick note", "content": "body"}
 
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json=payload,
     )
     assert resp.status_code == 201
@@ -397,7 +397,7 @@ async def test_create_note_defaults_category_and_importance(test_db, client):
 async def test_create_note_rejects_invalid_category(test_db, client):
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={
             "title": "x",
             "content": "y",
@@ -411,7 +411,7 @@ async def test_create_note_rejects_invalid_category(test_db, client):
 async def test_create_note_rejects_invalid_importance(test_db, client):
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={
             "title": "x",
             "content": "y",
@@ -424,7 +424,7 @@ async def test_create_note_rejects_invalid_importance(test_db, client):
 @pytest.mark.asyncio
 async def test_create_note_404_when_issue_missing(test_db, client):
     resp = await client.post(
-        "/api/issues/missing/documentation/notes",
+        "/api/issues/missing/documentation/notes?projectId=any-project",
         json={"title": "x", "content": "y"},
     )
     assert resp.status_code == 404
@@ -434,7 +434,7 @@ async def test_create_note_404_when_issue_missing(test_db, client):
 async def test_create_note_rejects_blank_title(test_db, client):
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "", "content": "y"},
     )
     assert resp.status_code == 422
@@ -444,7 +444,7 @@ async def test_create_note_rejects_blank_title(test_db, client):
 async def test_create_note_rejects_blank_content(test_db, client):
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "x", "content": ""},
     )
     assert resp.status_code == 422
@@ -455,7 +455,7 @@ async def test_create_note_rejects_oversized_content(test_db, client):
     """Cap content at 100k chars to block storage-abuse."""
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "x", "content": "a" * 100_001},
     )
     assert resp.status_code == 422
@@ -466,7 +466,7 @@ async def test_create_note_rejects_malformed_tags(test_db, client):
     """tags must be valid JSON — not raw strings."""
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "x", "content": "y", "tags": "not-json"},
     )
     assert resp.status_code == 422
@@ -477,7 +477,7 @@ async def test_create_note_rejects_non_array_tags(test_db, client):
     """tags must be a JSON array, not an object."""
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "x", "content": "y", "tags": '{"key": "value"}'},
     )
     assert resp.status_code == 422
@@ -488,7 +488,7 @@ async def test_create_note_rejects_non_string_array_items(test_db, client):
     """Array elements must all be strings."""
     issue = await _create_issue(test_db)
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={"title": "x", "content": "y", "references": "[1, 2, 3]"},
     )
     assert resp.status_code == 422
@@ -501,7 +501,7 @@ async def test_create_note_ignores_client_id(test_db, client):
     spoof_id = "client-spoofed-id-0000"
 
     resp = await client.post(
-        f"/api/issues/{issue.id}/documentation/notes",
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}",
         json={
             "title": "x",
             "content": "y",
@@ -520,12 +520,12 @@ async def test_delete_note_removes_record(test_db, client):
     note = await _add_note(test_db, issue.id, title="goner")
 
     resp = await client.delete(
-        f"/api/issues/{issue.id}/documentation/notes/{note.id}"
+        f"/api/issues/{issue.id}/documentation/notes/{note.id}?projectId={issue.projectId}"
     )
     assert resp.status_code == 204
 
     list_resp = await client.get(
-        f"/api/issues/{issue.id}/documentation/notes"
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}"
     )
     assert list_resp.status_code == 200
     assert all(n["id"] != note.id for n in list_resp.json())
@@ -536,7 +536,7 @@ async def test_delete_note_404_when_note_missing(test_db, client):
     issue = await _create_issue(test_db)
 
     resp = await client.delete(
-        f"/api/issues/{issue.id}/documentation/notes/no-such-note"
+        f"/api/issues/{issue.id}/documentation/notes/no-such-note?projectId={issue.projectId}"
     )
     assert resp.status_code == 404
 
@@ -544,7 +544,7 @@ async def test_delete_note_404_when_note_missing(test_db, client):
 @pytest.mark.asyncio
 async def test_delete_note_404_when_issue_missing(test_db, client):
     resp = await client.delete(
-        "/api/issues/missing/documentation/notes/whatever"
+        "/api/issues/missing/documentation/notes/whatever?projectId=any-project"
     )
     assert resp.status_code == 404
 
@@ -557,13 +557,13 @@ async def test_delete_note_404_when_note_belongs_to_other_issue(test_db, client)
     note_a = await _add_note(test_db, issue_a.id, title="A's note")
 
     resp = await client.delete(
-        f"/api/issues/{issue_b.id}/documentation/notes/{note_a.id}"
+        f"/api/issues/{issue_b.id}/documentation/notes/{note_a.id}?projectId={issue_b.projectId}"
     )
     assert resp.status_code == 404
 
     # And the note still exists under issue A
     list_a = await client.get(
-        f"/api/issues/{issue_a.id}/documentation/notes"
+        f"/api/issues/{issue_a.id}/documentation/notes?projectId={issue_a.projectId}"
     )
     assert any(n["id"] == note_a.id for n in list_a.json())
 
@@ -719,7 +719,7 @@ async def _add_qa_task(
 
 @pytest.mark.asyncio
 async def test_get_feature_documentation_404_when_issue_missing(client):
-    resp = await client.get("/api/features/missing-id/documentation")
+    resp = await client.get("/api/features/missing-id/documentation?projectId=any-project")
     assert resp.status_code == 404
     assert resp.json()["code"] == "NOT_FOUND"
 
@@ -729,7 +729,7 @@ async def test_get_feature_documentation_400_when_not_a_feature(test_db, client)
     """A TASK-type issue must yield 400, not 404 — issue exists, wrong type."""
     issue = await _create_issue(test_db)  # type=TASK
 
-    resp = await client.get(f"/api/features/{issue.id}/documentation")
+    resp = await client.get(f"/api/features/{issue.id}/documentation?projectId={issue.projectId}")
     assert resp.status_code == 400
     assert resp.json()["code"] == "BAD_REQUEST"
 
@@ -739,7 +739,7 @@ async def test_get_feature_documentation_404_when_no_doc_generated(test_db, clie
     """Feature exists but generate has not been called — explicit 404."""
     feature = await _create_feature(test_db)
 
-    resp = await client.get(f"/api/features/{feature.id}/documentation")
+    resp = await client.get(f"/api/features/{feature.id}/documentation?projectId={feature.projectId}")
     assert resp.status_code == 404
     assert resp.json()["code"] == "NOT_FOUND"
 
@@ -771,7 +771,7 @@ async def test_get_feature_documentation_returns_existing_record(test_db, client
         db.add(row)
         await db.commit()
 
-    resp = await client.get(f"/api/features/{feature.id}/documentation")
+    resp = await client.get(f"/api/features/{feature.id}/documentation?projectId={feature.projectId}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["featureIssueId"] == feature.id
@@ -783,7 +783,7 @@ async def test_get_feature_documentation_returns_existing_record(test_db, client
 
 @pytest.mark.asyncio
 async def test_generate_feature_documentation_404_when_issue_missing(client):
-    resp = await client.post("/api/features/missing-id/documentation/generate")
+    resp = await client.post("/api/features/missing-id/documentation/generate?projectId=any-project")
     assert resp.status_code == 404
 
 
@@ -792,7 +792,7 @@ async def test_generate_feature_documentation_400_when_not_a_feature(test_db, cl
     issue = await _create_issue(test_db)  # type=TASK
 
     resp = await client.post(
-        f"/api/features/{issue.id}/documentation/generate"
+        f"/api/features/{issue.id}/documentation/generate?projectId={issue.projectId}"
     )
     assert resp.status_code == 400
 
@@ -805,7 +805,7 @@ async def test_generate_feature_documentation_creates_record(
     feature = await _create_feature(test_db)
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -822,7 +822,7 @@ async def test_generate_feature_documentation_creates_record(
 
     # Confirm GET now returns it
     get_resp = await client.get(
-        f"/api/features/{feature.id}/documentation"
+        f"/api/features/{feature.id}/documentation?projectId={feature.projectId}"
     )
     assert get_resp.status_code == 200
     assert get_resp.json()["id"] == body["id"]
@@ -840,7 +840,7 @@ async def test_generate_feature_documentation_aggregates_descendants(
     await _add_child_issue(test_db, epic, type_="TASK", status_="BACKLOG")
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -876,7 +876,7 @@ async def test_generate_feature_documentation_aggregates_qa(
     )
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -890,11 +890,19 @@ async def test_generate_feature_documentation_aggregates_qa(
 async def test_generate_feature_documentation_is_idempotent(
     test_db, client, disable_ai_aggregation
 ):
-    """Calling generate twice must update in place — same id, refreshed counts."""
+    """Calling generate twice must update in place — same id, refreshed counts.
+
+    CB-2075: also asserts the DB has exactly ONE FeatureDocumentation row
+    for the feature after regenerate, defending against a future regression
+    where a code change inserts a second row instead of updating.
+    """
+    from sqlalchemy import func, select
+    from models.documentation import FeatureDocumentation
+
     feature = await _create_feature(test_db)
 
     first = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert first.status_code == 200
     first_id = first.json()["id"]
@@ -903,13 +911,28 @@ async def test_generate_feature_documentation_is_idempotent(
     # Add a child after the first generate, then regenerate
     await _add_child_issue(test_db, feature, type_="STORY", status_="DONE")
     second = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert second.status_code == 200
     body = second.json()
     assert body["id"] == first_id  # SAME row, updated in place
     assert body["totalTasks"] == 1
     assert body["completedTasks"] == 1
+
+    # Third regenerate — explicit row-count assertion (CB-2075)
+    third = await client.post(
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
+    )
+    assert third.status_code == 200
+    assert third.json()["id"] == first_id
+
+    async with test_db() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(FeatureDocumentation)
+            .where(FeatureDocumentation.featureIssueId == feature.id)
+        )
+    assert count == 1, f"expected exactly 1 row after 3 regenerates, got {count}"
 
 
 @pytest.mark.asyncio
@@ -938,7 +961,7 @@ async def test_generate_feature_documentation_pulls_execution_summaries(
         await db.commit()
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -963,7 +986,7 @@ async def test_generate_feature_documentation_ai_replaces_overview(
     mock_ai_aggregation('{"overview": "## Synthesized\\n\\nLogin flow is wired end-to-end."}')
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -997,7 +1020,7 @@ async def test_generate_feature_documentation_ai_prepends_architecture(
     )
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1027,7 +1050,7 @@ async def test_generate_feature_documentation_ai_prepends_testing_strategy(
     )
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1063,7 +1086,7 @@ async def test_generate_feature_documentation_ai_merges_tech_stack_hints(
     )
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     components = json.loads(resp.json()["techStack"])
@@ -1092,7 +1115,7 @@ async def test_generate_feature_documentation_skips_ai_for_empty_feature(
 
     feature = await _create_feature(test_db)
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     assert calls == [], "AI must not be invoked for an empty feature"
@@ -1127,7 +1150,7 @@ async def test_generate_feature_documentation_survives_ai_failure(
         await db.commit()
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1163,7 +1186,7 @@ async def test_generate_feature_documentation_invokes_chroma_indexing(
 
     feature = await _create_feature(test_db)
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1194,7 +1217,7 @@ async def test_generate_feature_documentation_tolerates_chroma_failure(
 
     feature = await _create_feature(test_db)
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1211,7 +1234,7 @@ async def test_generate_feature_documentation_skips_chroma_when_no_rag(
     """Default singleton has no RAG wired; persistence still succeeds."""
     feature = await _create_feature(test_db)
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1281,7 +1304,7 @@ async def test_generate_feature_documentation_skips_cross_project_descendants(
         await db.commit()
 
     resp = await client.post(
-        f"/api/features/{feature.id}/documentation/generate"
+        f"/api/features/{feature.id}/documentation/generate?projectId={feature.projectId}"
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -1301,3 +1324,232 @@ async def test_generate_feature_documentation_skips_cross_project_descendants(
     # And the legitimate child is still represented.
     assert in_project_child.key in body["implementation"] or \
         body["totalTasks"] == 1  # at minimum the count is right
+
+
+# ---- CB-2117: projectId scoping (IDOR guard) --------------------------------
+#
+# These regressions encode the contract added in CB-2117: every documentation
+# endpoint takes a required ``projectId`` query param and uses it to scope
+# every issue lookup. A missing or mismatched projectId must return the same
+# 404 as a missing issue id — no information leak — and must never expose,
+# create, or delete a row outside the asserted project.
+
+@pytest.mark.parametrize(
+    "method, path_template",
+    [
+        # Every public route on the documentation router must reject a
+        # missing projectId. Parametrising the case ensures a regression
+        # that drops `ProjectIdQuery` from a single endpoint is still
+        # caught — without us having to list all six checks by hand.
+        ("GET",    "/api/issues/{issue_id}/documentation"),
+        ("GET",    "/api/issues/{issue_id}/documentation/latest"),
+        ("GET",    "/api/issues/{issue_id}/documentation/notes"),
+        ("POST",   "/api/issues/{issue_id}/documentation/notes"),
+        ("DELETE", "/api/issues/{issue_id}/documentation/notes/whatever"),
+        ("GET",    "/api/features/{issue_id}/documentation"),
+        ("POST",   "/api/features/{issue_id}/documentation/generate"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_endpoints_require_projectId(test_db, client, method, path_template):
+    """No ``projectId`` → 422 from FastAPI's required-query-param check."""
+    issue = await _create_issue(test_db)
+    url = path_template.format(issue_id=issue.id)
+    resp = await client.request(
+        method,
+        url,
+        json={"title": "x", "content": "y"} if method == "POST" else None,
+    )
+    assert resp.status_code == 422, (
+        f"{method} {url} should reject missing projectId with 422, "
+        f"got {resp.status_code}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_summaries_requires_projectId(test_db, client):
+    """No ``projectId`` → 422 from FastAPI's required-query-param check."""
+    issue = await _create_issue(test_db)
+
+    resp = await client.get(f"/api/issues/{issue.id}/documentation")
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_latest_summary_404_on_wrong_projectId(test_db, client):
+    """Same scoping contract as list-summaries — wrong project → 404."""
+    issue = await _create_issue(test_db)
+    await _add_summary(
+        test_db, issue.id,
+        executed_at=datetime.utcnow(),
+        summary_text="latest-canary",
+    )
+
+    resp = await client.get(
+        f"/api/issues/{issue.id}/documentation/latest?projectId=other-project"
+    )
+    assert resp.status_code == 404
+    assert resp.json()["code"] == "NOT_FOUND"
+    assert "latest-canary" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_list_summaries_404_on_wrong_projectId(test_db, client):
+    """Issue exists but caller asserts the wrong project → 404, not 200.
+
+    The 404 response body must be indistinguishable from the missing-id
+    case so the endpoint cannot be used to enumerate (issue, project) pairs.
+    """
+    issue = await _create_issue(test_db)
+    await _add_summary(
+        test_db, issue.id,
+        executed_at=datetime.utcnow(),
+        summary_text="real summary",
+    )
+
+    resp = await client.get(
+        f"/api/issues/{issue.id}/documentation?projectId=some-other-project"
+    )
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["code"] == "NOT_FOUND"
+    # No leak of summary content via error details.
+    assert "real summary" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_list_notes_404_on_wrong_projectId(test_db, client):
+    issue = await _create_issue(test_db)
+    await _add_note(test_db, issue.id, title="canary")
+
+    resp = await client.get(
+        f"/api/issues/{issue.id}/documentation/notes?projectId=other-project"
+    )
+    assert resp.status_code == 404
+    assert "canary" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_create_note_blocked_by_wrong_projectId(test_db, client):
+    """Cross-project note POST must 404 — no row may be persisted."""
+    from sqlalchemy import func, select
+    issue = await _create_issue(test_db)
+
+    resp = await client.post(
+        f"/api/issues/{issue.id}/documentation/notes?projectId=other-project",
+        json={"title": "should-not-stick", "content": "x"},
+    )
+    assert resp.status_code == 404
+
+    # Confirm the DB stayed clean — no note was created against the issue.
+    async with test_db() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(ImplementationNote)
+            .where(ImplementationNote.issueId == issue.id)
+        )
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_note_blocked_by_wrong_projectId(test_db, client):
+    """Cross-project note DELETE must 404 — original row must remain."""
+    issue = await _create_issue(test_db)
+    note = await _add_note(test_db, issue.id, title="keep-me")
+
+    resp = await client.delete(
+        f"/api/issues/{issue.id}/documentation/notes/{note.id}"
+        f"?projectId=other-project"
+    )
+    assert resp.status_code == 404
+
+    # Note still present under the legitimate project.
+    list_resp = await client.get(
+        f"/api/issues/{issue.id}/documentation/notes?projectId={issue.projectId}"
+    )
+    assert any(n["id"] == note.id for n in list_resp.json())
+
+
+@pytest.mark.asyncio
+async def test_get_feature_documentation_404_on_wrong_projectId(test_db, client):
+    """Feature exists, doc exists, but wrong projectId → 404, never 200."""
+    feature = await _create_feature(test_db)
+    async with test_db() as db:
+        db.add(FeatureDocumentation(
+            id=str(uuid.uuid4()),
+            projectId=feature.projectId,
+            featureIssueId=feature.id,
+            featureKey=feature.key,
+            title=feature.title,
+            overview="OVERVIEW_CANARY",
+            requirements="rq",
+            implementation="im",
+            architecture="ar",
+            techStack="[]",
+            testingStrategy="ts",
+            totalTasks=0,
+            completedTasks=0,
+            totalQATasks=0,
+            passedQATasks=0,
+            failedQATasks=0,
+            mdFilePath=f"docs/features/{feature.key}.md",
+        ))
+        await db.commit()
+
+    resp = await client.get(
+        f"/api/features/{feature.id}/documentation?projectId=other-project"
+    )
+    assert resp.status_code == 404
+    assert "OVERVIEW_CANARY" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_generate_feature_documentation_blocked_by_wrong_projectId(
+    test_db, client, monkeypatch
+):
+    """The most expensive endpoint must NOT be reachable cross-project.
+
+    Spies on ai_service.generate_text — if scoping fails open, the
+    descendant walk + AI provider call would still run. The assertion is
+    that neither side-effect happens.
+    """
+    from sqlalchemy import func, select
+    from services.ai_service import ai_service
+
+    ai_calls: List[str] = []
+
+    async def _spy(prompt, max_tokens=2500):
+        ai_calls.append(prompt)
+        return None
+
+    monkeypatch.setattr(ai_service, "generate_text", _spy)
+
+    feature = await _create_feature(test_db)
+
+    resp = await client.post(
+        f"/api/features/{feature.id}/documentation/generate"
+        f"?projectId=other-project"
+    )
+    assert resp.status_code == 404
+    assert ai_calls == [], "AI provider must not be invoked on cross-project request"
+
+    # No FeatureDocumentation row got created.
+    async with test_db() as db:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(FeatureDocumentation)
+            .where(FeatureDocumentation.featureIssueId == feature.id)
+        )
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_projectId_blank_rejected(test_db, client):
+    """Empty-string ``projectId`` must 422 — a "" value would otherwise
+    silently pass and match no row, returning a misleading 404."""
+    issue = await _create_issue(test_db)
+
+    resp = await client.get(
+        f"/api/issues/{issue.id}/documentation?projectId="
+    )
+    assert resp.status_code == 422

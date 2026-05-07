@@ -91,7 +91,10 @@ export function IssueDetailModal({
   const { data: issueWithChildren } = useIssue(issue?.id || null);
 
   // Fetch execution summaries (CB-1612).
-  const { data: executionSummaries } = useExecutionSummaries(issue?.id);
+  const { data: executionSummaries } = useExecutionSummaries(
+    issue?.id,
+    issue?.projectId,
+  );
   const latestSummary = executionSummaries?.[0];
   const implFiles = useMemo(() => {
     if (!latestSummary?.filesTouched) return [] as string[];

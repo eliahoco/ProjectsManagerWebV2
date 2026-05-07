@@ -1,0 +1,1048 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e5]
+        - generic [ref=e7]: Projects Manager V2
+      - button "Search... ⌘K" [ref=e9]:
+        - img [ref=e10]
+        - generic [ref=e13]: Search...
+        - generic [ref=e14]: ⌘K
+      - navigation [ref=e15]:
+        - link "Dashboard" [ref=e16] [cursor=pointer]:
+          - /url: /
+          - img [ref=e17]
+          - text: Dashboard
+        - link "CodeBoard" [ref=e22] [cursor=pointer]:
+          - /url: /codeboard
+          - img [ref=e23]
+          - text: CodeBoard
+        - link "QA Board" [ref=e24] [cursor=pointer]:
+          - /url: /codeboard/qa
+          - img [ref=e25]
+          - text: QA Board
+        - link "Projects" [ref=e29] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e30]
+          - text: Projects
+        - link "Create" [ref=e32] [cursor=pointer]:
+          - /url: /create
+          - img [ref=e33]
+          - text: Create
+        - link "Import" [ref=e34] [cursor=pointer]:
+          - /url: /import
+          - img [ref=e35]
+          - text: Import
+        - link "Build" [ref=e38] [cursor=pointer]:
+          - /url: /build
+          - img [ref=e39]
+          - text: Build
+        - link "Ports" [ref=e43] [cursor=pointer]:
+          - /url: /ports
+          - img [ref=e44]
+          - text: Ports
+        - link "Docker" [ref=e49] [cursor=pointer]:
+          - /url: /docker
+          - img [ref=e50]
+          - text: Docker
+        - link "GitHub" [ref=e54] [cursor=pointer]:
+          - /url: /github
+          - img [ref=e55]
+          - text: GitHub
+        - link "Settings" [ref=e58] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e59]
+          - text: Settings
+      - generic [ref=e62]:
+        - button "Light Mode" [ref=e63]:
+          - img [ref=e64]
+          - text: Light Mode
+        - button "Shortcuts ?" [ref=e70]:
+          - img [ref=e71]
+          - text: Shortcuts
+          - generic [ref=e73]: "?"
+      - generic [ref=e75]:
+        - paragraph [ref=e76]: Projects Manager Web
+        - paragraph [ref=e77]: v1.0.0
+    - main [ref=e78]:
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - link "CB-2038" [ref=e106] [cursor=pointer]:
+              - /url: /codeboard/issues/94aff46e-715b-49cf-8f69-7112be5bd211
+              - img [ref=e84]
+              - text: CB-2038
+            - generic [ref=e86]:
+              - img [ref=e87]
+              - heading "CB-2038Documentation Surface — make documentation feature visible, controllable, and properly stored" [level=1] [ref=e107]
+          - button "Regenerate feature documentation" [ref=e108]:
+            - img
+            - text: Regenerate
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - generic "Indexed in ChromaDB" [ref=e112]
+              - generic [ref=e113]:
+                - text: Indexed
+                - time [ref=e114]: 3h ago
+            - generic [ref=e115]:
+              - text: Last updated
+              - time [ref=e116]: 3h ago
+          - generic [ref=e117]:
+            - generic [ref=e118]:
+              - img [ref=e120]
+              - heading "Progress" [level=3] [ref=e123]
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - img [ref=e127]
+                - generic [ref=e131]: "98"
+                - generic [ref=e132]: Total Tasks
+              - generic [ref=e133]:
+                - img [ref=e135]
+                - generic [ref=e138]: "64"
+                - generic [ref=e139]: Completed
+              - generic [ref=e140]:
+                - img [ref=e142]
+                - generic [ref=e145]: "108"
+                - generic [ref=e146]: QA Tasks
+              - generic [ref=e147]:
+                - img [ref=e149]
+                - generic [ref=e152]: "0"
+                - generic [ref=e153]: QA Passed
+              - generic [ref=e154]:
+                - img [ref=e156]
+                - generic [ref=e160]: "0"
+                - generic [ref=e161]: QA Failed
+          - generic [ref=e162]:
+            - generic [ref=e163]:
+              - img [ref=e165]
+              - heading "Tech Stack" [level=3] [ref=e169]
+            - generic [ref=e171]:
+              - generic [ref=e172]: FeatureDocumentationView
+              - generic [ref=e173]: AutoPilot Queue Service
+              - generic [ref=e174]: RAG Service
+              - generic [ref=e175]: AutoPilotFloatingBar
+              - generic [ref=e176]: ServiceMonitor
+              - generic [ref=e177]: AutoPilotContext
+              - generic [ref=e178]: Settings Page
+              - generic [ref=e179]: Providers
+              - generic [ref=e180]: test_documentation_api
+              - generic [ref=e181]: FeatureDocumentation upsert logic (verified, no change)
+              - generic [ref=e182]: documentation_generator service (verified only)
+              - generic [ref=e183]: Backend Execution API
+              - generic [ref=e184]: Backend Error Handling
+              - generic [ref=e185]: Backend Main App
+              - generic [ref=e186]: Schema Test Utils
+              - generic [ref=e187]: Schema Data Integrity Tests
+              - generic [ref=e188]: Frontend Settings Page
+              - generic [ref=e189]: AutoPilot Floating Bar
+              - generic [ref=e190]: Frontend Providers
+              - generic [ref=e191]: Service Monitor
+              - generic [ref=e192]: AutoPilot Context
+              - generic [ref=e193]: Prisma Schema
+              - generic [ref=e194]: CLAUDE.md Documentation
+              - generic [ref=e195]: PROMPT_HISTORY.md
+              - generic [ref=e196]: CLAUDE.md
+              - generic [ref=e197]: backend/PROMPT_HISTORY.md
+              - generic [ref=e198]: backend/api/execution.py
+              - generic [ref=e199]: backend/app/errors.py
+              - generic [ref=e200]: backend/app/main.py
+              - generic [ref=e201]: backend/services/autopilot_queue_service.py
+              - generic [ref=e202]: backend/services/rag_service.py
+              - generic [ref=e203]: backend/tests/schema_test_utils.py
+              - generic [ref=e204]: backend/tests/test_schema_data_integrity.py
+              - generic [ref=e205]: frontend/PROMPT_HISTORY.md
+              - generic [ref=e206]: frontend/app/settings/page.tsx
+              - generic [ref=e207]: frontend/components/codeboard/AutoPilotFloatingBar.tsx
+              - generic [ref=e208]: frontend/components/providers.tsx
+              - generic [ref=e209]: frontend/components/service-monitor.tsx
+              - generic [ref=e210]: frontend/contexts/AutoPilotContext.tsx
+              - generic [ref=e211]: frontend/prisma/schema.prisma
+              - generic [ref=e212]: Schema Test Utilities
+              - generic [ref=e213]: AutoPilotQueueService
+              - generic [ref=e214]: RAGService
+              - generic [ref=e215]: Execution API
+              - generic [ref=e216]: Issues API
+              - generic [ref=e217]: CodeBoard Issue Tracker (CB-2051 status update)
+              - generic [ref=e218]: Backend API (execution, errors, main)
+              - generic [ref=e219]: frontend/app/api/system/rag/status/route.ts
+              - generic [ref=e220]: frontend/__tests__/api-system-rag-status-route.test.ts
+              - generic [ref=e221]: backend/scripts/codeboard
+              - generic [ref=e222]: CodeBoard automation scripts
+              - generic [ref=e223]: RAG service (audit target — read only)
+              - generic [ref=e224]: System API endpoint (audit target — read only)
+              - generic [ref=e225]: Chroma migration runbook (audit target — read only)
+              - generic [ref=e226]: PROMPT_HISTORY documentation
+              - generic [ref=e227]: backend/api/system.py
+              - generic [ref=e228]: backend/api/__init__.py
+              - generic [ref=e229]: backend/tests/test_rag_service_describe_mode.py
+              - generic [ref=e230]: backend/tests/test_rag_service_status_payload.py
+              - generic [ref=e231]: backend/tests/test_system_rag_status.py
+              - generic [ref=e232]: CodeBoard issue tracker (CB-2211 through CB-2215 filed, CB-2048 updated)
+              - generic [ref=e233]: RagStatusCard (new subcomponent in service-monitor.tsx)
+              - generic [ref=e234]: ServiceMonitor (frontend/components/service-monitor.tsx)
+              - generic [ref=e235]: backend/models/schemas.py
+              - generic [ref=e236]: backend/utils/db_queries.py
+              - generic [ref=e237]: frontend/hooks/useCodeBoard.ts
+              - generic [ref=e238]: frontend/types/codeboard.ts
+              - generic [ref=e239]: RAGService (backend/services/rag_service.py)
+              - generic [ref=e240]: System API router (backend/api/system.py)
+              - generic [ref=e241]: API router registry (backend/api/__init__.py)
+              - generic [ref=e242]: Test suite — rag_service status payload (backend/tests/test_rag_service_status_payload.py)
+              - generic [ref=e243]: Test suite — system endpoint (backend/tests/test_system_rag_status.py)
+              - generic [ref=e244]: CodeBoard status script (scripts/codeboard/2026-05-02-CB-2045-mark-cwq.py)
+              - generic [ref=e245]: RAGService (rag_service.py)
+              - generic [ref=e246]: App lifespan (main.py)
+              - generic [ref=e247]: Test suite (test_rag_service_describe_mode.py)
+              - generic [ref=e248]: ChromaDB Docker volume (chroma_data)
+              - generic [ref=e249]: Migration runbook
+              - generic [ref=e250]: CodeBoard status update script
+              - generic [ref=e251]: scripts/codeboard
+              - generic [ref=e252]: Next.js
+              - generic [ref=e253]: React
+              - generic [ref=e254]: TypeScript
+              - generic [ref=e255]: Vitest
+              - generic [ref=e256]: Playwright
+              - generic [ref=e257]: FastAPI
+              - generic [ref=e258]: Python
+              - generic [ref=e259]: SQLAlchemy
+              - generic [ref=e260]: SQLite
+              - generic [ref=e261]: ChromaDB
+              - generic [ref=e262]: Docker
+              - generic [ref=e263]: Prisma
+              - generic [ref=e264]: asyncio
+          - generic [ref=e265]:
+            - generic [ref=e266]:
+              - img [ref=e268]
+              - heading "Overview" [level=3] [ref=e270]
+            - generic [ref=e272]:
+              - paragraph [ref=e273]:
+                - text: CB-2038 (Documentation Surface) brings the previously invisible auto-documentation pipeline (CB-1578) to the user surface, making it visible, controllable, and properly stored. Prior to this feature, the
+                - code [ref=e274]: ExecutionSummary
+                - text: ","
+                - code [ref=e275]: FeatureDocumentation
+                - text: ", and"
+                - code [ref=e276]: ImplementationNote
+                - text: pipelines all ran silently on AI execution completion with no frontend exposure, and ChromaDB had silently fallen back to an embedded SQLite file (~17MB) because the Docker container was not running.
+              - paragraph [ref=e277]:
+                - text: "The feature is organized across four epics:"
+                - strong [ref=e278]: E1
+                - text: restores the ChromaDB container, migrates data from the embedded SQLite fallback to a proper container volume, and surfaces a RAG health status endpoint (
+                - code [ref=e279]: GET /api/system/rag/status
+                - text: ) plus a Service Monitor card showing mode and collection count.
+                - strong [ref=e280]: E2
+                - text: builds the FeatureDocumentation frontend, including a dedicated documentation page, a Documentation tab gated to FEATURE-type issues, hooks for fetching and generating documentation, a six-section view component with metrics, and empty-state CTAs for issues with no generated documentation.
+              - paragraph [ref=e281]:
+                - strong [ref=e282]: E3
+                - text: adds a Documentation Settings panel with configurable
+                - code [ref=e283]: autoGenerate
+                - text: ","
+                - code [ref=e284]: retentionDays
+                - text: ", and"
+                - code [ref=e285]: maxPerIssue
+                - text: fields backed by a
+                - code [ref=e286]: DocSettings
+                - text: model, a
+                - code [ref=e287]: GET/PATCH /api/documentation/settings
+                - text: API, a background retention task that purges
+                - code [ref=e288]: ExecutionSummary
+                - text: rows by age and per-issue cap, and a recent summaries list with per-row manual re-trigger buttons.
+                - strong [ref=e289]: E4
+                - text: audits and commits the existing uncommitted WIP through code-review, security-audit, and logical commit slices, including cleanup of loose screenshot files from the repository root.
+              - paragraph [ref=e290]:
+                - text: As of the current status, E1 through E3 implementation work is largely
+                - code [ref=e291]: COMPLETED_WAITING_QA
+                - text: ", with audit and regression tasks still in progress or backlogged. Several medium and high severity bugs have been filed (authorization gaps, SQLite variable limits, retention batching, proxy timeout causing 504 on long LLM runs, and missing query invalidation on error) and are tracked as descendant issues."
+          - generic [ref=e292]:
+            - generic [ref=e293]:
+              - img [ref=e295]
+              - heading "Requirements" [level=3] [ref=e298]
+            - generic [ref=e300]:
+              - paragraph [ref=e301]: Bring the auto-documentation feature (CB-1578) to user surface.
+              - paragraph [ref=e302]:
+                - strong [ref=e303]: Current state
+                - text: ": ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite ("
+                - code [ref=e304]: backend/data/chroma/chroma.sqlite3
+                - text: ", 17MB) because the Docker container is not running. FeatureDocumentation endpoints exist but have NO frontend. There is no settings UI to toggle, configure retention, or inspect generated artifacts. Existing implementation lives in an uncommitted working tree."
+              - paragraph [ref=e305]:
+                - strong [ref=e306]: This feature delivers
+                - text: ":"
+              - list [ref=e307]:
+                - listitem [ref=e308]: Restore ChromaDB container + observability surface
+                - listitem [ref=e309]: Build FeatureDocumentation frontend (page + tab + generate UI)
+                - listitem [ref=e310]: Settings panel for autoGenerate / retention / max-per-issue + recent summaries list
+                - listitem [ref=e311]: Audit + commit existing WIP through proper gates
+          - generic [ref=e312]:
+            - generic [ref=e313]:
+              - img [ref=e315]
+              - heading "Implementation" [level=3] [ref=e317]
+            - generic [ref=e319]:
+              - heading "Execution log (16 run(s))" [level=2] [ref=e320]
+              - 'heading "2026-05-06T22:44:33.515570 · files touched: 18" [level=3] [ref=e321]'
+              - paragraph [ref=e322]:
+                - text: CB-2076 was a QA verification task to confirm that techStack JSON arrays (e.g.
+                - code [ref=e323]: "[\"FastAPI\", \"Next.js\"]"
+                - text: ) render as distinct badge components in the FeatureDocumentationView. The execution located the
+                - code [ref=e324]: parseTechStack
+                - text: function (line 50) and badge render block (lines 278-295) in
+                - code [ref=e325]: FeatureDocumentationView.tsx
+                - text: ", then authored an 8-case Vitest regression suite covering: literal 2-badge render, deduplication, empty array hides section, invalid JSON hides, non-array JSON hides, mixed-type filtering, undefined hides, and null hides."
+              - paragraph [ref=e326]:
+                - text: A live Chrome/Playwright screenshot of the CB-2038 Documentation tab confirmed the same JSON→badge pipeline renders 70 badges from real data in the production-like dev environment. The test file was hardened after a code-review pass — replacing a brittle
+                - code [ref=e327]: parentElement.children.length
+                - text: selector with a stable
+                - code [ref=e328]: getBadgeTexts(.flex.flex-wrap)
+                - text: helper and adding null/undefined guard cases. All 8 tests passed (16.55s), and
+                - code [ref=e329]: tsc --noEmit
+                - text: reported zero errors.
+              - paragraph [ref=e330]:
+                - text: The task was closed via a per-project CWQ script (
+                - code [ref=e331]: 2026-05-07-CB-2076-cwq.py
+                - text: ) setting the issue to
+                - code [ref=e332]: COMPLETED_WAITING_QA
+                - text: ". Note: the git diff --stat reflects a much larger set of unrelated accumulated changes in the repository; the actual deliverables for this task are the new test file, the screenshot artifact, and the CWQ script."
+              - 'heading "2026-05-06T22:36:44.576595 · files touched: 18" [level=3] [ref=e333]'
+              - paragraph [ref=e334]:
+                - text: This QA verification task (CB-2075) confirmed that the FeatureDocumentation regenerate endpoint is idempotent — clicking Generate multiple times results in exactly one DB row for a given
+                - code [ref=e335]: featureIssueId
+                - text: ", not duplicates. The backend logic in"
+                - code [ref=e336]: services/documentation_generator.py
+                - text: (lines 1660-1705) correctly performs a SELECT-then-update-or-insert pattern using
+                - code [ref=e337]: scalar_one_or_none()
+                - text: ", ensuring upsert semantics on the natural key."
+              - paragraph [ref=e338]:
+                - text: The existing test
+                - code [ref=e339]: test_generate_feature_documentation_is_idempotent
+                - text: in
+                - code [ref=e340]: tests/test_documentation_api.py
+                - text: was strengthened by adding a third regenerate call and an explicit
+                - code [ref=e341]: SELECT COUNT(*) WHERE featureIssueId=...
+                - text: assertion via SQLAlchemy, confirming exactly 1 row exists after multiple generates. The
+                - code [ref=e342]: select
+                - text: import was also added to the test file to support this query.
+              - paragraph [ref=e343]:
+                - text: Live verification was performed against the running backend on port 8401 using a real feature (CB-2128). Three consecutive POST calls to
+                - code [ref=e344]: "/api/features/{id}/documentation/generate"
+                - text: all returned the same row ID, and a direct DB count confirmed exactly 1 row. All 48 documentation API tests passed regression checks. CB-2075 was marked
+                - code [ref=e345]: COMPLETED_WAITING_QA
+                - text: .
+              - 'heading "2026-05-06T22:30:07.577295 · files touched: 17" [level=3] [ref=e346]'
+              - paragraph [ref=e347]: "This execution performed a QA validation task (CB-2074) to verify that the Generate button creates a FeatureDocumentation row and all 6 sections populate with non-empty content. The QA engineer (Jonny) executed a manual flow: fetching the FeatureDocumentation record via API, confirming all 6 sections (overview, requirements, implementation, architecture, techStack, testingStrategy) contained substantial content, and capturing a live Chrome screenshot via Playwright to confirm DOM rendering."
+              - paragraph [ref=e348]: "The verification confirmed a PASS verdict: all 6 section H3s were present in the DOM, with section content sizes ranging from 855 to 15,938 characters, tech stack containing 70 JSON badge entries, and the progress card showing metrics 96/59/48/0/0. The task was then marked COMPLETED_WAITING_QA via a push script per project convention. Cross-references to open bugs BUG-A (proxy 504 on Regenerate) and BUG-B (no auto-refetch after 504) from CB-2071 were noted as non-blocking."
+              - paragraph [ref=e349]: The broader git diff reflects a large amount of parallel or preceding work including AutoPilot Queue service enhancements (persistent state, crash recovery, token-exhaustion auto-pause, circuit breaker), schema changes to Prisma and backend models, RAG service updates, test schema integrity additions, and frontend updates to settings, service monitor, and AutoPilot components. These changes were already in-flight and represent the feature context surrounding this QA task.
+              - 'heading "2026-05-06T22:27:30.857822 · files touched: 17" [level=3] [ref=e350]'
+              - paragraph [ref=e351]: "This execution performed QA verification for CB-2073 (E2-2: Empty state shows when no FeatureDocumentation row exists). The task involved identifying a FEATURE-type issue (CB-2128) without any prior documentation generation, navigating to its Documentation tab in the browser, and confirming that the empty state UI renders correctly with all required elements."
+              - paragraph [ref=e352]:
+                - text: The backend was probed via
+                - code [ref=e353]: "GET /api/features/{id}/documentation"
+                - text: which returned a 404 NOT_FOUND response, confirming zero FeatureDocumentation rows exist for CB-2128. The frontend correctly translated this 404 into a
+                - code [ref=e354]: "null"
+                - text: state and rendered the empty-state card rather than an error card. Both the center CTA and header-strip 'Generate Documentation' buttons were visible and functional.
+              - paragraph [ref=e355]:
+                - text: A screenshot was captured as evidence and stored at
+                - code [ref=e356]: docs/research/cb-2073-empty-state.png
+                - text: . The task was marked COMPLETED_WAITING_QA via a generated script. The out-of-scope 500 error on
+                - code [ref=e357]: /api/projects/status
+                - text: was noted as unrelated service-monitor noise. All acceptance criteria for E2-2 were confirmed passing.
+              - 'heading "2026-05-06T22:22:03.262884 · files touched: 17" [level=3] [ref=e358]'
+              - paragraph [ref=e359]: CB-2071 was a full end-to-end regression test for the Documentation Surface feature (E2 track). The execution drove a FEATURE issue (CB-2038) through the Documentation tab → Generate flow, verifying all 6 sections render (Overview, Requirements, Implementation, Architecture, Tech Stack, Testing Strategy), metrics update correctly, data persists on reload, and ChromaDB indexing is confirmed. The test was run by 'Jonny' acting as VP-R&D, using Playwright for UI automation and direct HTTP API calls to both the backend (port 8401) and ChromaDB (port 8402).
+              - paragraph [ref=e360]:
+                - text: "The regression found one pre-existing architectural subtlety: the"
+                - code [ref=e361]: feature_documentation
+                - text: content type is stored as metadata-tagged documents inside per-project Chroma collections (not a separate named collection), which was confirmed correct per
+                - code [ref=e362]: rag_service.py:541-553
+                - text: ". Two new bugs were filed per Rule 28: CB-2375 (HIGH) for the Next.js proxy 15s timeout causing 504 errors on Generate calls that take 30-35s, and CB-2376 (MEDIUM) for the"
+                - code [ref=e363]: useGenerateFeatureDoc
+                - text: hook not invalidating the doc query on error. The task was marked COMPLETED_WAITING_QA.
+              - paragraph [ref=e364]: "The git diff shows broader sprint work committed alongside this regression: AutoPilot queue persistence/crash-recovery/circuit-breaker infrastructure, schema migrations, RAG service updates, and frontend settings/monitoring components — all part of the surrounding CB-1951 and related tasks in the same session context."
+              - 'heading "2026-05-06T22:08:29.220574 · files touched: 17" [level=3] [ref=e365]'
+              - paragraph [ref=e366]:
+                - text: This execution performed manual QA verification for CB-2053, confirming that the Service Monitor card in the frontend correctly renders RAG mode with a green HTTP badge and a non-zero document count. The agent checked backend health via
+                - code [ref=e367]: /api/system/rag/status
+                - text: (returning
+                - code [ref=e368]: mode=HTTP
+                - text: ","
+                - code [ref=e369]: healthy=true
+                - text: ","
+                - code [ref=e370]: total_docs=3516
+                - text: ", 8 collections), verified the frontend proxy route returned an identical 200 response, and used Playwright to capture browser screenshots of both the collapsed and expanded Service Monitor card states."
+              - paragraph [ref=e371]:
+                - text: Screenshots were saved to
+                - code [ref=e372]: docs/research/
+                - text: as audit artifacts (
+                - code [ref=e373]: cb-2053-rag-card-collapsed.png
+                - text: and
+                - code [ref=e374]: cb-2053-rag-card-expanded.png
+                - text: ). The expanded card confirmed the RAG endpoint (
+                - code [ref=e375]: localhost:8402
+                - text: ) and top 3 collections with correct document counts. A QA close script was written to
+                - code [ref=e376]: scripts/codeboard/2026-05-07-CB-2053-qa-close.py
+                - text: per Rule 29, which posted a comment on the issue and flipped its status to
+                - code [ref=e377]: COMPLETED_WAITING_QA
+                - text: .
+              - paragraph [ref=e378]: The git diff reflects a broader set of concurrent changes across the codebase from other tasks in the same feature branch, including AutoPilot queue persistence, RAG service updates, frontend service-monitor component changes, and schema migrations. No new code changes were authored specifically for this QA task — the execution was verification-only.
+              - 'heading "2026-05-06T22:04:35.795874 · files touched: 17" [level=3] [ref=e379]'
+              - paragraph [ref=e380]:
+                - text: This was a pure QA verification task (CB-2052) with no code changes. The execution verified that the
+                - code [ref=e381]: /api/system/rag/status
+                - text: endpoint correctly returns
+                - code [ref=e382]: mode=HTTP
+                - text: after
+                - code [ref=e383]: docker compose up
+                - text: ", and that the backend startup log includes the expected"
+                - code [ref=e384]: RAG mode=HTTP
+                - text: line.
+              - paragraph [ref=e385]:
+                - text: "All three acceptance gates passed: the endpoint returned"
+                - code [ref=e386]: mode=HTTP
+                - text: with host=localhost, port=8402, healthy=true, 8 collections, and 3514 documents; the backend startup log confirmed
+                - code [ref=e387]: RAG mode=HTTP host=localhost port=8402 collections=8
+                - text: ; and the Chroma container (
+                - code [ref=e388]: projectsmanagerwebv2production-chromadb-1
+                - text: ) was confirmed UP for 12 hours with port 8402 reachable and heartbeat returning HTTP 200.
+              - paragraph [ref=e389]:
+                - text: Following verification, CB-2052 was transitioned from
+                - code [ref=e390]: IN_PROGRESS
+                - text: to
+                - code [ref=e391]: COMPLETED_WAITING_QA
+                - text: via a PATCH API call, with an ImplementationSummary recorded containing all verification evidence. The git diff reflects unrelated accumulated changes from prior tasks in the working tree, not from this execution.
+              - 'heading "2026-05-06T22:03:04.120434 · files touched: 17" [level=3] [ref=e392]'
+              - paragraph [ref=e393]:
+                - text: "This execution performed a QA verification task (CB-2051) to confirm that the Chroma container is running, the heartbeat endpoint returns HTTP 200, and port 8402 is reachable on localhost. Two shell checks were run:"
+                - code [ref=e394]: docker ps
+                - text: to confirm the container
+                - code [ref=e395]: projectsmanagerwebv2production-chromadb-1
+                - text: is up with port mapping
+                - code [ref=e396]: 127.0.0.1:8402->8000/tcp
+                - text: ", and"
+                - code [ref=e397]: curl http://localhost:8402/api/v2/heartbeat
+                - text: which returned HTTP 200 with body
+                - code [ref=e398]: "{\"nanosecond heartbeat\":1778104942874580894}"
+                - text: in 6.9ms.
+              - paragraph [ref=e399]:
+                - text: After confirming both checks passed, the CodeBoard issue CB-2051 was updated via PATCH to
+                - code [ref=e400]: COMPLETED_WAITING_QA
+                - text: status with full evidence documented in the issue notes. No code changes were required for this task as it was purely a manual verification exercise.
+              - paragraph [ref=e401]: The git diff reflects a large set of unrelated changes from prior executions in the same working session — including AutoPilot queue persistence, RAG service updates, schema changes, frontend service monitor updates, and documentation additions — none of which were part of this specific CB-2051 QA task.
+              - 'heading "2026-05-06T14:40:47.467974 · files touched: 17" [level=3] [ref=e402]'
+              - paragraph [ref=e403]:
+                - text: CB-2211 was a CRITICAL bug where
+                - code [ref=e404]: RagStatusCard
+                - text: in
+                - code [ref=e405]: service-monitor.tsx
+                - text: called
+                - code [ref=e406]: fetch('/api/system/rag/status')
+                - text: as a relative URL, but no Next.js route handler existed to proxy that request to the FastAPI backend at
+                - code [ref=e407]: :8401
+                - text: . This caused every poll to return 404, triggering the fail threshold and permanently displaying 'RAG offline' — silently breaking E1's primary user-visible deliverable.
+              - paragraph [ref=e408]:
+                - text: "The fix followed Option A (mirroring the existing proxy pattern): a new GET route handler was created at"
+                - code [ref=e409]: frontend/app/api/system/rag/status/route.ts
+                - text: that proxies requests to
+                - code [ref=e410]: http://localhost:8401/api/system/rag/status
+                - text: ". Defense-in-depth hardening was applied based on parallel code-reviewer and security-auditor agent findings:"
+                - code [ref=e411]: export const dynamic = 'force-dynamic'
+                - text: to prevent Next.js caching,
+                - code [ref=e412]: "Cache-Control: no-store"
+                - text: on all response branches, sanitized error logging (no internal hostname leakage on DNS/TLS failures), and
+                - code [ref=e413]: "Accept: application/json"
+                - text: header on the upstream fetch.
+              - paragraph [ref=e414]:
+                - text: A 5-test vitest regression suite was added at
+                - code [ref=e415]: frontend/__tests__/api-system-rag-status-route.test.ts
+                - text: covering URL forwarding, AbortSignal plumbing, 502 on ECONNREFUSED, 504 on AbortError, non-2xx passthrough, and cache-control header presence. All 5 tests passed. E2E smoke through the Next.js layer confirmed HTTP 200 with
+                - code [ref=e416]: "cache-control: no-store"
+                - text: and byte-identical payload to the backend. CB-2211 was transitioned to COMPLETED_WAITING_QA.
+              - 'heading "2026-05-02T20:44:34.741807 · files touched: 17" [level=3] [ref=e417]'
+              - paragraph [ref=e418]:
+                - text: "CB-2049 was a security audit task targeting two specific concerns on E1: path-traversal risk in the chroma migration script, and data-exposure / authorization issues on the"
+                - code [ref=e419]: /api/system/rag/status
+                - text: endpoint. The security-auditor subagent performed a full code review of
+                - code [ref=e420]: rag_service.py
+                - text: ","
+                - code [ref=e421]: system.py
+                - text: ","
+                - code [ref=e422]: deps.py
+                - text: ","
+                - code [ref=e423]: __init__.py
+                - text: ","
+                - code [ref=e424]: main.py
+                - text: ","
+                - code [ref=e425]: service-monitor.tsx
+                - text: ", and the chroma migration runbook, then rendered a verdict of"
+                - strong [ref=e426]: SAFE TO SHIP
+                - text: with 0 CRITICAL, 0 HIGH, 3 MEDIUM, 2 LOW, and 3 INFO findings.
+              - paragraph [ref=e427]:
+                - text: "Five child BUG tickets were filed under STORY CB-2047: CB-2216 (MEDIUM —"
+                - code [ref=e428]: host
+                - text: field leaks absolute filesystem path in PERSISTENT mode), CB-2217 (MEDIUM — collection names enable project enumeration), CB-2218 (MEDIUM — DoS amplification via heartbeat + per-collection polling), CB-2219 (LOW — migration runbook
+                - code [ref=e429]: tar
+                - text: not hardened with
+                - code [ref=e430]: "--no-same-owner"
+                - text: /
+                - code [ref=e431]: "--anchored"
+                - text: ), and CB-2220 (LOW —
+                - code [ref=e432]: PERSISTENT_FALLBACK_PATH
+                - text: is CWD-relative). INFO-level findings (TOCTOU half-init not exploitable, response shape correctly minimal, frontend sends no credentials) required no follow-up tickets.
+              - paragraph [ref=e433]:
+                - text: A CodeBoard automation script was written to
+                - code [ref=e434]: scripts/codeboard/2026-05-02-CB-2049-file-audit-bugs-and-cwq.py
+                - text: per Rule 29, which created all five bug tickets via the API and transitioned CB-2049 to
+                - code [ref=e435]: COMPLETED_WAITING_QA
+                - text: . The audit findings summary was appended to the CB-2049 description. No source code was modified; all changes are documentation, test infrastructure, schema updates, and service-layer work from adjacent tasks included in the same diff window.
+              - 'heading "2026-05-02T20:36:54.533424 · files touched: 17" [level=3] [ref=e436]'
+              - paragraph [ref=e437]: "CB-2048 was a code-review task (T1.3.1) covering the E1 diff: chroma migration, status endpoint, and the frontend monitor card. The reviewer (Claude Code) read the full diff across backend services, API layer, tests, and frontend component, then produced a structured verdict of REQUEST-CHANGES with 1 CRITICAL, 0 HIGH, 3 MEDIUM, and 5 LOW findings."
+              - paragraph [ref=e438]:
+                - text: The CRITICAL finding (CB-2211) identified that
+                - code [ref=e439]: fetch('/api/system/rag/status')
+                - text: in
+                - code [ref=e440]: service-monitor.tsx
+                - text: has no backing Next.js proxy route and no rewrite rule in
+                - code [ref=e441]: next.config.ts
+                - text: ", meaning the card permanently 404s in production — a deployment blocker for E1. Three MEDIUM findings covered:"
+                - code [ref=e442]: _init_client_blocking
+                - text: reset omitting
+                - code [ref=e443]: _collections
+                - text: (CB-2212), no test for the half-init invariant (CB-2213), and a misleading
+                - code [ref=e444]: get_status_payload
+                - text: docstring vs. actual summing behavior (CB-2214). Five LOW findings were bundled into CB-2215 covering
+                - code [ref=e445]: host
+                - text: field overload, missing Page Visibility gating, hint wording, fragment fragility, and heartbeat-warning log spam.
+              - paragraph [ref=e446]: All findings were filed as child BUGs under STORY CB-2047 via a generated Python script that POSTed to the CodeBoard API. CB-2048's description was updated with the inline summary table and its status set to COMPLETED_WAITING_QA. Out-of-scope items (path-traversal on PERSISTENT_FALLBACK_PATH, chroma container health) were deferred to sibling tasks CB-2049 and CB-2050 respectively.
+              - 'heading "2026-05-02T20:28:51.654941 · files touched: 17" [level=3] [ref=e447]'
+              - paragraph [ref=e448]:
+                - text: Implemented a new
+                - code [ref=e449]: RagStatusCard
+                - text: subcomponent inside
+                - code [ref=e450]: frontend/components/service-monitor.tsx
+                - text: that displays RAG service status as a persistent floating card in the bottom-left corner of the UI. The card polls
+                - code [ref=e451]: /api/system/rag/status
+                - text: every 30 seconds and shows a mode badge (green for HTTP+healthy, amber for PERSISTENT or HTTP+unhealthy, red for UNINITIALIZED or repeated fetch failures), total document count, and an expandable view with endpoint details and top-3 collections by count.
+              - paragraph [ref=e452]:
+                - text: The implementation follows the existing service-monitor polling pattern using
+                - code [ref=e453]: setInterval
+                - text: with a ref-callback approach. A
+                - code [ref=e454]: normalizeRagStatus
+                - text: runtime guard was added to prevent malformed API payloads from crashing the always-on card. A fail-threshold of 2 consecutive poll failures is required before flipping to the red 'RAG offline' state to prevent flickering on transient network hiccups. The card is hidden below the
+                - code [ref=e455]: sm
+                - text: breakpoint (
+                - code [ref=e456]: hidden sm:block
+                - text: ) to avoid mobile layout collisions.
+              - paragraph [ref=e457]: "All audit gates were passed: TypeScript type-check was clean for the modified file, ESLint reported no new issues, a code …[truncated]"
+          - generic [ref=e458]:
+            - generic [ref=e459]:
+              - img [ref=e461]
+              - heading "Architecture" [level=3] [ref=e465]
+            - generic [ref=e467]:
+              - heading "Architecture Synthesis" [level=2] [ref=e468]
+              - paragraph [ref=e469]:
+                - text: ChromaDB is operated as a Docker container on port 8402 in HTTP client mode. When the container is unavailable the system falls back to an embedded persistent SQLite store (
+                - code [ref=e470]: backend/data/chroma/chroma.sqlite3
+                - text: ); the RAG service surfaces the active mode (
+                - code [ref=e471]: HTTP
+                - text: vs
+                - code [ref=e472]: PERSISTENT
+                - text: ) in a startup log line and via the
+                - code [ref=e473]: /api/system/rag/status
+                - text: endpoint. Feature documentation embeddings are stored as metadata-tagged documents (
+                - code [ref=e474]: content_type='feature_documentation'
+                - text: ) inside per-project Chroma collections rather than a dedicated collection; document IDs are MD5 hashes of
+                - code [ref=e475]: feature_documentation:<issue_id>
+                - text: ", and deduplication is enforced at the application layer via a"
+                - code [ref=e476]: scalar_one_or_none()
+                - text: SELECT-then-upsert pattern keyed on
+                - code [ref=e477]: featureIssueId
+                - text: .
+              - paragraph [ref=e478]:
+                - text: The
+                - code [ref=e479]: DocSettings
+                - text: model controls the
+                - code [ref=e480]: autoGenerate
+                - text: flag that is checked in
+                - code [ref=e481]: _process_completion_for_session
+                - text: before any documentation pipeline runs. A background retention task (
+                - code [ref=e482]: process_doc_retention
+                - text: ) periodically purges
+                - code [ref=e483]: ExecutionSummary
+                - text: rows exceeding
+                - code [ref=e484]: retentionDays
+                - text: age or the
+                - code [ref=e485]: maxPerIssue
+                - text: cap; a known issue is that it sleeps six hours before its first pass and walks all distinct issue IDs in a single transaction without batching. The
+                - code [ref=e486]: parseTechStack
+                - text: function on the frontend uses
+                - code [ref=e487]: JSON.parse
+                - text: +
+                - code [ref=e488]: Array.isArray
+                - text: +
+                - code [ref=e489]: typeof string
+                - text: "guards to safely convert stored JSON arrays into badge components, avoiding XSS risks. The AutoPilot Queue service was significantly hardened in parallel work: write-through persistence to"
+                - code [ref=e490]: AutoPilotQueueRecord
+                - text: /
+                - code [ref=e491]: AutoPilotTaskRecord
+                - text: /
+                - code [ref=e492]: AutoPilotEvent
+                - text: tables, crash-recovery via a lifespan startup
+                - code [ref=e493]: rehydrate_from_db()
+                - text: hook, token-exhaustion
+                - code [ref=e494]: WAITING_RESET
+                - text: state with asyncio-scheduled auto-resume, and a circuit breaker capping consecutive auto-resumes at three before requiring manual intervention.
+              - paragraph [ref=e495]:
+                - text: "Two notable proxy-layer issues were filed during regression: the Next.js proxy has a 15-second timeout that is shorter than the typical 30–35-second LLM generation run (causing 504 errors on Generate calls), and the"
+                - code [ref=e496]: useGenerateFeatureDoc
+                - text: mutation does not invalidate the documentation query cache on error, leaving the UI stale after a failed generation.
+              - separator [ref=e497]
+              - paragraph [ref=e498]: The QA task itself introduced no new architecture. The parseTechStack function uses JSON.parse + Array.isArray + typeof string guards — a safe, XSS-free pipeline. The test suite uses a stable CSS selector (.flex.flex-wrap) rather than DOM traversal to locate badge containers, which is more resilient to layout refactors. The broader diff reflects accumulated AutoPilot Queue persistence architecture (write-through to AutoPilotQueueRecord/AutoPilotTaskRecord/AutoPilotEvent tables with crash recovery and token-exhaustion auto-pause) committed alongside this task.
+              - separator [ref=e499]
+              - paragraph [ref=e500]:
+                - text: The FeatureDocumentation upsert relies on a SELECT-then-update-or-insert pattern keyed on
+                - code [ref=e501]: featureIssueId
+                - text: rather than a DB-level UNIQUE constraint. This means the application layer enforces idempotency. The defense-in-depth note is that
+                - code [ref=e502]: scalar_one_or_none()
+                - text: would raise if duplicates somehow existed, surfacing the problem immediately. No architectural changes were made — the existing design was verified correct.
+              - separator [ref=e503]
+              - paragraph [ref=e504]: The AutoPilot Queue service was significantly enhanced with persistent state via AutoPilotQueueRecord/AutoPilotTaskRecord/AutoPilotEvent DB tables, crash recovery via lifespan startup rehydration, token-exhaustion auto-pause with asyncio timer-based auto-resume, a circuit breaker limiting auto-resume attempts to 3 before requiring manual intervention, and a redacted audit log with 8KB cap per event. These patterns establish a durable, observable queue system that survives process restarts.
+              - separator [ref=e505]
+              - paragraph [ref=e506]: The QA verification confirmed that the 404 response from the documentation API endpoint is correctly mapped to a null/empty state in the frontend rather than triggering an error card. The two-CTA pattern (header strip + center empty-state card) ensures discoverability. The FEATURE-gate check in the page component correctly allows rendering for FEATURE-type issues. No architectural changes were made as this was a QA-only task; the diff reflects accumulated changes from prior sessions in the same working directory.
+              - separator [ref=e507]
+              - paragraph [ref=e508]:
+                - text: ChromaDB indexing for feature documentation uses metadata-tagged documents (
+                - code [ref=e509]: content_type='feature_documentation'
+                - text: ) inside per-project collections rather than a dedicated
+                - code [ref=e510]: feature_documentation
+                - text: collection. Document IDs are md5 hashes of
+                - code [ref=e511]: feature_documentation:<issue_id>
+                - text: . The AutoPilot queue uses write-through persistence to
+                - code [ref=e512]: AutoPilotQueueRecord
+                - text: /
+                - code [ref=e513]: AutoPilotTaskRecord
+                - text: /
+                - code [ref=e514]: AutoPilotEvent
+                - text: tables with crash recovery via lifespan startup hook
+                - code [ref=e515]: rehydrate_from_db()
+                - text: . Token-exhaustion triggers
+                - code [ref=e516]: WAITING_RESET
+                - text: state with asyncio-scheduled auto-resume at
+                - code [ref=e517]: reset_time + 60s
+                - text: . Circuit breaker caps auto-resumes at 3 consecutive attempts before requiring manual intervention.
+              - separator [ref=e518]
+              - paragraph [ref=e519]: No architectural changes were made by this QA task specifically. The broader diff captures concurrent feature work including AutoPilot queue persistence (write-through to AutoPilotQueueRecord/AutoPilotTaskRecord/AutoPilotEvent tables), crash recovery via lifespan startup rehydration, token-exhaustion auto-pause with asyncio timer scheduling, and a circuit breaker pattern limiting auto-resume attempts to 3 before requiring manual intervention.
+              - separator [ref=e520]
+              - paragraph [ref=e521]: No architectural decisions were made in this execution. The task was a read-only QA verification confirming that the RAG subsystem initializes in HTTP mode (connecting to a standalone Chroma container on port 8402) rather than an embedded or alternative mode. The diff reflects pre-existing uncommitted changes from prior executions in the working tree.
+              - separator [ref=e522]
+              - paragraph [ref=e523]: "CB-2051 itself required no architectural changes — it was a pure QA verification task. The broader diff reflects previously implemented AutoPilot queue persistence architecture: write-through persistence to AutoPilotQueueRecord/AutoPilotTaskRecord/AutoPilotEvent tables, crash recovery via lifespan startup rehydration, token-exhaustion auto-pause with asyncio timer scheduling, and a circuit breaker limiting auto-resume attempts to 3 before requiring manual intervention."
+              - separator [ref=e524]
+              - paragraph [ref=e525]:
+                - text: The proxy route strictly mirrors the existing pattern used by
+                - code [ref=e526]: /api/projects/status
+                - text: ","
+                - code [ref=e527]: /api/docker/status
+                - text: ", and"
+                - code [ref=e528]: /api/watchdog/events
+                - text: route handlers — a thin Next.js GET handler that forwards to FastAPI and streams back the response. The backend URL is hardcoded (not parameterized) to close the SSRF gadget surface identified by the security auditor.
+                - code [ref=e529]: force-dynamic
+                - text: export prevents Next.js 15+ static caching of the route.
+                - code [ref=e530]: "Cache-Control: no-store"
+                - text: is set on every response branch (success, 502, 504) to prevent CDN or shared-cache poisoning.
+              - separator [ref=e531]
+              - paragraph [ref=e532]:
+                - text: Audit confirmed the existing E1 architecture is safe for the current localhost-only single-user threat model. The lifespan-gated initialization pattern correctly prevents TOCTOU on
+                - code [ref=e533]: app.state.rag
+                - text: . The Origin-validation middleware intentionally permits no-Origin server-to-server calls, which is acceptable given the deployment context but flagged for future tightening. Five defence-in-depth hardening items were filed as child BUGs rather than blocking the release, consistent with the single-user localhost platform risk model.
+              - separator [ref=e534]
+              - paragraph [ref=e535]: "The review confirmed the reset-before-init pattern in rag_service as sound. The CRITICAL finding exposed a missing Next.js API proxy layer: the frontend must never call the FastAPI backend directly from client components without a /app/api/ route or next.config.ts rewrite. All future status-polling endpoints must have a corresponding Next.js proxy route created in the same PR as the frontend consumer. Out-of-scope security and regression concerns were cleanly deferred to dedicated sibling audit tasks (CB-2049, CB-2050) per the Bible's separation-of-concerns rule."
+              - separator [ref=e536]
+              - paragraph [ref=e537]: The RagStatusCard is mounted always-on inside the existing ServiceMonitor component (which is in the root layout) rather than as a separate component, keeping RAG status co-located with other service health indicators. Fixed positioning at bottom-4 left-4 z-40 avoids collision with the existing right-side alert column. Polling reuses the same setInterval+ref-callback pattern established by the existing watchdog code for consistency. A 2-poll fail-threshold prevents red-state flicker on transient failures.
+              - separator [ref=e538]
+              - paragraph [ref=e539]:
+                - text: The status endpoint is intentionally read-only and auth-free (internal-only per spec). All Chroma I/O is isolated inside
+                - code [ref=e540]: RAGService.get_status_payload()
+                - text: which catches every exception individually so a partial Chroma failure degrades gracefully (healthy=false, affected collection count=0) without propagating an HTTP 500. The Pydantic
+                - code [ref=e541]: RagStatusResponse
+                - text: model enforces the exact contract defined in the ticket, making the shape machine-verifiable. The router is registered under the
+                - code [ref=e542]: system
+                - text: tag to keep operational/introspection endpoints separated from domain API routes.
+              - separator [ref=e543]
+              - paragraph [ref=e544]: Mode tracking is stored as instance state on RAGService (_mode / _mode_detail) rather than a global or module-level flag, keeping it encapsulated and testable. describe_mode() is a pure read method with a defensive try/except around list_collections() so it is safe to call from any context including lifespan hooks. PERSISTENT_FALLBACK_PATH is a module-level constant to avoid magic strings and to give a single place to change the default path.
+              - separator [ref=e545]
+              - paragraph [ref=e546]:
+                - text: Data migration used a tar stdin pipe approach instead of a direct bind-mount because Colima restricts file-sharing to specific host paths and
+                - code [ref=e547]: /Volumes/Seagate
+                - text: is outside that scope. The original
+                - code [ref=e548]: backend/data/chroma/
+                - text: directory was preserved (copy, not move) to allow safe rollback until CB-2043 confirms the HTTP client path is live in production. The backend uses
+                - code [ref=e549]: chromadb.HttpClient(host, port)
+                - text: with default tenant/database, which is fully compatible with the volume's namespace structure.
+              - separator [ref=e550]
+              - paragraph [ref=e551]: ChromaDB is accessed exclusively via HTTP client (port 8402) in production. The lifespan boot sequence in main.py performs a TCP probe + /api/v2/heartbeat call before constructing the HttpClient, falling back to PersistentClient only if an exception is raised. This means a Colima/Docker restart restores HTTP mode automatically on the next backend restart without any code change.
+          - generic [ref=e552]:
+            - generic [ref=e553]:
+              - img [ref=e555]
+              - heading "Testing Strategy" [level=3] [ref=e557]
+            - generic [ref=e559]:
+              - heading "Testing Strategy" [level=2] [ref=e560]
+              - paragraph [ref=e561]:
+                - text: QA coverage for this feature follows a layered strategy. At the unit and integration level, Vitest regression suites cover the
+                - code [ref=e562]: parseTechStack
+                - text: "badge-rendering pipeline (8 cases: literal render, deduplication, empty/invalid/non-array/mixed-type/undefined/null inputs) and the"
+                - code [ref=e563]: FeatureDocumentation
+                - text: upsert idempotency (a strengthened test adds a third regenerate call plus an explicit
+                - code [ref=e564]: SELECT COUNT(*)
+                - text: assertion confirming exactly one row after multiple generates). The backend documentation API suite (48 tests) is run as a regression gate on each audit task.
+              - paragraph [ref=e565]:
+                - text: End-to-end and manual QA tasks are captured as explicit
+                - code [ref=e566]: "[QA]"
+                - text: "-prefixed issues covering: ChromaDB container health and HTTP mode confirmation (E1-1 through E1-3), Documentation tab FEATURE-gating and empty/populated states (E2-1 through E2-6), settings persistence and retention behavior (E3-1 through E3-6), and ImplementationTab flows (E4-1 through E4-3). Playwright-driven Chrome screenshots are captured as evidence and stored under"
+                - code [ref=e567]: docs/research/
+                - text: . Security audits (code-reviewer + security-auditor agent passes) were completed for each epic's diff, covering areas such as git subprocess shape-checking, prompt injection, path validation, markdown XSS, JSON.parse defense, PATCH validation, and retention SQL safety.
+              - heading "QA Coverage" [level=2] [ref=e568]
+              - list [ref=e569]:
+                - listitem [ref=e570]:
+                  - strong [ref=e571]: QA-5604
+                  - text: "(NOT_DONE): Verify /api/system/rag/status Next.js proxy route exists and returns 200"
+                - listitem [ref=e572]:
+                  - strong [ref=e573]: QA-5605
+                  - text: "(NOT_DONE): Verify frontend/app/api/system/rag/status/route.ts proxy file exists in the codebase"
+                - listitem [ref=e574]:
+                  - strong [ref=e575]: QA-5606
+                  - text: "(NOT_DONE): Verify RagStatusCard displays 'RAG online' badge when backend is healthy"
+                - listitem [ref=e576]:
+                  - strong [ref=e577]: QA-5607
+                  - text: "(NOT_DONE): Verify RagStatusCard does NOT permanently show 'RAG offline — status endpoint unreachable' after fix"
+                - listitem [ref=e578]:
+                  - strong [ref=e579]: QA-5608
+                  - text: "(NOT_DONE): Verify proxy route correctly forwards response headers and body from FastAPI to browser"
+                - listitem [ref=e580]:
+                  - strong [ref=e581]: QA-5609
+                  - text: "(NOT_DONE): Verify RagStatusCard shows degraded/offline state when FastAPI backend is down (graceful error handling)"
+                - listitem [ref=e582]:
+                  - strong [ref=e583]: QA-5610
+                  - text: "(NOT_DONE): Verify that other existing API proxy routes are not broken by the fix (regression check)"
+                - listitem [ref=e584]:
+                  - strong [ref=e585]: QA-5611
+                  - text: "(NOT_DONE): Verify smoke test hits the RAG status endpoint through Next.js layer (port 3601), not just FastAPI directly"
+                - listitem [ref=e586]:
+                  - strong [ref=e587]: QA-5612
+                  - text: "(NOT_DONE): Verify failCountRef does not reach threshold causing permanent 'RAG offline' badge after fix"
+                - listitem [ref=e588]:
+                  - strong [ref=e589]: QA-5613
+                  - text: "(NOT_DONE): Verify the new proxy route handles non-200 HTTP responses from FastAPI gracefully"
+                - listitem [ref=e590]:
+                  - strong [ref=e591]: QA-5614
+                  - text: "(NOT_DONE): Verify no CORS or CSP errors occur when browser fetches /api/system/rag/status through Next.js proxy"
+                - listitem [ref=e592]:
+                  - strong [ref=e593]: QA-5615
+                  - text: "(NOT_DONE): Verify proxy route structure mirrors the existing projects/status route pattern for consistency"
+                - listitem [ref=e594]:
+                  - strong [ref=e595]: QA-5640
+                  - text: "(NOT_DONE): Verify Chroma container is running via docker ps"
+                - listitem [ref=e596]:
+                  - strong [ref=e597]: QA-5641
+                  - text: "(NOT_DONE): Verify heartbeat endpoint returns HTTP 200 on port 8402"
+                - listitem [ref=e598]:
+                  - strong [ref=e599]: QA-5642
+                  - text: "(NOT_DONE): Verify port 8402 is actively listening and accessible"
+                - listitem [ref=e600]:
+                  - strong [ref=e601]: QA-5643
+                  - text: "(NOT_DONE): Verify heartbeat response body contains valid Chroma heartbeat payload"
+                - listitem [ref=e602]:
+                  - strong [ref=e603]: QA-5644
+                  - text: "(NOT_DONE): Verify heartbeat endpoint response time is within acceptable limits"
+                - listitem [ref=e604]:
+                  - strong [ref=e605]: QA-5645
+                  - text: "(NOT_DONE): Verify Docker container port mapping shows 8402 correctly bound"
+                - listitem [ref=e606]:
+                  - strong [ref=e607]: QA-5646
+                  - text: "(NOT_DONE): Verify heartbeat endpoint returns 404 or error for invalid API path"
+                - listitem [ref=e608]:
+                  - strong [ref=e609]: QA-5647
+                  - text: "(NOT_DONE): Verify Chroma container restarts and heartbeat recovers after container restart"
+                - listitem [ref=e610]:
+                  - strong [ref=e611]: QA-5648
+                  - text: "(NOT_DONE): Verify heartbeat fails gracefully when Chroma container is stopped"
+                - listitem [ref=e612]:
+                  - strong [ref=e613]: QA-5649
+                  - text: "(NOT_DONE): Verify heartbeat endpoint returns correct Content-Type header"
+                - listitem [ref=e614]:
+                  - strong [ref=e615]: QA-5650
+                  - text: "(NOT_DONE): Verify Chroma container logs show no critical errors during heartbeat"
+                - listitem [ref=e616]:
+                  - strong [ref=e617]: QA-5651
+                  - text: "(NOT_DONE): Verify multiple consecutive heartbeat requests all return HTTP 200"
+                - listitem [ref=e618]:
+                  - strong [ref=e619]: QA-5652
+                  - text: "(NOT_DONE): Verify /api/system/rag/status returns HTTP 200 with mode='HTTP' after compose up"
+                - listitem [ref=e620]:
+                  - strong [ref=e621]: QA-5653
+                  - text: "(NOT_DONE): Verify backend startup log contains 'RAG mode=HTTP' message"
+                - listitem [ref=e622]:
+                  - strong [ref=e623]: QA-5654
+                  - text: "(NOT_DONE): Verify response Content-Type is application/json for /api/system/rag/status"
+                - listitem [ref=e624]:
+                  - strong [ref=e625]: QA-5655
+                  - text: "(NOT_DONE): Verify /api/system/rag/status response schema includes all expected fields"
+                - listitem [ref=e626]:
+                  - strong [ref=e627]: QA-5656
+                  - text: "(NOT_DONE): Verify /api/system/rag/status is accessible without authentication"
+                - listitem [ref=e628]:
+                  - strong [ref=e629]: QA-5657
+                  - text: "(NOT_DONE): Verify RAG mode=HTTP log appears only once during startup (no duplicate entries)"
+                - listitem [ref=e630]:
+                  - strong [ref=e631]: QA-5658
+                  - text: "(NOT_DONE): Verify /api/system/rag/status returns mode='HTTP' after container restart"
+                - listitem [ref=e632]:
+                  - strong [ref=e633]: QA-5659
+                  - text: "(NOT_DONE): Verify endpoint responds within acceptable latency threshold"
+                - listitem [ref=e634]:
+                  - strong [ref=e635]: QA-5660
+                  - text: "(NOT_DONE): Verify /api/system/rag/status returns 404 or connection refused before compose up"
+                - listitem [ref=e636]:
+                  - strong [ref=e637]: QA-5661
+                  - text: "(NOT_DONE): Verify 'RAG mode=HTTP' log entry appears before the service accepts requests"
+                - listitem [ref=e638]:
+                  - strong [ref=e639]: QA-5662
+                  - text: "(NOT_DONE): Verify /api/system/rag/status mode value is case-sensitive 'HTTP' not 'http' or 'Http'"
+                - listitem [ref=e640]:
+                  - strong [ref=e641]: QA-5663
+                  - text: "(NOT_DONE): Verify backend log 'RAG mode=HTTP' message format and content via manual log review"
+                - listitem [ref=e642]:
+                  - strong [ref=e643]: QA-5664
+                  - text: "(NOT_DONE): Verify Service Monitor card is visible on the frontend dashboard"
+                - listitem [ref=e644]:
+                  - strong [ref=e645]: QA-5665
+                  - text: "(NOT_DONE): Verify RAG card displays a green HTTP badge indicating healthy status"
+                - listitem [ref=e646]:
+                  - strong [ref=e647]: QA-5666
+                  - text: "(NOT_DONE): Verify RAG card displays a non-zero total document count"
+                - listitem [ref=e648]:
+                  - strong [ref=e649]: QA-5667
+                  - text: "(NOT_DONE): Verify RAG card HTTP badge turns red/error state when RAG service is down"
+                - listitem [ref=e650]:
+                  - strong [ref=e651]: QA-5668
+                  - text: "(NOT_DONE): Verify RAG card document count shows zero when collection is empty"
+                - listitem [ref=e652]:
+                  - strong [ref=e653]: QA-5669
+                  - text: "(NOT_DONE): Verify RAG card document count reflects accurate real-time collection size"
+                - listitem [ref=e654]:
+                  - strong [ref=e655]: QA-5670
+                  - text: "(NOT_DONE): Verify Service Monitor page loads without console errors related to RAG card"
+                - listitem [ref=e656]:
+                  - strong [ref=e657]: QA-5671
+                  - text: "(NOT_DONE): Verify RAG card layout and UI elements are correctly rendered on different screen sizes"
+                - listitem [ref=e658]:
+                  - strong [ref=e659]: QA-5672
+                  - text: "(NOT_DONE): Verify RAG card data auto-refreshes or updates without requiring a full page reload"
+                - listitem [ref=e660]:
+                  - strong [ref=e661]: QA-5673
+                  - text: "(NOT_DONE): Verify RAG card HTTP badge label text is accurate and meaningful"
+                - listitem [ref=e662]:
+                  - strong [ref=e663]: QA-5674
+                  - text: "(NOT_DONE): Verify RAG card title and collection name are correctly displayed"
+                - listitem [ref=e664]:
+                  - strong [ref=e665]: QA-5675
+                  - text: "(NOT_DONE): Verify RAG card document count displays a large number without UI truncation or overflow"
+                - listitem [ref=e666]:
+                  - strong [ref=e667]: QA-5676
+                  - text: "(NOT_DONE): Verify full E2E documentation generation for FEATURE issue type"
+                - listitem [ref=e668]:
+                  - strong [ref=e669]: QA-5677
+                  - text: "(NOT_DONE): Verify generated documentation metrics are correct after generation"
+                - listitem [ref=e670]:
+                  - strong [ref=e671]: QA-5678
+                  - text: "(NOT_DONE): Verify documentation data persists after page reload"
+                - listitem [ref=e672]:
+                  - strong [ref=e673]: QA-5679
+                  - text: "(NOT_DONE): Verify new entry is created in Chroma 'feature_documentation' collection after generation"
+                - listitem [ref=e674]:
+                  - strong [ref=e675]: QA-5680
+                  - text: "(NOT_DONE): Verify all 6 individual documentation sections render with correct headings and structure"
+                - listitem [ref=e676]:
+                  - strong [ref=e677]: QA-5681
+                  - text: "(NOT_DONE): Verify 'Generate' button behavior during active generation (loading state)"
+                - listitem [ref=e678]:
+                  - strong [ref=e679]: QA-5682
+                  - text: "(NOT_DONE): Verify documentation generation does not trigger for non-FEATURE issue types"
+                - listitem [ref=e680]:
+                  - strong [ref=e681]: QA-5683
+                  - text: "(NOT_DONE): Verify regeneration of documentation overwrites previous Chroma entry rather than creating duplicate"
+                - listitem [ref=e682]:
+                  - strong [ref=e683]: QA-5684
+                  - text: "(NOT_DONE): Verify documentation generation handles service timeout or failure gracefully"
+                - listitem [ref=e684]:
+                  - strong [ref=e685]: QA-5685
+                  - text: "(NOT_DONE): Verify Chroma indexed entry content is semantically searchable after generation"
+                - listitem [ref=e686]:
+                  - strong [ref=e687]: QA-5686
+                  - text: "(NOT_DONE): Verify documentation tab is accessible and Generate button is visible for FEATURE issues"
+                - listitem [ref=e688]:
+                  - strong [ref=e689]: QA-5687
+                  - text: "(NOT_DONE): Verify complete E2E regression flow matches timing and performance benchmarks"
+                - listitem [ref=e690]:
+                  - strong [ref=e691]: QA-5688
+                  - text: "(NOT_DONE): Verify empty state is displayed when selecting a FEATURE with no FeatureDocumentation row"
+                - listitem [ref=e692]:
+                  - strong [ref=e693]: QA-5689
+                  - text: "(NOT_DONE): Verify Generate CTA button is visible in the empty state"
+                - listitem [ref=e694]:
+                  - strong [ref=e695]: QA-5690
+                  - text: "(NOT_DONE): Verify Generate CTA button is interactable and triggers documentation generation"
+                - listitem [ref=e696]:
+                  - strong [ref=e697]: QA-5691
+                  - text: "(NOT_DONE): Verify empty state does NOT appear when a FEATURE has an existing FeatureDocumentation row"
+                - listitem [ref=e698]:
+                  - strong [ref=e699]: QA-5692
+                  - text: "(NOT_DONE): Verify empty state persists after page refresh for a FEATURE without documentation"
+                - listitem [ref=e700]:
+                  - strong [ref=e701]: QA-5693
+                  - text: "(NOT_DONE): Verify switching between a FEATURE with documentation and one without shows correct states"
+                - listitem [ref=e702]:
+                  - strong [ref=e703]: QA-5694
+                  - text: "(NOT_DONE): Verify empty state UI contains appropriate messaging and no broken layout"
+                - listitem [ref=e704]:
+                  - strong [ref=e705]: QA-5695
+                  - text: "(NOT_DONE): Verify empty state is shown for every FEATURE that lacks a FeatureDocumentation row (multiple features)"
+                - listitem [ref=e706]:
+                  - strong [ref=e707]: QA-5696
+                  - text: "(NOT_DONE): Verify database state confirms no FeatureDocumentation row for test FEATURE prior to testing"
+                - listitem [ref=e708]:
+                  - strong [ref=e709]: QA-5697
+                  - text: "(NOT_DONE): Verify empty state disappears and documentation is shown after successful generation"
+                - listitem [ref=e710]:
+                  - strong [ref=e711]: QA-5698
+                  - text: "(NOT_DONE): Verify empty state behavior when no FEATURE is selected (initial load / unselected state)"
+                - listitem [ref=e712]:
+                  - strong [ref=e713]: QA-5699
+                  - text: "(NOT_DONE): Verify Generate CTA in empty state is disabled or hidden for users without generation permissions"
+                - listitem [ref=e714]:
+                  - strong [ref=e715]: QA-5700
+                  - text: "(NOT_DONE): Verify Generate button creates a new row in the data table"
+                - listitem [ref=e716]:
+                  - strong [ref=e717]: QA-5701
+                  - text: "(NOT_DONE): Verify all 6 sections (overview, requirements, implementation, architecture, techStack, testingStrategy) populate after Generate"
+                - listitem [ref=e718]:
+                  - strong [ref=e719]: QA-5702
+                  - text: "(NOT_DONE): Verify Generate button shows a loading/waiting state during content generation"
+                - listitem [ref=e720]:
+                  - strong [ref=e721]: QA-5703
+                  - text: "(NOT_DONE): Verify each populated section renders with descriptive placeholder when generator returns no content"
+                - listitem [ref=e722]:
+                  - strong [ref=e723]: QA-5704
+                  - text: "(NOT_DONE): Verify Generate button is not re-clickable while generation is in progress (no duplicate rows)"
+                - listitem [ref=e724]:
+                  - strong [ref=e725]: QA-5705
+                  - text: "(NOT_DONE): Verify the newly generated row persists after page refresh"
+                - listitem [ref=e726]:
+                  - strong [ref=e727]: QA-5706
+                  - text: "(NOT_DONE): Verify Generate button behavior when API/generator service is unavailable"
+                - listitem [ref=e728]:
+                  - strong [ref=e729]: QA-5707
+                  - text: "(NOT_DONE): Verify the content of all 6 sections is contextually relevant and not generic filler"
+                - listitem [ref=e730]:
+                  - strong [ref=e731]: QA-5708
+                  - text: "(NOT_DONE): Verify multiple successive Generate clicks each create a unique row with all 6 sections populated"
+                - listitem [ref=e732]:
+                  - strong [ref=e733]: QA-5709
+                  - text: "(NOT_DONE): Verify the 6 populated sections are visually rendered and readable in the UI"
+                - listitem [ref=e734]:
+                  - strong [ref=e735]: QA-5710
+                  - text: "(NOT_DONE): Verify Generate functionality works correctly for authenticated users with different roles/permissions"
+                - listitem [ref=e736]:
+                  - strong [ref=e737]: QA-5711
+                  - text: "(NOT_DONE): Verify Generate button response time meets acceptable performance threshold"
+                - listitem [ref=e738]:
+                  - strong [ref=e739]: QA-5712
+                  - text: "(NOT_DONE): Verify clicking Generate twice creates only one FeatureDocumentation row"
+                - listitem [ref=e740]:
+                  - strong [ref=e741]: QA-5713
+                  - text: "(NOT_DONE): Verify second Generate call updates existing row rather than inserting a new one"
+                - listitem [ref=e742]:
+                  - strong [ref=e743]: QA-5714
+                  - text: "(NOT_DONE): Verify rapid consecutive Generate clicks do not create duplicate rows"
+                - listitem [ref=e744]:
+                  - strong [ref=e745]: QA-5715
+                  - text: "(NOT_DONE): Verify Generate on a pre-existing FeatureDocumentation row updates it without duplication"
+                - listitem [ref=e746]:
+                  - strong [ref=e747]: QA-5716
+                  - text: "(NOT_DONE): Verify UI reflects updated content after second Generate without showing stale data"
+                - listitem [ref=e748]:
+                  - strong [ref=e749]: QA-5717
+                  - text: "(NOT_DONE): Verify Generate button state/loading indicator prevents accidental double submissions"
+                - listitem [ref=e750]:
+                  - strong [ref=e751]: QA-5718
+                  - text: "(NOT_DONE): Verify different featureIssueIds each produce their own single row without cross-contamination"
+                - listitem [ref=e752]:
+                  - strong [ref=e753]: QA-5719
+                  - text: "(NOT_DONE): Verify the database unique constraint or upsert logic on featureIssueId"
+                - listitem [ref=e754]:
+                  - strong [ref=e755]: QA-5720
+                  - text: "(NOT_DONE): Verify Generate behavior when generation process fails midway on first attempt then succeeds on second"
+                - listitem [ref=e756]:
+                  - strong [ref=e757]: QA-5721
+                  - text: "(NOT_DONE): Verify that row content is updated with latest data on second Generate call"
+                - listitem [ref=e758]:
+                  - strong [ref=e759]: QA-5722
+                  - text: "(NOT_DONE): Verify concurrent Generate requests for the same featureIssueId result in a single row"
+                - listitem [ref=e760]:
+                  - strong [ref=e761]: QA-5723
+                  - text: "(NOT_DONE): Verify the total row count in FeatureDocumentation does not grow unboundedly after multiple Generate calls across sessions"
+                - listitem [ref=e762]:
+                  - strong [ref=e763]: QA-5724
+                  - text: "(NOT_DONE): Verify two badges render for a valid two-item techStack JSON array"
+                - listitem [ref=e764]:
+                  - strong [ref=e765]: QA-5725
+                  - text: "(NOT_DONE): Verify badge text content matches the values in the JSON array"
+                - listitem [ref=e766]:
+                  - strong [ref=e767]: QA-5726
+                  - text: "(NOT_DONE): Verify single-item techStack array renders exactly one badge"
+                - listitem [ref=e768]:
+                  - strong [ref=e769]: QA-5727
+                  - text: "(NOT_DONE): Verify no badges render when techStack is an empty JSON array"
+                - listitem [ref=e770]:
+                  - strong [ref=e771]: QA-5728
+                  - text: "(NOT_DONE): Verify badges render correctly for a large techStack array (10+ items)"
+                - listitem [ref=e772]:
+                  - strong [ref=e773]: QA-5729
+                  - text: "(NOT_DONE): Verify badges render when techStack JSON contains special characters"
+                - listitem [ref=e774]:
+                  - strong [ref=e775]: QA-5730
+                  - text: "(NOT_DONE): Verify no badges render when techStack field is null or missing"
+                - listitem [ref=e776]:
+                  - strong [ref=e777]: QA-5731
+                  - text: "(NOT_DONE): Verify badge rendering fails gracefully when techStack is an invalid JSON string"
+                - listitem [ref=e778]:
+                  - strong [ref=e779]: QA-5732
+                  - text: "(NOT_DONE): Verify badge count updates dynamically when techStack array is modified"
+                - listitem [ref=e780]:
+                  - strong [ref=e781]: QA-5733
+                  - text: "(NOT_DONE): Verify techStack badges have visible and consistent styling"
+                - listitem [ref=e782]:
+                  - strong [ref=e783]: QA-5734
+                  - text: "(NOT_DONE): Verify badges render correctly when techStack array contains duplicate values"
+                - listitem [ref=e784]:
+                  - strong [ref=e785]: QA-5735
+                  - text: "(NOT_DONE): Verify badge rendering when techStack JSON array contains an empty string entry"
+  - button "RAG HTTP 3,526 docs" [ref=e786]:
+    - img [ref=e96]
+    - generic [ref=e101]: RAG HTTP
+    - generic [ref=e102]: 3,526 docs
+    - img [ref=e103]
+  - button "Open Next.js Dev Tools" [ref=e792] [cursor=pointer]:
+    - img [ref=e793]
+  - alert [ref=e105]
+  - generic [ref=e797]:
+    - img [ref=e798]
+    - generic [ref=e800]:
+      - generic [ref=e801]:
+        - generic [ref=e802]: CB-2038
+        - generic [ref=e803]: 8/21
+      - paragraph [ref=e804]: "CB-2077 — [QA] E2-6: Last-indexed timestamp updates after regenerate"
+      - paragraph [ref=e805]: Planning tasks...
+    - generic [ref=e806]:
+      - button "Pause" [ref=e807]:
+        - img [ref=e808]
+      - button "Skip current task" [ref=e811]:
+        - img [ref=e812]
+      - button "Abort" [ref=e814]:
+        - img [ref=e815]
+      - button "Expand queue" [ref=e817]:
+        - img [ref=e818]

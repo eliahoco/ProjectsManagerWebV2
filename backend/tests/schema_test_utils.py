@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
 from models.database import Base
 # Import all models so metadata is populated
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
+from models.grouping import IssueGroup, IssueGroupMember
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
 from models.documentation import ExecutionSummary, FeatureDocumentation
 from models.git import CommitLink, GitSyncState
@@ -249,6 +250,8 @@ ALL_TABLES = [
     "Comment",
     "Activity",
     "IssueLink",
+    "IssueGroup",
+    "IssueGroupMember",
     "IssueSequence",
     "QATask",
     "QATaskIssueLink",
@@ -267,6 +270,8 @@ SQLALCHEMY_MANAGED_TABLES = [
     "Comment",
     "Activity",
     "IssueLink",
+    "IssueGroup",
+    "IssueGroupMember",
     "IssueSequence",
     "QATask",
     "QATaskIssueLink",

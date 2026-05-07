@@ -14,6 +14,7 @@ import { OfflineIndicator } from '@/components/ui/offline-indicator';
 import { getErrorMessage } from '@/hooks/use-mutation-error';
 import { AutoPilotProvider } from '@/contexts/AutoPilotContext';
 import { AutoPilotFloatingBar } from '@/components/codeboard/AutoPilotFloatingBar';
+import { useAutoPilotEvents } from '@/hooks/useAutoPilotEvents';
 
 /**
  * Extract error title based on error type
@@ -97,6 +98,16 @@ function createQueryClient(showToast: (title: string, message: string) => void) 
 }
 
 /**
+ * Mounts the AutoPilot SSE event subscriber once the AutoPilotProvider tree is
+ * ready. Kept as a separate component so it sits inside both ToastProvider and
+ * AutoPilotProvider without touching unrelated render trees.
+ */
+function AutoPilotEventSubscriber() {
+  useAutoPilotEvents();
+  return null;
+}
+
+/**
  * Wrapper that creates QueryClient with toast access
  */
 function QueryClientWrapper({ children }: { children: ReactNode }) {
@@ -114,6 +125,7 @@ function QueryClientWrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AutoPilotProvider>
+        <AutoPilotEventSubscriber />
         {children}
         <AutoPilotFloatingBar />
       </AutoPilotProvider>

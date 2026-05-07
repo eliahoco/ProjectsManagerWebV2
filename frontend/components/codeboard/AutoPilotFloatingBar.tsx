@@ -6,21 +6,67 @@
  *
  * Now reads from the backend-driven queue state via AutoPilotContext.
  * Shows token exhaustion states with Wait/Switch Model/Abort options.
+ *
+ * E5 additions:
+ * - Crash-recovery banner (fetched from GET /api/execute/queue/recovery-status on mount)
+ * - Countdown timer when waiting_reset + pause_reason === 'token_exhaustion' + reset_time
+ * - Visual border distinction per queue state
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Loader2, Pause, Play, SkipForward, Square, ChevronDown, ChevronUp,
-  CheckCircle2, AlertCircle, Clock, Zap, X, Timer, RefreshCw,
+  CheckCircle2, AlertCircle, Clock, Timer, RefreshCw, ShieldAlert,
 } from 'lucide-react';
 import { useAutoPilot } from '@/contexts/AutoPilotContext';
-import type { AbortAction, QueueTask } from '@/contexts/AutoPilotContext';
+import type { AbortAction, QueueTask, RecoveredQueueInfo } from '@/contexts/AutoPilotContext';
 import { cn } from '@/lib/utils';
+
+// Direct backend URL for non-proxied endpoints.
+const BACKEND_API = 'http://localhost:8401/api/execute';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatCountdown(targetIso: string): string {
+  const diffMs = new Date(targetIso).getTime() - Date.now();
+  if (diffMs <= 0) return '0m 0s';
+  const totalSecs = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
+function formatResetClock(targetIso: string): string {
+  try {
+    return new Date(targetIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
+}
+
+// ─── Border colour derived from queue state ───────────────────────────────────
+
+function getBorderClass(
+  isTokenExhausted: boolean,
+  pauseReason: string | null,
+  isPaused: boolean,
+): string {
+  if (isTokenExhausted && pauseReason === 'crash_recovery') return 'border-red-600/60';
+  if (isTokenExhausted) return 'border-amber-600/60';
+  if (isPaused && pauseReason === 'manual') return 'border-zinc-500/40';
+  if (isPaused) return 'border-yellow-600/40';
+  return 'border-amber-600/40';
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function AutoPilotFloatingBar() {
   const {
     state, pauseAutoPilot, resumeAutoPilot, skipCurrentTask,
     abortAutoPilot, waitForReset, switchModel,
+    clearRecoveredQueue, setRecoveredQueues,
   } = useAutoPilot();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -33,6 +79,10 @@ export function AutoPilotFloatingBar() {
     models: string[];
   }>>([]);
 
+  // Countdown display string — updated every second when we have a reset_time.
+  const [countdown, setCountdown] = useState<string>('');
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Fetch available models when token dialog opens
   useEffect(() => {
     if (!showTokenDialog) return;
@@ -44,6 +94,8 @@ export function AutoPilotFloatingBar() {
 
   // Derived values used below — safe to compute even when not active.
   const isTokenExhausted = state.isWaitingReset;
+  const pauseReason = state.pauseReason;
+  const resetTime = state.resetTime;
 
   // Auto-show token dialog when waiting_reset.
   // Must be declared before any conditional return per Rules of Hooks —
@@ -55,10 +107,48 @@ export function AutoPilotFloatingBar() {
     }
   }, [isTokenExhausted, showTokenDialog, showAbortDialog]);
 
+  // Fetch recovery status on mount — shows crash-recovery banner if needed.
+  useEffect(() => {
+    fetch(`${BACKEND_API}/queue/recovery-status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.recovered_count > 0 && Array.isArray(data.queues)) {
+          setRecoveredQueues(data.queues as RecoveredQueueInfo[]);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount; setRecoveredQueues is stable (useCallback)
+
+  // Countdown timer — starts/stops based on reset_time availability.
+  useEffect(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    if (isTokenExhausted && pauseReason === 'token_exhaustion' && resetTime) {
+      // Update immediately, then every second.
+      setCountdown(formatCountdown(resetTime));
+      countdownIntervalRef.current = setInterval(() => {
+        setCountdown(formatCountdown(resetTime));
+      }, 1000);
+    } else {
+      setCountdown('');
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [isTokenExhausted, pauseReason, resetTime]);
+
   if (!state.isActive) return null;
 
   const currentTask = state.queue[state.currentIndex];
-  const { total, completed, failed, skipped, percent } = state.progress;
+  const { total, completed, skipped, percent } = state.progress;
   const pendingCount = state.queue.filter(q => q.status === 'pending' || q.status === 'running').length;
 
   const handleAbort = async (action: AbortAction) => {
@@ -76,8 +166,67 @@ export function AutoPilotFloatingBar() {
     await switchModel(provider, model);
   };
 
+  const handleCrashRecoveryAction = async (
+    action: 'resume' | 'skip' | 'abort',
+    queue: RecoveredQueueInfo,
+  ) => {
+    // Act first, then clear from recovery set.
+    if (action === 'resume') {
+      await resumeAutoPilot();
+    } else if (action === 'skip') {
+      await skipCurrentTask();
+    } else {
+      setShowAbortDialog(true);
+    }
+    await clearRecoveredQueue(queue.id);
+  };
+
+  const borderClass = getBorderClass(isTokenExhausted, pauseReason ?? null, state.isPaused);
+
   return (
-    <div className="fixed bottom-4 right-4 z-[70] w-[420px] bg-zinc-900 border border-amber-600/40 rounded-xl shadow-2xl overflow-hidden">
+    <div className={cn(
+      'fixed bottom-4 right-4 z-[70] w-[420px] bg-zinc-900 border rounded-xl shadow-2xl overflow-hidden',
+      borderClass,
+    )}>
+
+      {/* Crash-recovery banner — shown when backend restart detected */}
+      {state.recoveredQueues.length > 0 && state.recoveredQueues.map(rq => (
+        <div
+          key={rq.id}
+          className="px-4 py-3 bg-red-900/20 border-b border-red-600/40 flex flex-col gap-2"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="text-sm text-red-300 font-medium flex-1">
+              AutoPilot recovered after backend restart — {rq.feature_key}
+            </span>
+          </div>
+          <p className="text-xs text-zinc-400">
+            Review and choose how to proceed:
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleCrashRecoveryAction('resume', rq)}
+              className="px-3 py-1.5 rounded bg-green-900/50 hover:bg-green-900/70 text-green-300 text-xs transition-colors"
+            >
+              Resume
+            </button>
+            <button
+              onClick={() => handleCrashRecoveryAction('skip', rq)}
+              className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors"
+            >
+              Skip current task
+            </button>
+            <button
+              onClick={() => handleCrashRecoveryAction('abort', rq)}
+              className="px-3 py-1.5 rounded bg-red-900/50 hover:bg-red-900/70 text-red-300 text-xs transition-colors"
+            >
+              Abort
+            </button>
+          </div>
+        </div>
+      ))}
+
       {/* Main bar */}
       <div className="px-4 py-3 flex items-center gap-3">
         {/* Spinner / status */}
@@ -103,6 +252,11 @@ export function AutoPilotFloatingBar() {
                 Token Exhausted
               </span>
             )}
+            {state.isPaused && pauseReason === 'manual' && !isTokenExhausted && (
+              <span className="text-xs px-1.5 py-0.5 bg-zinc-700 text-zinc-400 rounded">
+                Paused
+              </span>
+            )}
           </div>
           {currentTask && (
             <p className="text-xs text-zinc-400 truncate">
@@ -113,6 +267,22 @@ export function AutoPilotFloatingBar() {
             <p className="text-xs text-cyan-400/70 truncate mt-0.5">
               {currentTask.session_info.current_action}
             </p>
+          )}
+
+          {/* Countdown row — only when token_exhaustion + reset_time */}
+          {isTokenExhausted && pauseReason === 'token_exhaustion' && resetTime && countdown && (
+            <div className="flex items-center gap-2 mt-1">
+              <Timer className="w-3 h-3 text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-300">
+                Auto-resumes at {formatResetClock(resetTime)} ({countdown} left)
+              </span>
+              <button
+                onClick={resumeAutoPilot}
+                className="ml-auto px-2 py-0.5 rounded bg-amber-900/50 hover:bg-amber-900/70 text-amber-300 text-xs transition-colors"
+              >
+                Resume now
+              </button>
+            </div>
           )}
         </div>
 
@@ -256,7 +426,9 @@ export function AutoPilotFloatingBar() {
                 Wait for Token Reset
               </div>
               <span className="block text-xs text-zinc-500 mt-0.5">
-                Auto-resume when quota resets (default: ~1 hour)
+                {resetTime
+                  ? `Auto-resume at ${formatResetClock(resetTime)} (${countdown || '…'})`
+                  : 'Auto-resume when quota resets (default: ~1 hour)'}
               </span>
             </button>
 

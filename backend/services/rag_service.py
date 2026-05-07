@@ -3,6 +3,7 @@ RAG Service - Semantic Search using ChromaDB
 """
 
 import chromadb
+import os
 import socket
 from chromadb.config import Settings
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
@@ -37,12 +38,21 @@ def _safe_json_list(value: Optional[str]) -> List[str]:
     return []
 
 
+PERSISTENT_FALLBACK_PATH = "./data/chroma"
+
+
 class RAGService:
     """Service for RAG (Retrieval Augmented Generation) using ChromaDB"""
 
     def __init__(self):
         self._client = None
         self._collections: Dict[str, Any] = {}
+        # CB-2043: surface RAG mode at startup so silent fallback to the
+        # embedded SQLite path can never recur. `_mode` is one of
+        # {"HTTP", "PERSISTENT", None}; `_mode_detail` carries the host:port
+        # or filesystem path that backs the active client.
+        self._mode: Optional[str] = None
+        self._mode_detail: Optional[str] = None
 
     @property
     def client(self):
@@ -60,12 +70,30 @@ class RAGService:
             self._fallback_to_persistent()
         return self._client
 
+    def _reset_state(self) -> None:
+        """CB-2212: zero out every field that depends on the active client.
+
+        Both init paths (`_init_client_blocking`, `_fallback_to_persistent`)
+        must reset identically — otherwise a future "reconnect" caller can
+        leave `_collections` pointing at handles bound to a dead client
+        (the half-initialised state CB-2043's reset block aimed to prevent).
+        """
+        self._client = None
+        self._mode = None
+        self._mode_detail = None
+        self._collections = {}
+
     def _init_client_blocking(self) -> None:
         """Blocking: probe TCP, construct HttpClient, verify via heartbeat.
 
         Raises on any connectivity failure so the caller can fall back.
         Intended to be called via asyncio.to_thread() from the lifespan.
         """
+        # CB-2043 (review): reset mode/client up front so a mid-init failure
+        # cannot leave stale `_mode` reporting HTTP while `_client` is None
+        # or still pointing at a previous backend.
+        self._reset_state()
+
         host = settings.CHROMA_HOST
         port = settings.CHROMA_PORT
 
@@ -89,14 +117,140 @@ class RAGService:
             ) from exc
 
         self._client = client
+        self._mode = "HTTP"
+        self._mode_detail = f"{host}:{port}"
 
     def _fallback_to_persistent(self) -> None:
         """Switch to a local PersistentClient (no external server needed)."""
+        # CB-2043 (review): reset state so a PersistentClient(...) raise
+        # cannot leave the prior HTTP `_mode` advertised next to a now-None
+        # client.
+        self._reset_state()
+
         self._client = chromadb.PersistentClient(
-            path="./data/chroma",
+            path=PERSISTENT_FALLBACK_PATH,
             settings=Settings(anonymized_telemetry=False),
         )
-        self._collections = {}
+        self._mode = "PERSISTENT"
+        self._mode_detail = os.path.abspath(PERSISTENT_FALLBACK_PATH)
+
+    def describe_mode(self) -> str:
+        """CB-2043: build a one-line summary of the active RAG backend.
+
+        Format:
+          RAG mode=HTTP host=<host> port=<port> collections=<N>
+          RAG mode=PERSISTENT path=<abspath> collections=<N>
+          RAG mode=UNINITIALIZED
+
+        Collection count is best-effort — a count failure must never block
+        startup logging, so we fall back to "?" rather than raise.
+        """
+        if self._mode is None or self._client is None:
+            return "RAG mode=UNINITIALIZED"
+
+        try:
+            collections = self._client.list_collections()
+            count = len(collections) if collections is not None else 0
+            count_str = str(count)
+        except Exception as exc:
+            logger.debug("list_collections failed during describe_mode: %s", exc)
+            count_str = "?"
+
+        if self._mode == "HTTP":
+            host, _, port = (self._mode_detail or "").partition(":")
+            return (
+                f"RAG mode=HTTP host={host or '?'} port={port or '?'} "
+                f"collections={count_str}"
+            )
+        return (
+            f"RAG mode=PERSISTENT path={self._mode_detail or '?'} "
+            f"collections={count_str}"
+        )
+
+    def get_status_payload(self) -> Dict[str, Any]:
+        """CB-2045: structured status snapshot for /api/system/rag/status.
+
+        Returns a dict with:
+          - mode: "HTTP" | "PERSISTENT" | "UNINITIALIZED"
+          - host: str (host for HTTP; abspath for PERSISTENT; "" otherwise)
+          - port: int (TCP port for HTTP; 0 for PERSISTENT/UNINITIALIZED)
+          - collections: list[{"name": str, "count": int|None}]
+          - total_docs: int (sum of per-collection counts; 0 on partial failure)
+          - healthy: bool (True iff client is up AND collection enumeration
+            succeeded AND, for HTTP, heartbeat succeeded)
+
+        Best-effort: any error during collection enumeration or per-collection
+        count is captured and reflected by `healthy=False`. The endpoint must
+        never raise — silent fallback or a half-broken backend is exactly what
+        this surface exists to expose.
+        """
+        if self._mode is None or self._client is None:
+            return {
+                "mode": "UNINITIALIZED",
+                "host": "",
+                "port": 0,
+                "collections": [],
+                "total_docs": 0,
+                "healthy": False,
+            }
+
+        if self._mode == "HTTP":
+            host_part, _, port_part = (self._mode_detail or "").partition(":")
+            host = host_part
+            try:
+                port = int(port_part) if port_part else 0
+            except ValueError:
+                port = 0
+        else:
+            host = self._mode_detail or ""
+            port = 0
+
+        healthy = True
+
+        if self._mode == "HTTP":
+            try:
+                self._client.heartbeat()
+            except Exception as exc:
+                # Surface at WARNING — this endpoint exists precisely to
+                # expose silent backend failures (CB-2043/CB-2045 motivation).
+                logger.warning(
+                    "RAG heartbeat failed during get_status_payload: %s", exc
+                )
+                healthy = False
+
+        collections_payload: List[Dict[str, Any]] = []
+        total_docs = 0
+        try:
+            collections = self._client.list_collections() or []
+        except Exception as exc:
+            logger.warning(
+                "RAG list_collections failed during get_status_payload: %s", exc
+            )
+            collections = []
+            healthy = False
+
+        for col in collections:
+            name = getattr(col, "name", None) or str(col)
+            try:
+                count = col.count()
+                total_docs += int(count)
+            except Exception as exc:
+                logger.debug(
+                    "count() failed for collection %s in get_status_payload: %s",
+                    name, exc,
+                )
+                count = None
+                healthy = False
+            collections_payload.append({"name": name, "count": count})
+
+        return {
+            "mode": self._mode,
+            "host": host,
+            "port": port,
+            "collections": collections_payload,
+            "total_docs": total_docs,
+            "healthy": healthy,
+        }
 
     def get_collection(self, project_id: str):
         """Get or create a collection for a project"""

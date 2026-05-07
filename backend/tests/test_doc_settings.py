@@ -14,6 +14,7 @@ test_documentation_api.py) so tests never touch production codeboard.db.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import sys
@@ -172,6 +173,69 @@ async def test_apply_retention_caps_per_issue(factory):
             counts[r.issueId] = counts.get(r.issueId, 0) + 1
         assert counts == {"issue-A": 2, "issue-B": 1}
         await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_apply_retention_batches_and_yields(factory, monkeypatch):
+    """CB-2123: per-issue walk commits per batch and yields to event loop.
+
+    Drops the batch size to 5, seeds 12 issues × 3 rows with maxPerIssue=1,
+    asserts: (a) total purge count is correct (each issue → 2 rows
+    purged → 24 rows), (b) `db.commit` was invoked more than once during
+    the pass (proves batching, not single-transaction), (c) `asyncio.sleep(0)`
+    was awaited at least once between batches (proves event-loop yield).
+    """
+    import services.doc_settings_service as svc
+
+    monkeypatch.setattr(svc, "_RETENTION_BATCH_SIZE", 5)
+
+    sleep_calls: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def _tracking_sleep(delay: float):
+        sleep_calls.append(delay)
+        # Honor the requested delay so any stray sleep(N) elsewhere in
+        # the event loop during this test isn't silently shortened.
+        await real_sleep(delay)
+
+    monkeypatch.setattr(svc.asyncio, "sleep", _tracking_sleep)
+
+    base = datetime.utcnow() - timedelta(days=1)
+    async with factory() as db:
+        settings = await get_or_create_settings(db)
+        settings.retentionDays = 10_000
+        settings.maxPerIssue = 1
+        await db.flush()
+        for issue_idx in range(12):
+            for row_idx in range(3):
+                db.add(_summary(
+                    f"i{issue_idx}-r{row_idx}",
+                    f"issue-{issue_idx}",
+                    base + timedelta(seconds=issue_idx * 10 + row_idx),
+                ))
+        await db.commit()
+
+        commit_count_before = 0
+        original_commit = db.commit
+
+        async def _counting_commit():
+            nonlocal commit_count_before
+            commit_count_before += 1
+            await original_commit()
+
+        monkeypatch.setattr(db, "commit", _counting_commit)
+
+        purged_age, purged_cap = await svc.apply_retention(db)
+
+    assert purged_age == 0
+    assert purged_cap == 12 * 2  # 12 issues × (3 rows - 1 keep) = 24
+    # Phase 1 commits once + phase 2 commits floor(12/5)=2 at batch boundaries
+    # + 1 final flush for the trailing 2 issues = exactly 4 commits.
+    # Tight assertion (>=4 not >=3) so a regression that drops the trailing
+    # flush would be caught.
+    assert commit_count_before >= 4, f"expected ≥4 commits, got {commit_count_before}"
+    assert any(d == 0 for d in sleep_calls), \
+        f"expected asyncio.sleep(0) yields, got {sleep_calls}"
 
 
 def _summary(id_: str, issue_id: str, executed_at: datetime) -> ExecutionSummary:

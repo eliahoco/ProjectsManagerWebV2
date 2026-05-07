@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,14 +40,39 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _ensure_issue_exists(db: AsyncSession, issue_id: str) -> None:
-    """Raise NotFoundError if the issue does not exist.
+# CB-2117: every endpoint takes a required ``projectId`` query param so the
+# id-only path lookups (``Issue.id == issue_id``) cannot be exploited for
+# cross-project IDOR. The helpers below scope on ``(id, projectId)`` and
+# return 404 on mismatch — caller-supplied projectId never widens the query.
+ProjectIdQuery = Query(
+    ...,
+    alias="projectId",
+    min_length=1,
+    max_length=128,
+    description=(
+        "Project the issue belongs to. Required to scope lookups and "
+        "block cross-project access via guessed issue ids (CB-2117)."
+    ),
+)
+
+
+async def _ensure_issue_exists(
+    db: AsyncSession, issue_id: str, project_id: str
+) -> None:
+    """Raise NotFoundError if the issue does not exist within ``project_id``.
 
     Distinguishes "issue missing" from "issue exists but has no docs yet" so
     callers can render the empty state without surfacing a 404 when the
-    issue itself is fine.
+    issue itself is fine. The ``projectId`` predicate is the IDOR guard
+    (CB-2117) — a wrong projectId returns the same 404 as a missing id, so
+    the response can never be used to enumerate the issue/project space.
     """
-    result = await db.execute(select(Issue.id).where(Issue.id == issue_id))
+    result = await db.execute(
+        select(Issue.id).where(
+            Issue.id == issue_id,
+            Issue.projectId == project_id,
+        )
+    )
     if result.scalar_one_or_none() is None:
         raise NotFoundError("Issue", issue_id)
 
@@ -58,14 +83,15 @@ async def _ensure_issue_exists(db: AsyncSession, issue_id: str) -> None:
 )
 async def list_execution_summaries(
     issue_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> List[ExecutionSummaryResponse]:
     """Return all ExecutionSummaries for an issue, newest first.
 
-    404 only when the parent issue does not exist. An issue with no
-    summaries yet returns an empty list.
+    404 only when the parent issue does not exist within ``projectId``. An
+    issue with no summaries yet returns an empty list.
     """
-    await _ensure_issue_exists(db, issue_id)
+    await _ensure_issue_exists(db, issue_id, project_id)
 
     result = await db.execute(
         select(ExecutionSummary)
@@ -82,14 +108,16 @@ async def list_execution_summaries(
 )
 async def get_latest_execution_summary(
     issue_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> ExecutionSummaryResponse:
     """Return the most recent ExecutionSummary for an issue.
 
-    404 when the issue does not exist OR when the issue has no summaries —
-    the caller wants a single record, so "no record" is a not-found.
+    404 when the issue does not exist in ``projectId`` OR when the issue
+    has no summaries — the caller wants a single record, so "no record"
+    is a not-found.
     """
-    await _ensure_issue_exists(db, issue_id)
+    await _ensure_issue_exists(db, issue_id, project_id)
 
     result = await db.execute(
         select(ExecutionSummary)
@@ -110,14 +138,15 @@ async def get_latest_execution_summary(
 )
 async def list_implementation_notes(
     issue_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> List[ImplementationNoteResponse]:
     """Return all ImplementationNotes for an issue, newest first.
 
-    404 only when the parent issue does not exist. An issue with no notes
-    returns an empty list.
+    404 only when the parent issue does not exist within ``projectId``. An
+    issue with no notes returns an empty list.
     """
-    await _ensure_issue_exists(db, issue_id)
+    await _ensure_issue_exists(db, issue_id, project_id)
 
     result = await db.execute(
         select(ImplementationNote)
@@ -136,6 +165,7 @@ async def list_implementation_notes(
 async def create_implementation_note(
     issue_id: str,
     payload: ImplementationNoteCreate,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> ImplementationNoteResponse:
     """Create an ImplementationNote attached to an issue.
@@ -143,8 +173,11 @@ async def create_implementation_note(
     The note ID is server-generated (uuid4) — callers must not supply one.
     Pydantic enums for category/importance reject invalid values up-front
     so the SQLite layer never sees a malformed enum string.
+
+    ``projectId`` is required so that a caller cannot inject a 100 KB note
+    into an arbitrary issue by guessing only its id (CB-2117).
     """
-    await _ensure_issue_exists(db, issue_id)
+    await _ensure_issue_exists(db, issue_id, project_id)
 
     note = ImplementationNote(
         id=str(uuid.uuid4()),
@@ -171,16 +204,17 @@ async def create_implementation_note(
 async def delete_implementation_note(
     issue_id: str,
     note_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an ImplementationNote.
 
     Validates the note belongs to the path's issue — prevents
     cross-issue deletes via guessed UUIDs even though IDs are unique
-    globally. Returns 404 when the issue is missing or the note does not
-    exist under that issue.
+    globally. Returns 404 when the issue is missing in ``projectId`` or
+    the note does not exist under that issue (CB-2117).
     """
-    await _ensure_issue_exists(db, issue_id)
+    await _ensure_issue_exists(db, issue_id, project_id)
 
     result = await db.execute(
         select(ImplementationNote)
@@ -216,15 +250,28 @@ class _BadRequestError(AppException):
         )
 
 
-async def _load_feature_issue(db: AsyncSession, issue_id: str) -> Issue:
-    """Return the FEATURE issue with this id or raise.
+async def _load_feature_issue(
+    db: AsyncSession, issue_id: str, project_id: str
+) -> Issue:
+    """Return the FEATURE issue with this id under ``project_id`` or raise.
 
-    404 when the issue does not exist. 400 when the issue exists but is
-    not of type FEATURE — surfacing that distinction lets the caller
-    redirect to the right context instead of seeing a misleading
-    "not found".
+    404 when the issue does not exist in the given project. 400 when the
+    issue exists but is not of type FEATURE — surfacing that distinction
+    lets the caller redirect to the right context instead of seeing a
+    misleading "not found".
+
+    The ``projectId`` predicate is the IDOR guard (CB-2117): a caller
+    cannot trigger the most expensive endpoint
+    (POST /features/{id}/documentation/generate, which walks the descendant
+    tree and calls the AI provider) on an arbitrary feature without
+    asserting which project it belongs to.
     """
-    result = await db.execute(select(Issue).where(Issue.id == issue_id))
+    result = await db.execute(
+        select(Issue).where(
+            Issue.id == issue_id,
+            Issue.projectId == project_id,
+        )
+    )
     issue = result.scalar_one_or_none()
     if issue is None:
         raise NotFoundError("Issue", issue_id)
@@ -242,16 +289,17 @@ async def _load_feature_issue(db: AsyncSession, issue_id: str) -> Issue:
 )
 async def get_feature_documentation(
     issue_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> FeatureDocumentationResponse:
     """Return the FeatureDocumentation row for a feature.
 
-    404 when the issue is missing OR when no FeatureDocumentation has been
-    generated yet — clients distinguish "feature exists but un-documented"
-    by calling POST /generate. 400 when the issue exists but is not of
-    type FEATURE.
+    404 when the issue is missing in ``projectId`` OR when no
+    FeatureDocumentation has been generated yet — clients distinguish
+    "feature exists but un-documented" by calling POST /generate. 400 when
+    the issue exists but is not of type FEATURE.
     """
-    feature = await _load_feature_issue(db, issue_id)
+    feature = await _load_feature_issue(db, issue_id, project_id)
 
     result = await db.execute(
         select(FeatureDocumentation)
@@ -270,6 +318,7 @@ async def get_feature_documentation(
 )
 async def generate_feature_documentation_endpoint(
     issue_id: str,
+    project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
 ) -> FeatureDocumentationResponse:
     """Generate (or refresh) the FeatureDocumentation row for a feature.
@@ -279,8 +328,13 @@ async def generate_feature_documentation_endpoint(
     a single FeatureDocumentation row, upserting on the natural key
     `featureIssueId`. The endpoint owns the transaction — the service
     flushes but never commits.
+
+    ``projectId`` scoping (CB-2117) is critical here: this is the most
+    expensive endpoint in the router (descendant walk + AI provider call),
+    so requiring callers to assert the owning project blocks abuse via
+    issue-id enumeration.
     """
-    feature = await _load_feature_issue(db, issue_id)
+    feature = await _load_feature_issue(db, issue_id, project_id)
 
     try:
         doc = await documentation_generator.generate_feature_documentation(

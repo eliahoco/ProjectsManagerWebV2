@@ -46,7 +46,10 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
   const { data: issueWithChildren } = useIssue(issue?.id || null);
 
   // Fetch execution summaries (CB-1612) — render compact summary section if any.
-  const { data: executionSummaries } = useExecutionSummaries(issue?.id);
+  const { data: executionSummaries } = useExecutionSummaries(
+    issue?.id,
+    issue?.projectId,
+  );
   const latestSummary = executionSummaries?.[0];
   const implFiles = useMemo(() => {
     if (!latestSummary?.filesTouched) return [] as string[];

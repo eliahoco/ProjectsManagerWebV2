@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTimeoutMs } from './timeouts';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8401';
 
@@ -31,11 +32,12 @@ function streamResponse(response: Response): Response {
 async function buildUrl(
   request: NextRequest,
   params: Promise<{ path: string[] }>,
-): Promise<string> {
+): Promise<{ url: string; pathStr: string }> {
   const { path } = await params;
   const pathStr = path.join('/');
   const searchParams = request.nextUrl.searchParams.toString();
-  return `${BACKEND_URL}/api/${pathStr}${searchParams ? `?${searchParams}` : ''}`;
+  const url = `${BACKEND_URL}/api/${pathStr}${searchParams ? `?${searchParams}` : ''}`;
+  return { url, pathStr };
 }
 
 async function forwardWithBody(
@@ -43,9 +45,10 @@ async function forwardWithBody(
   params: Promise<{ path: string[] }>,
   method: 'POST' | 'PUT' | 'PATCH',
 ): Promise<Response> {
-  const url = await buildUrl(request, params);
+  const { url, pathStr } = await buildUrl(request, params);
+  const timeoutMs = getTimeoutMs(pathStr, method);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     let body: string | undefined;
     try {
@@ -83,7 +86,10 @@ async function forwardWithBody(
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+      return NextResponse.json(
+        { error: 'Gateway timeout', timeoutMs },
+        { status: 504 },
+      );
     }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
@@ -99,9 +105,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  const url = await buildUrl(request, params);
+  const { url, pathStr } = await buildUrl(request, params);
+  const timeoutMs = getTimeoutMs(pathStr, 'GET');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
@@ -114,7 +121,10 @@ export async function GET(
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+      return NextResponse.json(
+        { error: 'Gateway timeout', timeoutMs },
+        { status: 504 },
+      );
     }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
@@ -151,9 +161,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  const url = await buildUrl(request, params);
+  const { url, pathStr } = await buildUrl(request, params);
+  const timeoutMs = getTimeoutMs(pathStr, 'DELETE');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       method: 'DELETE',
@@ -169,7 +180,10 @@ export async function DELETE(
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+      return NextResponse.json(
+        { error: 'Gateway timeout', timeoutMs },
+        { status: 504 },
+      );
     }
     console.error('CodeBoard API proxy error:', error);
     return NextResponse.json(
@@ -180,3 +194,4 @@ export async function DELETE(
     clearTimeout(timer);
   }
 }
+

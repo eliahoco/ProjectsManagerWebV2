@@ -26,6 +26,7 @@ model Project {
   qaSettings      QASettings? // QA Board settings
   watchdogEnabled Boolean     @default(false)
   watchdogEvents  WatchdogEvent[]
+  autopilotQueues AutoPilotQueueRecord[]
 }
 
 model Port {
@@ -185,7 +186,7 @@ model IssueLink {
   toIssueId    String
   toIssue      Issue  @relation("LinkedTo", fields: [toIssueId], references: [id], onDelete: Cascade)
 
-  linkType     String // BLOCKS, IS_BLOCKED_BY, RELATES_TO, DUPLICATES, IS_DUPLICATED_BY
+  linkType     String // BLOCKS, IS_BLOCKED_BY, RELATES_TO, DUPLICATES, IS_DUPLICATED_BY, CAUSED_BY, CAUSES
 
   createdAt    DateTime @default(now())
 
@@ -462,4 +463,57 @@ model WatchdogEvent {
 
   @@index([projectId])
   @@index([createdAt])
+}
+
+// ============================================
+// AutoPilot — Queue Persistence Models
+// ============================================
+
+model AutoPilotQueueRecord {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  featureId     String?       // Optional: the FEATURE issue this queue is running
+  status        String        // pending|running|paused|waiting_reset|completed|aborted
+  currentIndex  Int       @default(0)
+  pauseReason   String?       // token_exhaustion|crash_recovery|manual
+  resetTime     DateTime?     // When auto-resume should fire (token exhaustion case)
+  config        String        // JSON blob: model, retries, etc.
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+  tasks         AutoPilotTaskRecord[]
+  events        AutoPilotEvent[]
+
+  @@index([projectId, status])
+  @@index([status])
+}
+
+model AutoPilotTaskRecord {
+  id            String    @id @default(cuid())
+  queueId       String
+  queue         AutoPilotQueueRecord @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  sequence      Int           // Position within queue
+  issueId       String        // The issue being executed (CodeBoard Issue.id)
+  status        String        // pending|running|completed|failed|skipped
+  attempts      Int       @default(0)
+  sessionId     String?       // terminal_service session id for the latest attempt
+  startedAt     DateTime?
+  completedAt   DateTime?
+  failureReason String?
+
+  @@index([queueId, sequence])
+  @@index([issueId])
+}
+
+model AutoPilotEvent {
+  id        String    @id @default(cuid())
+  queueId   String
+  queue     AutoPilotQueueRecord @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  type      String        // created|task_started|task_completed|task_failed|auto_paused|manual_paused|resumed|auto_resume_scheduled|auto_resume_fired|aborted|crash_recovery_detected
+  payload   String        // JSON blob with event-specific fields
+  createdAt DateTime  @default(now())
+
+  @@index([queueId, createdAt])
+  @@index([type, createdAt])
 }

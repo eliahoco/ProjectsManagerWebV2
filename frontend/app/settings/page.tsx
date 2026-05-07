@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, FolderOpen, RefreshCw, Database, Terminal, Save, Check, Loader2, Github, Eye, EyeOff, Brain, Sparkles, CheckCircle, XCircle } from 'lucide-react';
+import { Settings, FolderOpen, RefreshCw, Database, Terminal, Save, Check, Loader2, Github, Eye, EyeOff, Brain, Sparkles, CheckCircle, XCircle, Activity, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -652,6 +652,9 @@ export default function SettingsPage() {
         </div>
 
         {/* Save Button */}
+        {/* CB-1951 E6.3.2 + E10.1.2 — AutoPilot section */}
+        <AutoPilotSettingsSection />
+
         <div className="flex justify-end">
           <Button
             variant="default"
@@ -673,6 +676,180 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// AutoPilot section (CB-1951 E6.3.2 metrics tile + E10.1.2 persistence toggle)
+// ============================================================================
+
+interface AutoPilotMetrics {
+  pending: number;
+  running: number;
+  paused: number;
+  waiting_reset: number;
+  completed: number;
+  aborted: number;
+  autoPause24h: number;
+  circuitBreakerTrips24h: number;
+  crashRecovery24h: number;
+}
+
+function AutoPilotSettingsSection() {
+  const toast = useToast();
+  const [metrics, setMetrics] = useState<AutoPilotMetrics | null>(null);
+  const [persistenceEnabled, setPersistenceEnabled] = useState<boolean | null>(null);
+  const [togglingPersistence, setTogglingPersistence] = useState(false);
+
+  // Poll metrics every 30s
+  useEffect(() => {
+    let cancelled = false;
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/execute/queue/metrics`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setMetrics(data);
+      } catch {
+        // network errors are silent — tile just shows last value
+      }
+    };
+    fetchMetrics();
+    const id = setInterval(fetchMetrics, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Fetch persistence flag once on mount
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/execute/queue/settings/persistence-enabled`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.enabled === 'boolean') {
+          setPersistenceEnabled(data.enabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTogglePersistence = async () => {
+    if (persistenceEnabled === null) return;
+    const next = !persistenceEnabled;
+    setTogglingPersistence(true);
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/execute/queue/settings/persistence-enabled`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: next }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPersistenceEnabled(data.enabled);
+      toast.success(
+        'AutoPilot persistence',
+        data.enabled
+          ? 'Enabled — queues will survive backend restarts.'
+          : 'Disabled — queues run in-memory only (pre-CB-1951 behaviour).',
+      );
+    } catch (e) {
+      toast.error('Toggle failed', String(e));
+    } finally {
+      setTogglingPersistence(false);
+    }
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+      <div className="flex items-start gap-4 mb-4">
+        <div className="p-2 bg-zinc-800 rounded-lg">
+          <Zap className="h-5 w-5 text-amber-400" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-zinc-100">AutoPilot</h3>
+          <p className="text-sm text-zinc-400">
+            Live queue metrics and persistence settings (CB-1951).
+          </p>
+        </div>
+      </div>
+
+      {/* Metrics tile (E6.3.2) */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3 text-sm font-medium text-zinc-300">
+          <Activity className="h-4 w-4 text-amber-400" />
+          Live queue counts
+          <span className="text-xs text-zinc-500">(refreshes every 30s)</span>
+        </div>
+        {metrics === null ? (
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading…
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <MetricCell label="Running" value={metrics.running} accent="text-amber-400" />
+            <MetricCell label="Paused" value={metrics.paused} accent="text-zinc-300" />
+            <MetricCell label="Waiting reset" value={metrics.waiting_reset} accent="text-yellow-400" />
+            <MetricCell label="Completed" value={metrics.completed} accent="text-emerald-400" />
+            <MetricCell label="Aborted" value={metrics.aborted} accent="text-rose-400" />
+            <MetricCell label="Pending" value={metrics.pending} accent="text-zinc-300" />
+            <MetricCell label="Auto-pauses (24h)" value={metrics.autoPause24h} accent="text-yellow-400" />
+            <MetricCell label="Breaker trips (24h)" value={metrics.circuitBreakerTrips24h} accent="text-rose-400" />
+            <MetricCell label="Crash recovery (24h)" value={metrics.crashRecovery24h} accent="text-rose-400" />
+          </div>
+        )}
+      </div>
+
+      {/* Persistence toggle (E10.1.2) */}
+      <div className="border-t border-zinc-800 pt-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="text-sm font-medium text-zinc-200">
+              Persistence enabled
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              When ON, queues survive backend restarts and crash recovery is
+              available. Disabling reverts to the original in-memory behaviour
+              (use only if persistence misbehaves). In-flight queues snapshot
+              this flag at creation time — toggling affects only future queues.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={persistenceEnabled === null || togglingPersistence}
+            onClick={handleTogglePersistence}
+            className={cn(
+              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
+              persistenceEnabled ? 'bg-amber-500' : 'bg-zinc-700',
+              (persistenceEnabled === null || togglingPersistence) && 'opacity-50 cursor-not-allowed',
+            )}
+            aria-label={persistenceEnabled ? 'Disable AutoPilot persistence' : 'Enable AutoPilot persistence'}
+            aria-pressed={!!persistenceEnabled}
+          >
+            <span
+              className={cn(
+                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                persistenceEnabled ? 'translate-x-6' : 'translate-x-1',
+              )}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCell({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <div className="bg-zinc-800/50 border border-zinc-800 rounded-md px-3 py-2">
+      <div className={cn('text-xl font-semibold', accent)}>{value}</div>
+      <div className="text-xs text-zinc-500 mt-0.5">{label}</div>
     </div>
   );
 }
