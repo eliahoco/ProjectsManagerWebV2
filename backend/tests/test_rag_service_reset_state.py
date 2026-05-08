@@ -1,6 +1,6 @@
 """CB-2212: both init paths must reset `_collections` (asymmetry regression).
 
-Before CB-2212, `_init_client_blocking` reset only `_client`/`_mode`/`_mode_detail`
+Before CB-2212, `_init_client_blocking` reset only `_client`/`_mode`/`_endpoint`
 but left `_collections` untouched. A future "reconnect" caller that hits this path
 on a service previously running in PERSISTENT mode would have `get_collection()`
 return cached objects bound to the dead PersistentClient — exactly the
@@ -60,14 +60,14 @@ def test_reset_state_zeroes_all_client_dependent_fields():
     rag = RAGService()
     rag._client = MagicMock()
     rag._mode = "HTTP"
-    rag._mode_detail = "chromadb:8000"
+    rag._endpoint = "chromadb:8000"
     rag._collections = {"a": MagicMock(), "b": MagicMock()}
 
     rag._reset_state()
 
     assert rag._client is None
     assert rag._mode is None
-    assert rag._mode_detail is None
+    assert rag._endpoint is None
     assert rag._collections == {}
 
 
@@ -98,4 +98,4 @@ def test_init_client_blocking_failure_leaves_collections_clean(monkeypatch):
     # on the failure path, not just _collections.
     assert rag._client is None
     assert rag._mode is None
-    assert rag._mode_detail is None
+    assert rag._endpoint is None

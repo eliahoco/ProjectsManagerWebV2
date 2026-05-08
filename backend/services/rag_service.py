@@ -5,6 +5,8 @@ RAG Service - Semantic Search using ChromaDB
 import chromadb
 import os
 import socket
+import threading
+import time
 from chromadb.config import Settings
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import hashlib
@@ -44,15 +46,58 @@ PERSISTENT_FALLBACK_PATH = "./data/chroma"
 class RAGService:
     """Service for RAG (Retrieval Augmented Generation) using ChromaDB"""
 
+    # CB-2218: TTL window for the status-payload cache (seconds).
+    # The /api/system/rag/status endpoint is polled at 30 s by the always-
+    # mounted Service Monitor card; with M open tabs and N collections each
+    # uncached call fans out to M·(N+2) ChromaDB round-trips per 30 s window
+    # (heartbeat + list_collections + count() per collection). ChromaDB has
+    # no rate limit of its own, so a noisy multi-tab session could degrade
+    # RAG responsiveness for AI execution exactly when it's needed.
+    # 10 s ≪ poll cadence ⇒ each fresh poll cycle still gets a fresh probe;
+    # 10 s > render-jitter ⇒ M concurrent tabs in the same window collapse
+    # to a single ChromaDB pass. Combined with the threading.Lock-based
+    # single-flight in `get_status_payload()`, the worst-case RT cost
+    # becomes (N+2) per 10 s regardless of tab count.
+    STATUS_CACHE_TTL_S: float = 10.0
+
     def __init__(self):
         self._client = None
         self._collections: Dict[str, Any] = {}
         # CB-2043: surface RAG mode at startup so silent fallback to the
         # embedded SQLite path can never recur. `_mode` is one of
-        # {"HTTP", "PERSISTENT", None}; `_mode_detail` carries the host:port
+        # {"HTTP", "PERSISTENT", None}; `_endpoint` carries the host:port
         # or filesystem path that backs the active client.
+        # CB-2215 (F-5): renamed from `_mode_detail` for naming-truth — this
+        # field is the endpoint identifier (host:port or abspath), not a
+        # generic "detail" string.
         self._mode: Optional[str] = None
-        self._mode_detail: Optional[str] = None
+        self._endpoint: Optional[str] = None
+        # CB-2215 (F-9 follow-up from code-reviewer + security-auditor):
+        # state-edge log gating for the status-endpoint probes. The endpoint
+        # is polled every 30s — flat WARN per failure spammed ~120 lines/h
+        # while chromadb was down (F-9 motivation), but a flat downgrade to
+        # DEBUG also lost the first-failure signal that's the most useful
+        # log line in an outage post-mortem (and the recovery edge that
+        # confirms a restore worked). Track the last-observed health per
+        # probe so we WARN once on transition healthy→unhealthy, INFO once
+        # on unhealthy→healthy, and DEBUG for steady-state.
+        # Initial value None → first observed state never WARNs spuriously
+        # for a fresh service.
+        self._last_heartbeat_ok: Optional[bool] = None
+        self._last_list_collections_ok: Optional[bool] = None
+        # CB-2218: cached status payload + monotonic timestamp it was
+        # computed at. Lock is `threading.Lock` (not `asyncio.Lock`) because
+        # the underlying ChromaDB client is sync — FastAPI runs the async
+        # endpoint in the event loop but `_compute_status_payload()` itself
+        # is synchronous and can be reached from threadpool callers (tests,
+        # `describe_mode()`, future sync entry points). A threading lock
+        # gives correct mutual exclusion in either case without any
+        # event-loop-vs-thread asymmetry. Held for the duration of the
+        # compute so concurrent callers single-flight onto one ChromaDB
+        # pass instead of stampeding the cache miss.
+        self._status_cache: Optional[Dict[str, Any]] = None
+        self._status_cache_at: float = 0.0
+        self._status_cache_lock = threading.Lock()
 
     @property
     def client(self):
@@ -80,8 +125,30 @@ class RAGService:
         """
         self._client = None
         self._mode = None
-        self._mode_detail = None
+        self._endpoint = None
         self._collections = {}
+        # Reset health-edge tracking too — a reconnect should treat the new
+        # client as a fresh subject. Without this, a healthy old client →
+        # reset → degraded new client would silently log DEBUG instead of
+        # WARN on the first failure of the new client.
+        self._last_heartbeat_ok = None
+        self._last_list_collections_ok = None
+        # CB-2218: clear the status cache on every state reset. A reconnect
+        # (HTTP→PERSISTENT fallback or future runtime reattach) must NOT
+        # serve a stale prior-mode payload during the post-reset TTL window
+        # — that would mask the very mode-transition the status surface
+        # exists to expose, and let "fallback_active=False" linger on a
+        # client that has already fallen back. We do not take the cache
+        # lock here on purpose: `_reset_state()` is called from
+        # `_init_client_blocking()` / `_fallback_to_persistent()` which run
+        # at startup before any concurrent reader can reach the service,
+        # and adding a lock acquisition here would serialize cache reset
+        # against an in-flight `get_status_payload()` that has already
+        # passed the TTL gate but not yet written its result — defeating
+        # the point. The single-flight contract (lock held during compute)
+        # already guarantees no torn read of `_status_cache`.
+        self._status_cache = None
+        self._status_cache_at = 0.0
 
     def _init_client_blocking(self) -> None:
         """Blocking: probe TCP, construct HttpClient, verify via heartbeat.
@@ -118,7 +185,7 @@ class RAGService:
 
         self._client = client
         self._mode = "HTTP"
-        self._mode_detail = f"{host}:{port}"
+        self._endpoint = f"{host}:{port}"
 
     def _fallback_to_persistent(self) -> None:
         """Switch to a local PersistentClient (no external server needed)."""
@@ -132,7 +199,7 @@ class RAGService:
             settings=Settings(anonymized_telemetry=False),
         )
         self._mode = "PERSISTENT"
-        self._mode_detail = os.path.abspath(PERSISTENT_FALLBACK_PATH)
+        self._endpoint = os.path.abspath(PERSISTENT_FALLBACK_PATH)
 
     def describe_mode(self) -> str:
         """CB-2043: build a one-line summary of the active RAG backend.
@@ -157,25 +224,69 @@ class RAGService:
             count_str = "?"
 
         if self._mode == "HTTP":
-            host, _, port = (self._mode_detail or "").partition(":")
+            host, _, port = (self._endpoint or "").partition(":")
             return (
                 f"RAG mode=HTTP host={host or '?'} port={port or '?'} "
                 f"collections={count_str}"
             )
         return (
-            f"RAG mode=PERSISTENT path={self._mode_detail or '?'} "
+            f"RAG mode=PERSISTENT path={self._endpoint or '?'} "
             f"collections={count_str}"
         )
 
     def get_status_payload(self) -> Dict[str, Any]:
         """CB-2045: structured status snapshot for /api/system/rag/status.
 
+        CB-2218: TTL-cached single-flight wrapper around the actual probe.
+        Returns the cached payload if it was computed within the last
+        `STATUS_CACHE_TTL_S` seconds (10 s); otherwise acquires the cache
+        lock, recomputes once, and returns the fresh result. Concurrent
+        callers that miss the TTL serialize on the lock so M open tabs
+        share a single ChromaDB pass per window — the M·(N+2) RT amplifier
+        described on the ticket collapses to (N+2) per TTL.
+
+        Cache rationale + TTL choice are documented on
+        `STATUS_CACHE_TTL_S`. State-edge logging (WARN-once-on-transition
+        for heartbeat / list_collections failures) is preserved
+        unchanged: it fires on actual probes, so a cache hit is silent
+        (no probe → no new outcome → no log line), and the first probe
+        after expiry still detects healthy⇄unhealthy transitions.
+
+        See `_compute_status_payload()` for the per-probe contract +
+        full payload shape.
+        """
+        with self._status_cache_lock:
+            now = time.monotonic()
+            cached = self._status_cache
+            if (
+                cached is not None
+                and (now - self._status_cache_at) < self.STATUS_CACHE_TTL_S
+            ):
+                return cached
+            payload = self._compute_status_payload()
+            # Store + timestamp inside the lock so a concurrent caller
+            # waiting on the lock sees a consistent (cache, timestamp)
+            # pair when it acquires.
+            self._status_cache = payload
+            self._status_cache_at = now
+            return payload
+
+    def _compute_status_payload(self) -> Dict[str, Any]:
+        """Actual ChromaDB probe — heartbeat + list_collections + per-col count.
+
+        Public callers go through `get_status_payload()` so the result is
+        TTL-cached (CB-2218). Direct callers must hold a sensible lock
+        themselves if they care about avoiding redundant probes.
+
         Returns a dict with:
           - mode: "HTTP" | "PERSISTENT" | "UNINITIALIZED"
-          - host: str (host for HTTP; abspath for PERSISTENT; "" otherwise)
+          - endpoint: str (host for HTTP; "" for PERSISTENT/UNINITIALIZED)
           - port: int (TCP port for HTTP; 0 for PERSISTENT/UNINITIALIZED)
-          - collections: list[{"name": str, "count": int|None}]
-          - total_docs: int (sum of per-collection counts; 0 on partial failure)
+          - fallback_active: bool (True iff mode=PERSISTENT — the embedded
+            client is in use, signalling silent fallback from HTTP)
+          - collections: list[{"count": int|None}]  (CB-2217: `name` removed)
+          - total_docs: int (sum of successful per-collection counts; partial
+            failure does not zero it; healthy=False signals partial failure)
           - healthy: bool (True iff client is up AND collection enumeration
             succeeded AND, for HTTP, heartbeat succeeded)
 
@@ -183,26 +294,60 @@ class RAGService:
         count is captured and reflected by `healthy=False`. The endpoint must
         never raise — silent fallback or a half-broken backend is exactly what
         this surface exists to expose.
+
+        CB-2215 (F-5): renamed `host` payload key to `endpoint` to reflect
+        the dual semantics (host:port vs filesystem path).
+        CB-2215 (F-9): heartbeat / list_collections failures use state-edge
+        log gating — WARN once on transition healthy→unhealthy, INFO once
+        on unhealthy→healthy, DEBUG for steady-state. A 30s poll cadence
+        would otherwise produce ~120 WARN/hour while chromadb is down,
+        drowning genuinely actionable warnings; a flat downgrade to DEBUG
+        loses the first-failure / recovery edges that are the most useful
+        signals in an outage post-mortem.
+        CB-2216: PERSISTENT mode no longer leaks the absolute filesystem
+        path — `endpoint` is "" and `fallback_active=True` is the surface
+        signal. The full abspath stays on `_endpoint` for internal logging
+        (`describe_mode()`, lifespan startup line) but never crosses the
+        HTTP boundary, since the status endpoint is reachable by any local
+        process via Origin-less curl (validate_origin in app/main.py
+        intentionally allows server-to-server callers through). The user-
+        named volume path was reconnaissance value if any sibling service
+        on the host is later compromised.
+        CB-2217: per-collection `name` (the `project_<cuid_prefix>` string)
+        no longer crosses the HTTP boundary either. Collections are named
+        `project_{project_id[:8]}`; echoing them on this surface let any
+        local foothold enumerate which projects exist + which CUID prefixes
+        are active + (combined with `count`) approximately how much content
+        each project holds. The doc-count distribution is preserved because
+        the Service Monitor card uses it to render "top collections by
+        size" — but the array is now anonymous, so neither rank nor count
+        can be back-mapped to a project. The real collection name is still
+        used internally (`get_collection`, `describe_mode`); only the HTTP
+        payload is redacted.
         """
         if self._mode is None or self._client is None:
             return {
                 "mode": "UNINITIALIZED",
-                "host": "",
+                "endpoint": "",
                 "port": 0,
+                "fallback_active": False,
                 "collections": [],
                 "total_docs": 0,
                 "healthy": False,
             }
 
+        fallback_active = self._mode == "PERSISTENT"
+
         if self._mode == "HTTP":
-            host_part, _, port_part = (self._mode_detail or "").partition(":")
-            host = host_part
+            host_part, _, port_part = (self._endpoint or "").partition(":")
+            endpoint = host_part
             try:
                 port = int(port_part) if port_part else 0
             except ValueError:
                 port = 0
         else:
-            host = self._mode_detail or ""
+            # CB-2216: do NOT echo `self._endpoint` (abspath) — see docstring.
+            endpoint = ""
             port = 0
 
         healthy = True
@@ -210,26 +355,51 @@ class RAGService:
         if self._mode == "HTTP":
             try:
                 self._client.heartbeat()
+                heartbeat_ok = True
             except Exception as exc:
-                # Surface at WARNING — this endpoint exists precisely to
-                # expose silent backend failures (CB-2043/CB-2045 motivation).
-                logger.warning(
-                    "RAG heartbeat failed during get_status_payload: %s", exc
-                )
+                heartbeat_ok = False
+                if self._last_heartbeat_ok is not False:
+                    # First failure (or transition from healthy) — make it
+                    # loud so the outage edge is visible in `tail -f`.
+                    logger.warning(
+                        "RAG heartbeat failed during get_status_payload: %s", exc
+                    )
+                else:
+                    logger.debug(
+                        "RAG heartbeat still failing during get_status_payload: %s",
+                        exc,
+                    )
                 healthy = False
+            if heartbeat_ok and self._last_heartbeat_ok is False:
+                logger.info("RAG heartbeat recovered")
+            self._last_heartbeat_ok = heartbeat_ok
 
         collections_payload: List[Dict[str, Any]] = []
         total_docs = 0
         try:
             collections = self._client.list_collections() or []
+            list_ok = True
         except Exception as exc:
-            logger.warning(
-                "RAG list_collections failed during get_status_payload: %s", exc
-            )
+            list_ok = False
+            if self._last_list_collections_ok is not False:
+                logger.warning(
+                    "RAG list_collections failed during get_status_payload: %s", exc
+                )
+            else:
+                logger.debug(
+                    "RAG list_collections still failing during get_status_payload: %s",
+                    exc,
+                )
             collections = []
             healthy = False
+        if list_ok and self._last_list_collections_ok is False:
+            logger.info("RAG list_collections recovered")
+        self._last_list_collections_ok = list_ok
 
         for col in collections:
+            # `name` is kept locally for diagnostic logging only — CB-2217
+            # forbids it from entering the payload (project enumeration leak
+            # via `project_<cuid_prefix>`).
             name = getattr(col, "name", None) or str(col)
             try:
                 count = col.count()
@@ -241,12 +411,13 @@ class RAGService:
                 )
                 count = None
                 healthy = False
-            collections_payload.append({"name": name, "count": count})
+            collections_payload.append({"count": count})
 
         return {
             "mode": self._mode,
-            "host": host,
+            "endpoint": endpoint,
             "port": port,
+            "fallback_active": fallback_active,
             "collections": collections_payload,
             "total_docs": total_docs,
             "healthy": healthy,

@@ -110,6 +110,24 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Short-circuit when there is genuinely nothing to push: clean tree
+      // and zero commits ahead of upstream. Avoids reporting failure for
+      // the no-op case.
+      const aheadResult = await execCommand('git rev-list --count @{u}..HEAD', {
+        cwd: project.path,
+      });
+      const ahead = parseInt(aheadResult.stdout.trim() || '0', 10);
+      if (!gitStatus.isDirty && aheadResult.exitCode === 0 && ahead === 0) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            output: 'Nothing to push — branch up to date with origin.',
+            exitCode: 0,
+            gitStatus,
+          },
+        });
+      }
+
       // Generate commit message
       const commitMessage = message || `Update ${project.name} - ${new Date().toISOString().split('T')[0]}`;
 
@@ -119,7 +137,9 @@ export async function POST(request: NextRequest) {
       // Get updated status
       const newStatus = await getGitStatus(project.path);
 
-      const isSuccess = result.exitCode === 0 || result.stderr.includes('nothing to commit');
+      // git writes "nothing to commit" to stdout, not stderr — scan both.
+      const combined = (result.stdout || '') + '\n' + (result.stderr || '');
+      const isSuccess = result.exitCode === 0 || combined.includes('nothing to commit');
 
       if (!isSuccess) {
         return NextResponse.json({

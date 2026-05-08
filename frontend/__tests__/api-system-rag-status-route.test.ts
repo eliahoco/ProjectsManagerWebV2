@@ -30,11 +30,15 @@ describe('GET /api/system/rag/status', () => {
   });
 
   it('forwards to FastAPI status endpoint and returns the payload', async () => {
+    // CB-2217: per-collection rows expose only `count` — `name` was removed
+    // because echoing the `project_<cuid_prefix>` collection name on this
+    // surface enabled project enumeration after any local foothold.
     const payload = {
       mode: 'HTTP',
-      host: 'chromadb',
+      endpoint: 'chromadb',
       port: 8000,
-      collections: [{ name: 'features', count: 42 }],
+      fallback_active: false,
+      collections: [{ count: 42 }],
       total_docs: 42,
       healthy: true,
     };

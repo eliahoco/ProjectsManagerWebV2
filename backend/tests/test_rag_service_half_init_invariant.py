@@ -5,7 +5,7 @@ Both init paths (`_init_client_blocking`, `_fallback_to_persistent`) call
 `_reset_state()` up front before constructing the new client. The invariant
 they pin: if construction (or heartbeat) raises mid-flight, the service must
 end up FULLY uninitialised — `_mode is None`, `_client is None`,
-`_mode_detail is None`, `_collections == {}` — so no caller can read a stale
+`_endpoint is None`, `_collections == {}` — so no caller can read a stale
 mode advertised next to a dead/None client.
 
 Pre-CB-2043, the original bug was exactly that: HTTP advertised, client None.
@@ -59,7 +59,7 @@ def _assert_uninitialised(rag: RAGService) -> None:
     'mode advertised next to a None client' bug is back."""
     assert rag._mode is None
     assert rag._client is None
-    assert rag._mode_detail is None
+    assert rag._endpoint is None
     assert rag._collections == {}
     assert rag.describe_mode() == "RAG mode=UNINITIALIZED"
 

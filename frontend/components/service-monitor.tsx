@@ -128,14 +128,26 @@ type RagBadgeColor = 'green' | 'amber' | 'red' | 'gray';
 type RagMode = 'HTTP' | 'PERSISTENT' | 'UNINITIALIZED';
 
 interface RagCollectionStatus {
-  name: string;
+  // CB-2217: collection `name` is no longer surfaced — payload contains
+  // only `count` so the status endpoint cannot be used to enumerate which
+  // projects exist via the `project_<cuid_prefix>` collection naming.
   count: number | null;
 }
 
 interface RagStatusPayload {
   mode: RagMode | (string & {});
-  host: string;
+  // CB-2215 (F-5): renamed from `host`. For mode=HTTP this is the ChromaDB
+  // host; for mode=PERSISTENT and mode=UNINITIALIZED this is "". CB-2216:
+  // PERSISTENT no longer echoes the abspath — `fallback_active` is the
+  // signal instead. The card already rendered "embedded" when endpoint
+  // was empty for PERSISTENT, so no UI change is needed.
+  endpoint: string;
   port: number;
+  // CB-2216: True iff mode=PERSISTENT — the embedded ChromaDB client is in
+  // use (silent HTTP fallback). Replaces the prior abspath-in-endpoint
+  // disclosure. Defaults to false on legacy/unknown payload shapes so a
+  // stale browser tab never falsely reports fallback.
+  fallback_active: boolean;
   collections: RagCollectionStatus[];
   total_docs: number;
   healthy: boolean;
@@ -158,6 +170,11 @@ const RING_CLASSES: Record<RagBadgeColor, string> = {
 // Coerce a raw fetch payload into a safe shape — backend is trusted but
 // React must not crash if the response loses a field. Returns null if the
 // payload is not an object.
+//
+// CB-2217: `name` is intentionally NOT extracted from incoming rows even if
+// a stale backend still emits it. The redaction is server-side; this is a
+// defence-in-depth so a stray legacy field on the wire can never make it
+// into React state and from there into a screenshot or bug-report log.
 function normalizeRagStatus(raw: unknown): RagStatusPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -165,13 +182,19 @@ function normalizeRagStatus(raw: unknown): RagStatusPayload | null {
   const collections: RagCollectionStatus[] = collectionsIn
     .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
     .map(c => ({
-      name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
       count: typeof c.count === 'number' ? c.count : null,
     }));
   return {
     mode: typeof r.mode === 'string' ? r.mode : 'UNINITIALIZED',
-    host: typeof r.host === 'string' ? r.host : '',
+    endpoint: typeof r.endpoint === 'string' ? r.endpoint : '',
     port: typeof r.port === 'number' ? r.port : 0,
+    // CB-2216: trust an explicit boolean if present; otherwise infer from
+    // mode (a stale backend that doesn't yet emit the field still surfaces
+    // fallback correctly). Never coerce truthy/falsy non-boolean shapes.
+    fallback_active:
+      typeof r.fallback_active === 'boolean'
+        ? r.fallback_active
+        : r.mode === 'PERSISTENT',
     collections,
     total_docs: typeof r.total_docs === 'number' ? r.total_docs : 0,
     healthy: r.healthy === true,
@@ -225,12 +248,34 @@ function RagStatusCard() {
   const fetchStatusRef = useRef(fetchStatus);
   fetchStatusRef.current = fetchStatus;
 
+  // CB-2215 (F-6): Page Visibility API gating.
+  // Without this, every open tab keeps polling /api/system/rag/status at
+  // 30 s cadence forever, multiplying load on the FastAPI status endpoint
+  // and the underlying chromadb heartbeat / list_collections fan-out (which
+  // is itself the subject of CB-2218). Skip the fetch when the tab is
+  // hidden, and fire one immediate refresh on visibility return so the card
+  // is current the moment the user looks at it again.
   useEffect(() => {
-    const initial = setTimeout(() => fetchStatusRef.current(), 1000);
-    const interval = setInterval(() => fetchStatusRef.current(), RAG_STATUS_POLL_MS);
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchStatusRef.current();
+    };
+    const initial = setTimeout(tick, 1000);
+    const interval = setInterval(tick, RAG_STATUS_POLL_MS);
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchStatusRef.current();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
     return () => {
       clearTimeout(initial);
       clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
     };
   }, []);
 
@@ -253,7 +298,11 @@ function RagStatusCard() {
     } else if (status.mode === 'PERSISTENT') {
       badgeColor = 'amber';
       modeLabel = 'RAG fallback';
-      unhealthyHint = 'silent fallback to embedded SQLite';
+      // CB-2215 (F-7): softened wording — PERSISTENT mode is legitimate
+      // for dev / CI runs without the chromadb container. The amber badge
+      // and "fallback" label still flag it for attention, but the hint
+      // no longer prejudges it as undesired.
+      unhealthyHint = 'running on local PersistentClient (chromadb container not in use)';
     } else {
       badgeColor = 'red';
       modeLabel = 'RAG offline';
@@ -263,14 +312,14 @@ function RagStatusCard() {
 
   const totalDocs = status?.total_docs ?? 0;
 
+  // CB-2217: collection rows are anonymous on the wire (no `name` field).
+  // Sort by count desc; ties keep their pre-existing wire order
+  // (Array.prototype.sort is stable per ECMA-262), which is deterministic
+  // for a single backend response so the rank labels below are stable
+  // across renders of the same payload.
   const topCollections: RagCollectionStatus[] = status
     ? [...status.collections]
-        .sort((a, b) => {
-          const ca = a.count ?? -1;
-          const cb = b.count ?? -1;
-          if (cb !== ca) return cb - ca;
-          return a.name.localeCompare(b.name);
-        })
+        .sort((a, b) => (b.count ?? -1) - (a.count ?? -1))
         .slice(0, 3)
     : [];
 
@@ -278,9 +327,9 @@ function RagStatusCard() {
   const endpointLabel = isPersistent ? 'Path' : 'Endpoint';
   const endpointDisplay = status
     ? status.mode === 'HTTP'
-      ? `${status.host}:${status.port}`
+      ? `${status.endpoint}:${status.port}`
       : isPersistent
-      ? status.host || 'embedded'
+      ? status.endpoint || 'embedded'
       : '—'
     : '—';
 
@@ -337,13 +386,25 @@ function RagStatusCard() {
                 <div className="text-zinc-600 italic">none</div>
               ) : (
                 <ul className="space-y-1">
-                  {topCollections.map(col => (
+                  {/*
+                    CB-2217: collections are anonymous on the wire — render
+                    them as ranked rows ("Collection #1" … #3) instead of
+                    echoing the `project_<cuid_prefix>` name that used to
+                    leak via this surface. Rank-as-identity by design: the
+                    `idx` React key means a count overtaking another count
+                    on the next poll will reuse the same <li> fiber and
+                    appear to "swap into" the same labeled row. That is
+                    intended ("Collection #1 = whatever has the most docs
+                    right now") — there is no stable per-project handle to
+                    key on, and re-introducing one would re-leak the bug.
+                  */}
+                  {topCollections.map((col, idx) => (
                     <li
-                      key={col.name}
+                      key={idx}
                       className="flex items-center justify-between gap-2"
                     >
                       <span className="text-zinc-300 font-mono truncate">
-                        {col.name}
+                        {`Collection #${idx + 1}`}
                       </span>
                       <span className="text-zinc-400 shrink-0">
                         {col.count === null ? '—' : col.count.toLocaleString()}
@@ -979,24 +1040,14 @@ export function ServiceMonitor() {
 
   const activeAlerts = alerts.filter(a => !a.dismissed);
 
-  // Docker pause indicator — show when watchdog is paused for VM operations
-  if (dockerPaused) {
-    return (
-      <>
-        <RagStatusCard />
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-          <div className="backdrop-blur-sm border rounded-lg px-4 py-2 flex items-center gap-2 bg-cyan-900/90 border-cyan-700 text-cyan-200">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            <span className="font-medium text-sm">Watchdog paused — waiting for Docker</span>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (activeAlerts.length === 0) {
-    return <RagStatusCard />;
-  }
+  // CB-2215 (F-8): hoist <RagStatusCard /> to a single top-level render so
+  // its fiber position is independent of the alert branch chosen below.
+  // Previously it was inlined in three separate return branches; React's
+  // reconciliation kept its state today only because the branches happened
+  // to render it at fiber index 0. Any future reorder (e.g., wrapping a
+  // branch in <AnimatePresence> or a layout container) would shift the
+  // fiber position and remount the card mid-poll — losing fetch state and
+  // resetting the failCount streak. Pulling it up here makes that safe.
 
   // Determine header style and text based on watchdog statuses
   const hasRestarting = activeAlerts.some(a => a.watchdogStatus === 'restarting');
@@ -1027,136 +1078,163 @@ export function ServiceMonitor() {
     headerClasses = 'bg-red-900/90 border-red-700 text-red-200';
   }
 
-  return (
-    <>
-      <RagStatusCard />
+  // Build the watchdog/alerts overlay (the bottom-right panel) as a single
+  // ReactNode that the unified return below renders alongside the always-on
+  // RagStatusCard. Branches:
+  //   * dockerPaused → cyan "watchdog paused" indicator
+  //   * dockerPaused === false && activeAlerts.length > 0 → alert list
+  //   * otherwise → null (card-only)
+  let alertOverlay: React.ReactNode = null;
+
+  if (dockerPaused) {
+    alertOverlay = (
       <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-      {/* Header */}
-      <div
-        className={cn(
-          'backdrop-blur-sm border rounded-t-lg px-4 py-2 flex items-center justify-between cursor-pointer',
-          headerClasses,
-          isMinimized && 'rounded-b-lg'
-        )}
-        onClick={() => setIsMinimized(!isMinimized)}
-      >
-        <div className={cn('flex items-center gap-2', headerTextColor)}>
-          {hasRestarting ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : hasSuccess && !hasGaveUp ? (
-            <CheckCircle className="h-4 w-4" />
-          ) : (
-            <AlertTriangle className="h-4 w-4" />
-          )}
-          <span className="font-medium text-sm">
-            {headerText}
-          </span>
+        <div className="backdrop-blur-sm border rounded-lg px-4 py-2 flex items-center gap-2 bg-cyan-900/90 border-cyan-700 text-cyan-200">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          <span className="font-medium text-sm">Watchdog paused — waiting for Docker</span>
         </div>
-        <div className="flex items-center gap-2">
-          {activeAlerts.length > 1 && (
-            <button
+      </div>
+    );
+  } else if (activeAlerts.length > 0) {
+    alertOverlay = (
+      <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+        {/* Header */}
+        <div
+          className={cn(
+            'backdrop-blur-sm border rounded-t-lg px-4 py-2 flex items-center justify-between cursor-pointer',
+            headerClasses,
+            isMinimized && 'rounded-b-lg'
+          )}
+          onClick={() => setIsMinimized(!isMinimized)}
+        >
+          <div className={cn('flex items-center gap-2', headerTextColor)}>
+            {hasRestarting ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : hasSuccess && !hasGaveUp ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" />
+            )}
+            <span className="font-medium text-sm">
+              {headerText}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {activeAlerts.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDismissAll();
+                }}
+                className={cn('text-xs', dismissTextColor, dismissHoverColor)}
+              >
+                Dismiss All
+              </button>
+            )}
+            <X
+              className={cn('h-4 w-4 cursor-pointer', iconDismissColor)}
               onClick={(e) => {
                 e.stopPropagation();
                 handleDismissAll();
               }}
-              className={cn('text-xs', dismissTextColor, dismissHoverColor)}
-            >
-              Dismiss All
-            </button>
-          )}
-          <X
-            className={cn('h-4 w-4 cursor-pointer', iconDismissColor)}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDismissAll();
-            }}
-          />
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Alert List */}
-      {!isMinimized && (
-        <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 border-t-0 rounded-b-lg max-h-80 overflow-y-auto">
-          {activeAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className="p-3 border-b border-zinc-800 last:border-b-0"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">
-                    {alert.projectName}
-                  </p>
-                  <p className="text-zinc-400 text-xs truncate">
-                    {alert.serviceName} (port {alert.port})
-                  </p>
+        {/* Alert List */}
+        {!isMinimized && (
+          <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 border-t-0 rounded-b-lg max-h-80 overflow-y-auto">
+            {activeAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="p-3 border-b border-zinc-800 last:border-b-0"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">
+                      {alert.projectName}
+                    </p>
+                    <p className="text-zinc-400 text-xs truncate">
+                      {alert.serviceName} (port {alert.port})
+                    </p>
 
-                  {/* Watchdog status messages */}
-                  {alert.watchdogStatus === 'restarting' && (
-                    <p className="text-amber-400 text-xs mt-1 flex items-center gap-1">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      Auto-restarting... (attempt {alert.watchdogAttempt}/3)
-                    </p>
-                  )}
-                  {alert.watchdogStatus === 'success' && (
-                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3" />
-                      Auto-restarted successfully
-                    </p>
-                  )}
-                  {alert.watchdogStatus === 'failed' && (
-                    <p className="text-red-400 text-xs mt-1">
-                      Restart failed (attempt {alert.watchdogAttempt}/3)
-                    </p>
-                  )}
-                  {alert.watchdogStatus === 'gave-up' && (
-                    <p className="text-red-300 text-xs mt-1 font-medium">
-                      3/3 retries exhausted
-                    </p>
-                  )}
+                    {/* Watchdog status messages */}
+                    {alert.watchdogStatus === 'restarting' && (
+                      <p className="text-amber-400 text-xs mt-1 flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        Auto-restarting... (attempt {alert.watchdogAttempt}/3)
+                      </p>
+                    )}
+                    {alert.watchdogStatus === 'success' && (
+                      <p className="text-green-400 text-xs mt-1 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Auto-restarted successfully
+                      </p>
+                    )}
+                    {alert.watchdogStatus === 'failed' && (
+                      <p className="text-red-400 text-xs mt-1">
+                        Restart failed (attempt {alert.watchdogAttempt}/3)
+                      </p>
+                    )}
+                    {alert.watchdogStatus === 'gave-up' && (
+                      <p className="text-red-300 text-xs mt-1 font-medium">
+                        3/3 retries exhausted
+                      </p>
+                    )}
 
-                  {/* Timestamp for non-watchdog or gave-up alerts */}
-                  {(!alert.watchdogStatus || alert.watchdogStatus === 'gave-up' || alert.watchdogStatus === 'failed') && (
-                    <p className="text-zinc-500 text-xs mt-1">
-                      Parked at {alert.timestamp.toLocaleTimeString()}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {/* Show manual restart button when not auto-restarting and not in success state */}
-                  {alert.watchdogStatus !== 'restarting' && alert.watchdogStatus !== 'success' && (
+                    {/* Timestamp for non-watchdog or gave-up alerts */}
+                    {(!alert.watchdogStatus || alert.watchdogStatus === 'gave-up' || alert.watchdogStatus === 'failed') && (
+                      <p className="text-zinc-500 text-xs mt-1">
+                        Parked at {alert.timestamp.toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {/* Show manual restart button when not auto-restarting and not in success state */}
+                    {alert.watchdogStatus !== 'restarting' && alert.watchdogStatus !== 'success' && (
+                      <button
+                        onClick={() => handleRestart(alert)}
+                        disabled={restartingService === alert.id}
+                        className={cn(
+                          'p-1.5 rounded-md transition-colors',
+                          restartingService === alert.id
+                            ? 'bg-zinc-700 text-zinc-400'
+                            : 'bg-green-600 hover:bg-green-500 text-white'
+                        )}
+                        title="Restart Service"
+                      >
+                        {restartingService === alert.id ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleRestart(alert)}
-                      disabled={restartingService === alert.id}
-                      className={cn(
-                        'p-1.5 rounded-md transition-colors',
-                        restartingService === alert.id
-                          ? 'bg-zinc-700 text-zinc-400'
-                          : 'bg-green-600 hover:bg-green-500 text-white'
-                      )}
-                      title="Restart Service"
+                      onClick={() => handleDismiss(alert.id)}
+                      className="p-1.5 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
+                      title="Dismiss"
                     >
-                      {restartingService === alert.id ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5" />
-                      )}
+                      <X className="h-3.5 w-3.5" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleDismiss(alert.id)}
-                    className="p-1.5 rounded-md bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
-                    title="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
       </div>
+    );
+  }
+
+  // CB-2215 (F-8): single return — RagStatusCard is at a stable fiber position
+  // (index 0 of the fragment) regardless of which alertOverlay branch ran,
+  // so its state survives every transition (no alerts → alerts → docker-paused
+  // → no alerts) without remounting.
+  return (
+    <>
+      <RagStatusCard />
+      {alertOverlay}
     </>
   );
 }

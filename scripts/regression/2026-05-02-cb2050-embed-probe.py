@@ -21,7 +21,7 @@ from services.rag_service import RAGService  # noqa: E402
 async def main():
     rag = RAGService()
     rag._init_client_blocking()
-    print(f"mode={rag._mode} detail={rag._mode_detail}")
+    print(f"mode={rag._mode} endpoint={rag._endpoint}")
     assert rag._mode == "HTTP", f"expected HTTP mode, got {rag._mode}"
 
     project_id = "test"

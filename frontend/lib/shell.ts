@@ -807,8 +807,9 @@ export async function syncToGitHub(projectPath: string, message?: string): Promi
   // spawnCommand: commitMessage comes from caller — must not be shell-interpolated
   const commitResult = await spawnCommand('git', ['commit', '-m', commitMessage], { cwd: projectPath });
 
-  // Push
-  if (commitResult.exitCode === 0 || commitResult.stderr.includes('nothing to commit')) {
+  // Push. git writes "nothing to commit" to stdout, not stderr — scan both.
+  const commitOutput = (commitResult.stdout || '') + '\n' + (commitResult.stderr || '');
+  if (commitResult.exitCode === 0 || commitOutput.includes('nothing to commit')) {
     return execCommand('git push', { cwd: projectPath, timeout: 60000 });
   }
 
