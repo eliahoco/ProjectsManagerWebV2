@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
 from sqlalchemy import select, delete
@@ -77,8 +77,15 @@ async def apply_retention(db: AsyncSession) -> Tuple[int, int]:
     activity in the loop.
     """
     settings = await get_or_create_settings(db)
-    now = datetime.utcnow()
-    cutoff = now - timedelta(days=settings.retentionDays)
+    # CB-2730 (CB-2377 follow-up): use `datetime.now(timezone.utc)` (utcnow()
+    # is deprecated in 3.12+) but strip tzinfo before binding — `executedAt`
+    # is a naive `DateTime` column and SQLite stores naive vs tz-aware values
+    # in different ISO string shapes (`...123456` vs `...123456+00:00`), so
+    # a tz-aware bind would break TEXT comparison. The stripped value is the
+    # canonical naive-UTC equivalent.
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        days=settings.retentionDays
+    )
 
     # Phase 1: by age. Single statement; commit immediately so the write
     # lock for phase 1 is released before phase 2's longer walk begins.

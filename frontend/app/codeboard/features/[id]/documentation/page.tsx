@@ -178,7 +178,7 @@ function PageShell({
 }: PageShellProps) {
   return (
     <div className="min-h-screen bg-zinc-950 p-4 md:p-6">
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="mx-auto space-y-4">
         {/* Header row */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1">

@@ -485,6 +485,15 @@ model AutoPilotQueueRecord {
   tasks         AutoPilotTaskRecord[]
   events        AutoPilotEvent[]
 
+  // CB-2748: persistence overhaul additions
+  state             String?   // canonical state enum value (mirrors status)
+  stateReason       String?   // enum reason: crash_recovery|disk_full|manual|etc.
+  lastCheckpointAt  DateTime? // UTC of last successful _checkpoint() call
+  recoveryGeneration Int      @default(0)  // incremented on each crash recovery
+
+  // CB-2794: persisted circuit-breaker counter — survives backend restarts
+  autoResumeAttempts Int      @default(0)
+
   @@index([projectId, status])
   @@index([status])
 }
@@ -495,12 +504,19 @@ model AutoPilotTaskRecord {
   queue         AutoPilotQueueRecord @relation(fields: [queueId], references: [id], onDelete: Cascade)
   sequence      Int           // Position within queue
   issueId       String        // The issue being executed (CodeBoard Issue.id)
+  // CB-2673: persisted so rehydrated tasks have populated key/title without a JOIN
+  issueKey      String?       // e.g. "CB-1234"
+  issueTitle    String?       // Human-readable title for display + audit log
   status        String        // pending|running|completed|failed|skipped
   attempts      Int       @default(0)
   sessionId     String?       // terminal_service session id for the latest attempt
   startedAt     DateTime?
   completedAt   DateTime?
   failureReason String?
+
+  // CB-2748: persistence overhaul additions
+  lastProgressAt  DateTime? // last tick where files_*/commands_run changed
+  subprocessPid   Int?      // PID of live claude subprocess; cleared on finish
 
   @@index([queueId, sequence])
   @@index([issueId])
@@ -510,7 +526,8 @@ model AutoPilotEvent {
   id        String    @id @default(cuid())
   queueId   String
   queue     AutoPilotQueueRecord @relation(fields: [queueId], references: [id], onDelete: Cascade)
-  type      String        // created|task_started|task_completed|task_failed|auto_paused|manual_paused|resumed|auto_resume_scheduled|auto_resume_fired|aborted|crash_recovery_detected
+  // CB-2748: extended type set — see AutoPilotEventType in backend/models/autopilot.py
+  type      String        // created|task_started|task_completed|task_failed|auto_paused|manual_paused|resumed|auto_resume_scheduled|auto_resume_fired|aborted|crash_recovery_detected|STATE_TRANSITION|CHECKPOINT_WRITTEN|RECOVERY_STARTED|RECOVERY_COMPLETED|ZOMBIE_DETECTED|TOKEN_EXHAUSTION_DETECTED|AUTO_RESUME_SCHEDULED|AUTO_RESUME_FIRED|PERSIST_FAILED|DISK_FULL_DETECTED|SUBPROCESS_PID_RECORDED
   payload   String        // JSON blob with event-specific fields
   createdAt DateTime  @default(now())
 

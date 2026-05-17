@@ -15,11 +15,12 @@ import logging
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import AppException, ErrorCode, NotFoundError
+from app.rate_limit import limiter
 from models import (
     ExecutionSummary,
     ExecutionSummaryResponse,
@@ -312,11 +313,25 @@ async def get_feature_documentation(
     return FeatureDocumentationResponse.model_validate(doc)
 
 
+# CB-2662: per-route rate limit on the LLM doc-gen endpoint. The global
+# 200/min cap (app.main) is too loose for an endpoint that pins a request
+# handler for up to 120 s and triggers a real AI provider call — a single
+# attacker who has guessed a (projectId, issueId) pair could sustain 200
+# concurrent calls/min, burning serverless concurrency and provider tokens.
+# 5/min/IP matches observed legitimate user behaviour (regenerate clicked
+# at most twice an hour) with comfortable headroom. Long-term plan: convert
+# to job-and-poll (POST → 202 + jobId) so handlers release immediately and
+# concurrency caps live in the worker pool — see backend/docs/DOC_PIPELINE_RUNBOOK.md.
+_DOC_GEN_RATE_LIMIT = "5/minute"
+
+
 @router.post(
     "/features/{issue_id}/documentation/generate",
     response_model=FeatureDocumentationResponse,
 )
+@limiter.limit(_DOC_GEN_RATE_LIMIT)
 async def generate_feature_documentation_endpoint(
+    request: Request,
     issue_id: str,
     project_id: str = ProjectIdQuery,
     db: AsyncSession = Depends(get_db),
@@ -333,6 +348,10 @@ async def generate_feature_documentation_endpoint(
     expensive endpoint in the router (descendant walk + AI provider call),
     so requiring callers to assert the owning project blocks abuse via
     issue-id enumeration.
+
+    CB-2662: rate-limited at ``_DOC_GEN_RATE_LIMIT`` per-IP. The required
+    ``request: Request`` parameter is consumed by the slowapi decorator —
+    do not remove it.
     """
     feature = await _load_feature_issue(db, issue_id, project_id)
 

@@ -21,7 +21,6 @@ import {
   Link2,
   CheckCircle,
   ExternalLink,
-  MoreHorizontal,
   MessageSquare,
   Activity,
   Tag,
@@ -42,6 +41,7 @@ import { ExecuteButton } from '@/components/codeboard/ExecuteButton';
 import { ExecutionModal } from '@/components/codeboard/ExecutionModal';
 import { CommentsSection } from '@/components/codeboard/comments-section';
 import { ImplementationTab } from '@/components/codeboard/ImplementationTab';
+import { HierarchyTreeSection, ParentBreadcrumb } from '@/components/codeboard';
 import {
   Issue,
   ISSUE_TYPES,
@@ -134,6 +134,9 @@ export default function IssueDetailPage({ params }: PageProps) {
       return a.sequence - b.sequence;
     });
   }, [issue?.children]);
+
+  // Whether this issue has any children (drives HierarchyTreeSection visibility)
+  const hasChildren = children.length > 0;
 
   if (isLoading) {
     return (
@@ -265,10 +268,10 @@ export default function IssueDetailPage({ params }: PageProps) {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="grid grid-cols-3 gap-8">
-            {/* Left: Main content (2/3) */}
-            <div className="col-span-2 space-y-6">
+        <div className="mx-auto px-6 py-8">
+          <div className="grid grid-cols-4 gap-8">
+            {/* Left: Main content (3/4) */}
+            <div className="col-span-3 space-y-6">
               {/* Title and Description */}
               {isEditing ? (
                 <div className="space-y-4">
@@ -306,6 +309,10 @@ export default function IssueDetailPage({ params }: PageProps) {
                 </div>
               ) : (
                 <>
+                  {/* Parent breadcrumb — CB-2700 */}
+                  {issue.parentId && (
+                    <ParentBreadcrumb issueId={issue.id} className="mb-2" />
+                  )}
                   <h1 className="text-2xl font-semibold">{issue.title}</h1>
                   {issue.description ? (
                     <div className="prose prose-invert prose-zinc max-w-none">
@@ -384,56 +391,19 @@ export default function IssueDetailPage({ params }: PageProps) {
               {/* Tab Content */}
               {activeTab === 'details' && (
                 <div className="space-y-6">
-                  {/* Child Issues */}
-                  {(issue.type === 'EPIC' || issue.type === 'STORY') && (
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
-                        <Target className="w-4 h-4" />
-                        {issue.type === 'EPIC' ? 'Stories & Tasks' : 'Tasks'} ({children.length})
-                      </h3>
-                      {children.length === 0 ? (
-                        <p className="text-sm text-zinc-600 italic">
-                          No {issue.type === 'EPIC' ? 'stories or tasks' : 'tasks'} yet
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {children.map((child) => {
-                            const childType = ISSUE_TYPES.find((t) => t.type === child.type);
-                            const childStatus = STATUS_COLUMNS.find((s) => s.status === child.status);
-                            return (
-                              <Link
-                                key={child.id}
-                                href={`/codeboard/issues/${child.id}`}
-                                className={cn(
-                                  'flex items-center gap-3 p-3 rounded-lg transition-colors',
-                                  'bg-zinc-800/50 hover:bg-zinc-800 border-l-4',
-                                  child.type === 'STORY' && 'border-l-green-500',
-                                  child.type === 'TASK' && 'border-l-blue-500',
-                                  child.type === 'BUG' && 'border-l-red-500',
-                                  child.type === 'SUBTASK' && 'border-l-cyan-500'
-                                )}
-                              >
-                                <span className="text-base">{childType?.icon}</span>
-                                <span className="text-xs font-mono text-zinc-500">{child.key}</span>
-                                <span className="text-sm flex-1 truncate">{child.title}</span>
-                                <span
-                                  className={cn(
-                                    'text-xs px-2 py-0.5 rounded',
-                                    child.status === 'DONE' && 'bg-green-900/30 text-green-400',
-                                    child.status === 'IN_PROGRESS' && 'bg-blue-900/30 text-blue-400',
-                                    child.status === 'BACKLOG' && 'bg-zinc-700 text-zinc-400',
-                                    child.status === 'TODO' && 'bg-yellow-900/30 text-yellow-400',
-                                    child.status === 'IN_REVIEW' && 'bg-purple-900/30 text-purple-400'
-                                  )}
-                                >
-                                  {childStatus?.label}
-                                </span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                  {/* Hierarchy tree — CB-2699: shown for any issue type that has children */}
+                  {hasChildren && (
+                    <HierarchyTreeSection
+                      issueId={issue.id}
+                      projectId={issue.projectId}
+                      viewKind={
+                        issue.type === 'FEATURE'
+                          ? 'feature'
+                          : issue.type === 'BUG'
+                          ? 'bug'
+                          : 'task'
+                      }
+                    />
                   )}
 
                   {/* Linked Commits */}

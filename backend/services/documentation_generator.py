@@ -25,7 +25,7 @@ import shlex
 import subprocess
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
@@ -512,7 +512,15 @@ Rules:
         ai_fields: Dict[str, Any],
     ) -> ExecutionSummary:
         """Translate AI + git data into an ExecutionSummary ORM instance."""
-        executed_at = session.completed_at or session.started_at or datetime.utcnow()
+        # CB-2730: tz-aware UTC fallback so the JSON serializer can round-trip
+        # the executedAt as `…Z`. (session.{started,completed}_at are still
+        # naive — terminal_service is out of scope for this ticket; the
+        # serializer treats naive values as UTC.)
+        executed_at = (
+            session.completed_at
+            or session.started_at
+            or datetime.now(timezone.utc)
+        )
         execution_time = 0.0
         if session.started_at and session.completed_at:
             execution_time = max(
@@ -1722,7 +1730,9 @@ async def _generate_feature_documentation_impl(
                     row.featureIssueId,
                     content_type="feature_documentation",
                 )
-                row.lastIndexedAt = datetime.utcnow()
+                # CB-2377: tz-aware UTC so JSON output carries the `Z` suffix
+                # and the frontend `new Date(iso)` parses to the right instant.
+                row.lastIndexedAt = datetime.now(timezone.utc)
                 await db.flush()
         except Exception:
             logger.exception(

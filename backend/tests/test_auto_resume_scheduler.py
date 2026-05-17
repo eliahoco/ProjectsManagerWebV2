@@ -46,8 +46,12 @@ async def patched_session(monkeypatch):
 
     import models.database
     import services.autopilot_queue_service as svc_mod
+    import utils.autopilot_repository as repo_mod
     monkeypatch.setattr(models.database, "AsyncSessionLocal", Sf)
     monkeypatch.setattr(svc_mod, "AsyncSessionLocal", Sf)
+    # CB-2798: also patch the repository module so transition_state and
+    # checkpoint write to the same in-memory DB that save_queue uses.
+    monkeypatch.setattr(repo_mod, "AsyncSessionLocal", Sf)
     yield Sf
     await engine.dispose()
 
@@ -112,7 +116,7 @@ async def test_resume_queue_cancels_pending_timer(patched_session):
     svc._schedule_auto_resume(q.id, datetime.utcnow() + timedelta(hours=1))
     assert q.id in svc._resume_handles
 
-    svc.resume_queue(q.id)
+    await svc.resume_queue(q.id)
     assert q.id not in svc._resume_handles
 
 
@@ -162,20 +166,23 @@ async def test_resume_clears_pause_reason_and_reset_time(patched_session):
     q.reset_time = datetime.utcnow() + timedelta(hours=1)
     svc._queues[q.id] = q
 
-    assert svc.resume_queue(q.id) is True
+    assert await svc.resume_queue(q.id) is True
     assert q.pause_reason is None
     assert q.reset_time is None
 
 
 @pytest.mark.asyncio
 async def test_resume_refuses_when_no_active_task(patched_session):
-    """If current_index >= len(tasks) the queue has no work left."""
+    """If current_index >= len(tasks) AND no pending tasks remain, refuse."""
     svc = AutoPilotQueueService()
     q = _make_queue(n_tasks=2, status=QueueStatus.PAUSED)
     q.current_index = 2  # past end
+    # Mark all tasks completed — genuinely nothing left.
+    for t in q.tasks:
+        t.status = TaskStatus.COMPLETED
     svc._queues[q.id] = q
 
-    assert svc.resume_queue(q.id) is False
+    assert await svc.resume_queue(q.id) is False
     # Pause flag preserved — no spurious _pause_event.set()
     assert q.status == QueueStatus.PAUSED
 
@@ -185,7 +192,7 @@ async def test_resume_returns_false_for_non_paused_queue(patched_session):
     svc = AutoPilotQueueService()
     q = _make_queue(status=QueueStatus.RUNNING)
     svc._queues[q.id] = q
-    assert svc.resume_queue(q.id) is False
+    assert await svc.resume_queue(q.id) is False
 
 
 # ---------------------------------------------------------------------------
@@ -310,20 +317,37 @@ async def test_preflight_aborts_when_cli_missing(patched_session):
 @pytest.mark.asyncio
 async def test_circuit_breaker_trips_after_max_attempts(patched_session):
     """After AUTO_RESUME_MAX_ATTEMPTS consecutive auto-resumes, the queue
-    must downgrade to manual and stop firing. (E4 review HIGH-1)"""
+    must downgrade to manual and stop firing. (E4 review HIGH-1)
+
+    CB-2794 fix: the cap check now uses >= so the breaker trips exactly when
+    attempts == MAX (not MAX+1).  The counter must NOT be incremented past MAX
+    when the breaker fires.
+
+    CB-2795 fix: status must transition WAITING_RESET → PAUSED and
+    pause_reason must be 'manual_circuit_breaker' (not just 'manual').
+    """
     svc = AutoPilotQueueService()
     q = _make_queue(status=QueueStatus.WAITING_RESET)
     q.pause_reason = "token_exhaustion"
     q.reset_time = datetime.utcnow()
-    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS  # one short of trip
+    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS  # already at cap
     svc._queues[q.id] = q
 
-    # Next fire pushes counter to MAX+1 → circuit-breaker trip
+    # CB-2794: _fire_auto_resume pre-flight sees attempts >= MAX and trips without
+    # calling resume_queue, so the counter must stay at MAX (not MAX+1).
     await svc._fire_auto_resume(q.id)
-    assert q.auto_resume_attempts == svc._AUTO_RESUME_MAX_ATTEMPTS + 1
-    assert q.pause_reason == "manual"
-    # Status unchanged — user must manually resume now
-    assert q.status == QueueStatus.WAITING_RESET
+    assert q.auto_resume_attempts == svc._AUTO_RESUME_MAX_ATTEMPTS, (
+        f"CB-2794: counter must not exceed MAX when breaker trips; "
+        f"expected {svc._AUTO_RESUME_MAX_ATTEMPTS}, got {q.auto_resume_attempts}"
+    )
+    # CB-2795: status must be PAUSED (terminal-for-auto-resume), not WAITING_RESET.
+    assert q.status == QueueStatus.PAUSED, (
+        f"CB-2795: status must be PAUSED after breaker trips, got {q.status}"
+    )
+    assert q.pause_reason == svc._CIRCUIT_BREAKER_PAUSE_REASON, (
+        f"CB-2795: pause_reason must be {svc._CIRCUIT_BREAKER_PAUSE_REASON!r}, "
+        f"got {q.pause_reason!r}"
+    )
 
 
 @pytest.mark.asyncio
@@ -400,3 +424,274 @@ async def test_preflight_proceeds_when_issue_active(patched_session):
 
     assert result == "ok"
     assert q.tasks[0].status == TaskStatus.PENDING  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# CB-2794 — increment ordering fix
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_increment_happens_after_cap_check(patched_session):
+    """CB-2794: When auto_resume_attempts == MAX, resume_queue must trip the
+    circuit breaker WITHOUT incrementing the counter past MAX.
+
+    Before the fix: increment happened first, so the counter reached MAX+1
+    before the cap check. This meant:
+      - The cap was functionally MAX+1 (off-by-one — 4 attempts instead of 3).
+      - The counter kept growing on each breaker trip across restarts.
+
+    After the fix: the >= check fires before the increment, so:
+      - The counter stays at MAX (3) when the breaker trips.
+      - resume_queue returns False (breaker tripped).
+      - pause_reason is set to "manual".
+    """
+    svc = AutoPilotQueueService()
+    q = _make_queue(status=QueueStatus.WAITING_RESET)
+    q.pause_reason = "token_exhaustion"
+    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS  # == 3
+
+    svc._queues[q.id] = q
+    svc._persist_async = lambda *a, **kw: None  # suppress persistence
+
+    result = await svc.resume_queue(q.id, _is_auto_resume=True)
+
+    assert result is False, (
+        "CB-2794: resume_queue must return False when attempts == MAX"
+    )
+    assert q.auto_resume_attempts == svc._AUTO_RESUME_MAX_ATTEMPTS, (
+        f"CB-2794: counter must stay at MAX={svc._AUTO_RESUME_MAX_ATTEMPTS} "
+        f"when breaker trips, got {q.auto_resume_attempts}"
+    )
+    # CB-2795: pause_reason is now 'manual_circuit_breaker' (not just 'manual')
+    # and status must be PAUSED so the tick/fire predicates stop matching.
+    assert q.pause_reason == svc._CIRCUIT_BREAKER_PAUSE_REASON, (
+        f"CB-2795: pause_reason must be {svc._CIRCUIT_BREAKER_PAUSE_REASON!r} "
+        f"after breaker trips, got {q.pause_reason!r}"
+    )
+    assert q.status == QueueStatus.PAUSED, (
+        f"CB-2795: status must be PAUSED after breaker trips, got {q.status}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# CB-2795 — Circuit-breaker is a terminal state transition
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_trip_is_terminal(patched_session):
+    """CB-2795: When the breaker trips via the recovery tick, status must
+    transition WAITING_RESET → PAUSED and subsequent ticks must not emit
+    additional events.
+
+    Simulates 4 calls to _recovery_tick_once with attempts already at MAX.
+    Asserts:
+      - queue.status is PAUSED after the first tick.
+      - queue.pause_reason is 'manual_circuit_breaker'.
+      - Exactly ONE auto_resume_circuit_breaker_tripped event is persisted.
+      - Subsequent ticks do NOT emit additional events (idempotent).
+    """
+    from sqlalchemy import select as sa_select
+    from models.autopilot import AutoPilotEvent
+
+    Sf = patched_session
+
+    svc = AutoPilotQueueService()
+    q = _make_queue(status=QueueStatus.WAITING_RESET)
+    q.pause_reason = "token_exhaustion"
+    # reset_time in the past so the lookahead window includes this queue.
+    q.reset_time = datetime.utcnow() - timedelta(seconds=5)
+    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS  # already at cap
+
+    # Persist the queue record so transition_state can find it.
+    async with Sf() as s:
+        await save_queue(s, q)
+        await s.commit()
+
+    svc._queues[q.id] = q
+
+    # Run the tick four times — simulating 4 minutes of polling at 60-second cadence.
+    for _ in range(4):
+        await svc._recovery_tick_once()
+        # Give the event loop a turn so any ensure_future tasks settle.
+        await asyncio.sleep(0)
+
+    # In-memory status must be PAUSED immediately after the first tick.
+    assert q.status == QueueStatus.PAUSED, (
+        f"CB-2795: expected PAUSED, got {q.status}"
+    )
+    assert q.pause_reason == svc._CIRCUIT_BREAKER_PAUSE_REASON, (
+        f"CB-2795: expected {svc._CIRCUIT_BREAKER_PAUSE_REASON!r}, got {q.pause_reason!r}"
+    )
+
+    # Allow any background ensure_future tasks to finish writing the event.
+    await asyncio.sleep(0.05)
+
+    # Exactly ONE circuit_breaker_tripped event must be persisted.
+    async with Sf() as s:
+        result = await s.execute(
+            sa_select(AutoPilotEvent).where(
+                AutoPilotEvent.queueId == q.id,
+                AutoPilotEvent.type == "auto_resume_circuit_breaker_tripped",
+            )
+        )
+        events = list(result.scalars().all())
+
+    assert len(events) == 1, (
+        f"CB-2795: expected exactly 1 circuit_breaker_tripped event, got {len(events)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_trip_cancels_active_timer(patched_session):
+    """CB-2795 H2 fix: exercise the self-cancel path by letting _runner call
+    _fire_auto_resume from *inside* the scheduled task, which is the production
+    code path. Calling _fire_auto_resume directly from the test task is a
+    different task and misses the asyncio.current_task() == handle guard.
+
+    Steps:
+      1. Arm a timer set to fire in the very near future (reset_time = now-5s
+         so the 60s buffer is skipped; we patch _TIMER_EXTRA_SECONDS_BUFFER=0).
+      2. Wait for the _runner task to complete naturally.
+      3. Assert: status PAUSED, pause_reason == _CIRCUIT_BREAKER_PAUSE_REASON,
+         _resume_handles entry is gone, exactly one event persisted.
+    """
+    from sqlalchemy import select as sa_select
+    from models.autopilot import AutoPilotEvent
+
+    Sf = patched_session
+
+    svc = AutoPilotQueueService()
+    # Zero out the extra buffer so the timer fires almost immediately.
+    svc._AUTO_RESUME_BUFFER_SECONDS = 0
+
+    q = _make_queue(status=QueueStatus.WAITING_RESET)
+    q.pause_reason = "token_exhaustion"
+    # reset_time in the past so delay = max(0, ...) = 0 seconds.
+    q.reset_time = datetime.utcnow() - timedelta(seconds=5)
+    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS
+
+    async with Sf() as s:
+        await save_queue(s, q)
+        await s.commit()
+
+    svc._queues[q.id] = q
+
+    # Arm the real timer — _runner will sleep(~0) then call _fire_auto_resume.
+    svc._schedule_auto_resume(q.id, q.reset_time)
+    runner_task = svc._resume_handles[q.id]
+    assert runner_task is not None, "Timer task must be registered"
+
+    # Wait for _runner to complete (it fires immediately at delay≈0).
+    try:
+        await asyncio.wait_for(asyncio.shield(runner_task), timeout=2.0)
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        pass  # task may have been cancelled by its own self-cancel path
+
+    # Allow any trailing async work (persist, etc.) to flush.
+    await asyncio.sleep(0.1)
+
+    # _runner's finally block (or the self-cancel pop) must have cleared the handle.
+    assert q.id not in svc._resume_handles, (
+        "CB-2795 H2: _resume_handles entry must be removed after _runner exits"
+    )
+    # In-memory mirror must be consistent.
+    assert q.status == QueueStatus.PAUSED, (
+        f"CB-2795 H2: expected PAUSED, got {q.status}"
+    )
+    assert q.pause_reason == svc._CIRCUIT_BREAKER_PAUSE_REASON, (
+        f"CB-2795 H2: expected {svc._CIRCUIT_BREAKER_PAUSE_REASON!r}, got {q.pause_reason!r}"
+    )
+    # Exactly one circuit_breaker_tripped event persisted.
+    async with Sf() as s:
+        result = await s.execute(
+            sa_select(AutoPilotEvent).where(
+                AutoPilotEvent.queueId == q.id,
+                AutoPilotEvent.type == "auto_resume_circuit_breaker_tripped",
+            )
+        )
+        events = list(result.scalars().all())
+    assert len(events) == 1, (
+        f"CB-2795 H2: expected exactly 1 circuit_breaker_tripped event, got {len(events)}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry_point", [
+    "_fire_auto_resume",
+    "_recovery_tick_once",
+    "resume_queue_auto",
+])
+async def test_circuit_breaker_idempotent(patched_session, entry_point):
+    """CB-2795 M3: Idempotency across all three entry points that can trip the
+    circuit breaker:
+      - _fire_auto_resume (timer path)
+      - _recovery_tick_once (tick path)
+      - resume_queue(_is_auto_resume=True) (manual-triggered auto path)
+
+    For each: invoke twice; assert exactly ONE persisted event total AND
+    queue.status stays PAUSED after the second invocation.
+
+    The early-exit guards (status != WAITING_RESET, pause_reason already set)
+    ensure no double-emission regardless of which path trips the breaker first.
+    """
+    from sqlalchemy import select as sa_select
+    from models.autopilot import AutoPilotEvent
+
+    Sf = patched_session
+
+    svc = AutoPilotQueueService()
+    q = _make_queue(status=QueueStatus.WAITING_RESET)
+    q.pause_reason = "token_exhaustion"
+    q.reset_time = datetime.utcnow() - timedelta(seconds=5)
+    q.auto_resume_attempts = svc._AUTO_RESUME_MAX_ATTEMPTS
+
+    # All three entry points need the queue persisted so transition_state and
+    # _persist can locate the record in the in-memory SQLite DB.
+    async with Sf() as s:
+        await save_queue(s, q)
+        await s.commit()
+
+    svc._queues[q.id] = q
+
+    async def invoke_once():
+        if entry_point == "_fire_auto_resume":
+            await svc._fire_auto_resume(q.id)
+        elif entry_point == "_recovery_tick_once":
+            await svc._recovery_tick_once()
+        else:  # resume_queue_auto
+            # _is_auto_resume=True hits the circuit-breaker branch inside
+            # resume_queue; the queue record is already in DB so transition_state
+            # and _persist_async can write the event.
+            await svc.resume_queue(q.id, _is_auto_resume=True)
+
+    # First invocation — must trip the breaker.
+    await invoke_once()
+    assert q.status == QueueStatus.PAUSED, (
+        f"[{entry_point}] First trip must set PAUSED, got {q.status}"
+    )
+
+    # Second invocation — status is now PAUSED; early-exit guards must prevent
+    # any additional state mutation or event emission.
+    await invoke_once()
+    assert q.status == QueueStatus.PAUSED, (
+        f"[{entry_point}] Second trip must leave status PAUSED"
+    )
+
+    # Allow async persist tasks to flush.
+    await asyncio.sleep(0.1)
+
+    # Exactly 1 circuit_breaker_tripped event — not 2.
+    async with Sf() as s:
+        result = await s.execute(
+            sa_select(AutoPilotEvent).where(
+                AutoPilotEvent.queueId == q.id,
+                AutoPilotEvent.type == "auto_resume_circuit_breaker_tripped",
+            )
+        )
+        events = list(result.scalars().all())
+
+    assert len(events) == 1, (
+        f"CB-2795 M3 [{entry_point}]: expected 1 event, got {len(events)}"
+    )

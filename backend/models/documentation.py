@@ -2,7 +2,7 @@
 SQLAlchemy models for Documentation & Implementation Notes
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Integer, Float, DateTime, Text, ForeignKey, Index
@@ -15,8 +15,11 @@ from models.database import Base
 
 # Prisma owns the schema; its NOT NULL columns lack `DEFAULT CURRENT_TIMESTAMP`
 # on `updatedAt`, so we must populate it from Python on INSERT (CB-1953).
+# CB-2730 (CB-2377 follow-up): return tz-aware UTC. Naive `DateTime` columns
+# strip tzinfo on round-trip, but the JSON-boundary `_isoformat_utc_z` serializer
+# in `models/schemas.py` re-asserts UTC + emits the `Z` suffix on response.
 def _utc_now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 class ImplementationNote(Base):

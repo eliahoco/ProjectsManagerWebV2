@@ -24,6 +24,7 @@ without disclosing which projects exist or how their content is
 distributed across CUID prefixes.
 """
 
+import asyncio
 import logging
 from typing import List, Optional
 
@@ -76,10 +77,14 @@ class RagStatusResponse(BaseModel):
             "host (e.g., 'chromadb'). Empty string for mode=PERSISTENT and "
             "mode=UNINITIALIZED — see `fallback_active` for the PERSISTENT "
             "signal. CB-2215 (F-5): renamed from `host` to reflect dual "
-            "semantics. CB-2216: PERSISTENT no longer echoes the abspath "
-            "to avoid leaking the user-named volume layout to any local "
-            "process able to curl this endpoint (Origin-less requests bypass "
-            "the validate_origin middleware by design)."
+            "semantics. CB-2665: flag-day rename — no back-compat alias; "
+            "migration note in `docs/runbooks/2026-05-09-rag-status-host-"
+            "endpoint-rename.md` explains the perimeter rationale and the "
+            "`undefined` failure mode for any stale `host`-keyed consumer. "
+            "CB-2216: PERSISTENT no longer echoes the abspath to avoid "
+            "leaking the user-named volume layout to any local process "
+            "able to curl this endpoint (Origin-less requests bypass the "
+            "validate_origin middleware by design)."
         )
     )
     port: int = Field(
@@ -109,6 +114,24 @@ async def get_rag_status(rag: RAGService = RAGDep) -> RagStatusResponse:
 
     Never raises — `RAGService.get_status_payload()` traps every error
     from the underlying client and reflects it via `healthy=False`.
+
+    CB-2729: the call dispatches via `asyncio.to_thread()` so the
+    synchronous ChromaDB probe (`heartbeat` + `list_collections` +
+    per-collection `count()`) runs on the default threadpool instead
+    of pinning the event-loop worker. Without this, a stuck ChromaDB
+    dependency (CLOSE_WAIT, slow-loris, half-closed TCP) would block
+    every other async handler scheduled on the same worker for the
+    duration of the (timeout-bounded) probe — every other status
+    request, every queue/AI-execution poll, every generic API call.
+    The httpx-side timeout (CB-2729 part 1, configured at HttpClient
+    construction in `RAGService._init_client_blocking()`) caps the
+    blocking time at ~2 s per probe; running off the loop ensures
+    even that 2 s only blocks one threadpool worker, not the loop
+    that schedules every other handler.
+
+    The TTL cache + lock-with-timeout (CB-2218 + CB-2729 part 3) keep
+    the steady-state cost negligible — most calls are cache hits and
+    return without touching the threadpool path's blocking work.
     """
-    payload = rag.get_status_payload()
+    payload = await asyncio.to_thread(rag.get_status_payload)
     return RagStatusResponse(**payload)

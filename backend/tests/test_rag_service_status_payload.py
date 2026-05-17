@@ -317,6 +317,47 @@ def test_status_payload_per_collection_count_failure():
     assert payload["healthy"] is False
 
 
+def test_status_payload_count_failure_log_uses_index_not_name(caplog):
+    """CB-2669 (L-2): the per-collection count() failure DEBUG log must
+    reference the loop index (`#<idx>`), not the collection name. Including
+    the name in the diagnostic log re-discloses the `project_<cuid_prefix>`
+    enumeration that CB-2217 banned from the HTTP status payload — anyone
+    who flips the logger to DEBUG (or scrapes a captured stdout pipe)
+    recovers the same string. The index is sufficient for operators to
+    correlate the log line with the position-aligned `collections_payload`
+    row returned to the client.
+    """
+    import logging
+
+    bad = MagicMock()
+    bad.name = "project_broken_secret"
+    bad.count = MagicMock(side_effect=RuntimeError("count failed"))
+
+    fake_persistent = MagicMock()
+    fake_persistent.list_collections = MagicMock(return_value=[bad])
+
+    rag = RAGService()
+    with patch.object(chromadb, "PersistentClient", return_value=fake_persistent):
+        rag._fallback_to_persistent()
+
+    with caplog.at_level(logging.DEBUG, logger="services.rag_service"):
+        rag.get_status_payload()
+
+    failure_lines = [
+        rec.getMessage()
+        for rec in caplog.records
+        if "count() failed for collection" in rec.getMessage()
+    ]
+    assert failure_lines, "expected a count() failure DEBUG log line"
+    for line in failure_lines:
+        assert "project_broken_secret" not in line, (
+            f"CB-2669 regression: collection name leaked into DEBUG log: {line!r}"
+        )
+        assert "#0" in line, (
+            f"CB-2669: expected loop index `#0` in log line, got: {line!r}"
+        )
+
+
 # ---- CB-2215 (F-9 follow-up): state-edge log gating regression tests ----
 #
 # A flat WARN per status poll would have produced ~120 lines/h while

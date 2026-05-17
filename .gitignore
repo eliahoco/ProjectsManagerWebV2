@@ -36,3 +36,6 @@ build/
 
 # macOS resource forks
 ._*
+
+# Local agent worktrees
+.worktrees/

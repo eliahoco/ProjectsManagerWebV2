@@ -13,14 +13,15 @@
  * - Visual border distinction per queue state
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, Pause, Play, SkipForward, Square, ChevronDown, ChevronUp,
-  CheckCircle2, AlertCircle, Clock, Timer, RefreshCw, ShieldAlert,
+  CheckCircle2, AlertCircle, Clock, Timer, RefreshCw, ShieldAlert, RotateCcw,
 } from 'lucide-react';
 import { useAutoPilot } from '@/contexts/AutoPilotContext';
 import type { AbortAction, QueueTask, RecoveredQueueInfo } from '@/contexts/AutoPilotContext';
 import { cn } from '@/lib/utils';
+import { AutoPilotStatusBadge } from '@/components/codeboard/AutoPilotStatusBadge';
 
 // Direct backend URL for non-proxied endpoints.
 const BACKEND_API = 'http://localhost:8401/api/execute';
@@ -78,6 +79,20 @@ export function AutoPilotFloatingBar() {
     description?: string;
     models: string[];
   }>>([]);
+
+  // Retry state — tracks in-progress and toast message.
+  const [retryingTasks, setRetryingTasks] = useState<Set<number>>(new Set());
+  const [retryToast, setRetryToast] = useState<string | null>(null);
+  const retryToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // CB-2796 (S3): when the resume endpoint returns 409 with failed_count > 0,
+  // we store the conflict details so the UI can surface a "Retry & Resume" button
+  // that calls POST resume?retry_failed=true instead of the per-task reset loop.
+  const [resumeConflict, setResumeConflict] = useState<{
+    failedCount: number;
+    pendingCount: number;
+    suggestion: string;
+  } | null>(null);
 
   // Countdown display string — updated every second when we have a reset_time.
   const [countdown, setCountdown] = useState<string>('');
@@ -145,11 +160,173 @@ export function AutoPilotFloatingBar() {
     };
   }, [isTokenExhausted, pauseReason, resetTime]);
 
+  // Show a toast message for N ms then clear it.
+  const showToast = useCallback((msg: string, ms = 3000) => {
+    setRetryToast(msg);
+    if (retryToastTimerRef.current) clearTimeout(retryToastTimerRef.current);
+    retryToastTimerRef.current = setTimeout(() => setRetryToast(null), ms);
+  }, []);
+
+  // CB-2779: Resume with optional pre-reset of failed tasks.
+  // When the queue is paused and has failed tasks, resets each one first then resumes.
+  const handleResumeWithRetry = useCallback(async () => {
+    if (!state.queueId) return;
+    // CB-2775 race fix: refetch queue from API at click time so we don't
+    // miss failed tasks because state.queue is mid-flight from SSE.
+    let failedTasks: QueueTask[];
+    try {
+      const res = await fetch(`${BACKEND_API}/queue/${state.queueId}`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (res.ok) {
+        const fresh = await res.json();
+        failedTasks = (fresh.tasks || []).filter((t: QueueTask) => t.status === 'failed');
+      } else {
+        failedTasks = state.queue.filter(t => t.status === 'failed');
+      }
+    } catch {
+      failedTasks = state.queue.filter(t => t.status === 'failed');
+    }
+
+    if (failedTasks.length === 0) {
+      // No failed tasks detected client-side — attempt a plain resume and
+      // detect 409 from the server (CB-2796 S3: server may see failed tasks
+      // that client hasn't received yet via SSE).
+      try {
+        const res = await fetch(
+          `${BACKEND_API}/queue/${state.queueId}/resume`,
+          { method: 'POST', signal: AbortSignal.timeout(15_000) },
+        );
+        if (res.status === 409) {
+          const body = await res.json().catch(() => ({}));
+          const details = body?.details ?? {};
+          const serverFailedCount: number = details.failed_count ?? 0;
+          if (serverFailedCount > 0) {
+            // Surface "Retry & Resume" button with server-provided context.
+            setResumeConflict({
+              failedCount: serverFailedCount,
+              pendingCount: details.pending_count ?? 0,
+              suggestion: details.suggestion ?? 'Use retry_failed=true to retry failed tasks',
+            });
+            return;
+          }
+          showToast(body?.message || 'Cannot resume — queue is not resumable.');
+          return;
+        }
+        if (!res.ok) {
+          showToast(`Resume failed: ${res.status}`);
+          return;
+        }
+      } catch (err) {
+        // Network error — fall through to context resume for retry
+        await resumeAutoPilot();
+        return;
+      }
+      // 200 OK — sync context state
+      await resumeAutoPilot();
+      return;
+    }
+
+    // Pre-mark all failed tasks as in-progress so buttons disable immediately.
+    setRetryingTasks(new Set(failedTasks.map(t => t.order)));
+    showToast(`Resetting ${failedTasks.length} failed task${failedTasks.length !== 1 ? 's' : ''}…`);
+
+    let failedResets = 0;
+    for (const task of failedTasks) {
+      try {
+        const res = await fetch(
+          `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset`,
+          { method: 'POST', signal: AbortSignal.timeout(15_000) },
+        );
+        if (res.status === 409) {
+          showToast('Cannot reset — queue is not paused.');
+          setRetryingTasks(new Set());
+          return;
+        }
+        if (!res.ok) failedResets++;
+      } catch { failedResets++; }
+      setRetryingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(task.order);
+        return next;
+      });
+    }
+
+    if (failedResets > 0) {
+      showToast(`${failedResets} task${failedResets !== 1 ? 's' : ''} failed to reset — check queue state before resuming.`);
+      return;
+    }
+
+    // All resets succeeded — now resume
+    await resumeAutoPilot();
+  }, [state.queueId, state.queue, resumeAutoPilot, showToast]);
+
+  // CB-2796 (S3): Retry & Resume — calls POST resume?retry_failed=true.
+  // Used when the backend has returned a 409 with failed_count > 0, indicating
+  // the server-side bulk reset is the right recovery path.
+  const handleRetryAndResume = useCallback(async () => {
+    if (!state.queueId) return;
+    setResumeConflict(null);
+    try {
+      const res = await fetch(
+        `${BACKEND_API}/queue/${state.queueId}/resume?retry_failed=true`,
+        { method: 'POST', signal: AbortSignal.timeout(30_000) },
+      );
+      if (res.ok) {
+        // Context state will sync via SSE; clear any stale conflict banner.
+        setResumeConflict(null);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showToast(body?.message || `Resume failed: ${res.status}`);
+      }
+    } catch (err) {
+      showToast(`Resume failed: ${err instanceof Error ? err.message : 'Network error'}`);
+    }
+  }, [state.queueId, showToast]);
+
+  // Retry a single failed task — POST to backend reset endpoint, then refetch.
+  const handleRetryTask = useCallback(async (task: QueueTask) => {
+    if (!state.queueId) return;
+    setRetryingTasks(prev => new Set(prev).add(task.order));
+    try {
+      const res = await fetch(
+        `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset`,
+        { method: 'POST', signal: AbortSignal.timeout(15_000) },
+      );
+      if (res.status === 409) {
+        showToast('Pause the queue first to retry tasks.');
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        showToast(`Retry failed: ${text || res.status}`);
+        return;
+      }
+      showToast(`${task.issue_key} reset to pending.`);
+    } catch (err) {
+      showToast(`Retry failed: ${err instanceof Error ? err.message : 'Network error'}`);
+    } finally {
+      setRetryingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(task.order);
+        return next;
+      });
+    }
+  }, [state.queueId, showToast]);
+
+  // Bulk retry — loop over all failed tasks sequentially.
+  // CB-2775: handleRetryAllFailed removed — superseded by handleResumeWithRetry
+  // (header button does reset+resume) + per-task Retry buttons in the expanded list.
+
   if (!state.isActive) return null;
 
   const currentTask = state.queue[state.currentIndex];
   const { total, completed, skipped, percent } = state.progress;
   const pendingCount = state.queue.filter(q => q.status === 'pending' || q.status === 'running').length;
+  const failedTasks = state.queue.filter(t => t.status === 'failed');
+  const failedCount = failedTasks.length;
+  // Retry is only possible when queue is not running (backend enforces 409 otherwise).
+  const queueIsRunning = state.queueStatus === 'running';
 
   const handleAbort = async (action: AbortAction) => {
     setShowAbortDialog(false);
@@ -247,15 +424,12 @@ export function AutoPilotFloatingBar() {
             <span className="text-zinc-500 text-xs">
               {completed + skipped}/{total}
             </span>
-            {isTokenExhausted && (
-              <span className="text-xs px-1.5 py-0.5 bg-red-900/50 text-red-300 rounded">
-                Token Exhausted
-              </span>
-            )}
-            {state.isPaused && pauseReason === 'manual' && !isTokenExhausted && (
-              <span className="text-xs px-1.5 py-0.5 bg-zinc-700 text-zinc-400 rounded">
-                Paused
-              </span>
+            {/* CB-2751: Status badge — shows live queue state/reason */}
+            {state.queueStatus && (
+              <AutoPilotStatusBadge
+                state={state.queueStatus}
+                reason={pauseReason ?? undefined}
+              />
             )}
           </div>
           {currentTask && (
@@ -298,11 +472,19 @@ export function AutoPilotFloatingBar() {
             </button>
           ) : state.isPaused ? (
             <button
-              onClick={resumeAutoPilot}
-              className="p-1.5 rounded hover:bg-green-900/50 text-green-400"
-              title="Resume"
+              onClick={handleResumeWithRetry}
+              disabled={retryingTasks.size > 0}
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
+                retryingTasks.size > 0
+                  ? 'text-zinc-500 cursor-not-allowed'
+                  : 'hover:bg-green-900/50 text-green-400',
+              )}
+              title={failedCount > 0 ? `Reset ${failedCount} failed task${failedCount !== 1 ? 's' : ''} then resume` : 'Resume'}
+              data-testid="resume-btn"
             >
               <Play className="w-4 h-4" />
+              {failedCount > 0 ? 'Retry failed & Resume' : 'Resume'}
             </button>
           ) : (
             <button
@@ -358,12 +540,67 @@ export function AutoPilotFloatingBar() {
         </div>
       )}
 
+      {/* Retry toast */}
+      {retryToast && (
+        <div className="px-4 py-2 bg-zinc-800 border-t border-zinc-700 text-xs text-zinc-300">
+          {retryToast}
+        </div>
+      )}
+
+      {/* CB-2796 (S3): 409 conflict banner — shown when server returns 409 with
+          failed_count > 0. Surfaces a "Retry & Resume" button that calls
+          POST resume?retry_failed=true (server-side bulk reset + resume). */}
+      {resumeConflict !== null && (
+        <div className="px-4 py-3 bg-amber-900/20 border-t border-amber-600/40 flex flex-col gap-2" data-testid="resume-conflict-banner">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-xs text-amber-300 flex-1">
+              {resumeConflict.failedCount} failed task{resumeConflict.failedCount !== 1 ? 's' : ''} — {resumeConflict.pendingCount} pending.
+            </span>
+            <button
+              onClick={handleRetryAndResume}
+              className="px-3 py-1.5 rounded bg-amber-900/50 hover:bg-amber-900/70 text-amber-300 text-xs font-medium transition-colors shrink-0"
+              data-testid="retry-and-resume-btn"
+            >
+              Retry &amp; Resume
+            </button>
+            <button
+              onClick={() => setResumeConflict(null)}
+              className="p-1 rounded hover:bg-zinc-700 text-zinc-500 text-xs"
+              aria-label="Dismiss"
+            >
+              &#x2715;
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Expanded queue list */}
       {isExpanded && (
-        <div className="max-h-64 overflow-y-auto border-t border-zinc-700">
-          {state.queue.map((task, idx) => (
-            <QueueRow key={task.issue_id} task={task} isCurrent={idx === state.currentIndex} />
-          ))}
+        <div className="border-t border-zinc-700">
+          {/* CB-2775: failed-task counter (no bulk button — "Retry failed & Resume"
+              in the header already does the same job + resumes; per-task Retry buttons
+              below give granular control) */}
+          {failedCount > 0 && (
+            <div className="px-4 py-2 bg-zinc-800/60 border-b border-zinc-700">
+              <span className="text-xs text-zinc-400">
+                {failedCount} failed task{failedCount !== 1 ? 's' : ''} — use header button or per-task Retry
+              </span>
+            </div>
+          )}
+          <div className="max-h-64 overflow-y-auto">
+            {state.queue.map((task, idx) => (
+              <QueueRow
+                key={task.issue_id}
+                task={task}
+                isCurrent={idx === state.currentIndex}
+                queueId={state.queueId ?? ''}
+                queueIsRunning={queueIsRunning}
+                isRetrying={retryingTasks.has(task.order)}
+                onRetry={handleRetryTask}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -493,7 +730,19 @@ export function AutoPilotFloatingBar() {
   );
 }
 
-function QueueRow({ task, isCurrent }: { task: QueueTask; isCurrent: boolean }) {
+interface QueueRowProps {
+  task: QueueTask;
+  isCurrent: boolean;
+  queueId: string;
+  queueIsRunning: boolean;
+  isRetrying: boolean;
+  onRetry: (task: QueueTask) => void;
+}
+
+function QueueRow({ task, isCurrent, queueIsRunning, isRetrying, onRetry }: QueueRowProps) {
+  const isFailed = task.status === 'failed';
+  const retryDisabled = queueIsRunning || isRetrying;
+
   return (
     <div className={cn(
       'flex items-center gap-2 px-4 py-2 text-xs',
@@ -502,7 +751,8 @@ function QueueRow({ task, isCurrent }: { task: QueueTask; isCurrent: boolean }) 
       {/* Status icon */}
       {task.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin shrink-0" />}
       {task.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />}
-      {task.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+      {task.status === 'failed' && !isRetrying && <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+      {task.status === 'failed' && isRetrying && <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />}
       {task.status === 'skipped' && <SkipForward className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
       {task.status === 'pending' && <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
 
@@ -514,6 +764,25 @@ function QueueRow({ task, isCurrent }: { task: QueueTask; isCurrent: boolean }) 
         <span className="text-cyan-400/70 text-xs shrink-0">
           {task.session_info.progress_percent}%
         </span>
+      )}
+
+      {/* Per-task retry button — only for failed tasks */}
+      {isFailed && (
+        <button
+          onClick={() => onRetry(task)}
+          disabled={retryDisabled}
+          title={queueIsRunning ? 'Pause queue first to retry tasks' : 'Retry this task'}
+          aria-label={`Retry ${task.issue_key}`}
+          data-testid={`retry-task-btn-${task.order}`}
+          className={cn(
+            'p-1 rounded transition-colors shrink-0',
+            retryDisabled
+              ? 'text-zinc-600 cursor-not-allowed'
+              : 'text-amber-400 hover:bg-amber-900/40 hover:text-amber-300',
+          )}
+        >
+          <RotateCcw className="w-3 h-3" />
+        </button>
       )}
 
       <span className={cn(

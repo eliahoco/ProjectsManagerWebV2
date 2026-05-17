@@ -6,7 +6,7 @@ retention policy for old summaries, and the per-issue cap. One row, fixed
 primary key (`SINGLETON_KEY`); GET creates the default row if missing.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.sql import func
@@ -17,8 +17,10 @@ from models.database import Base
 SINGLETON_KEY = "global"
 
 
+# CB-2730 (CB-2377 follow-up): tz-aware UTC. Same naive-column round-trip as
+# `models.documentation._utc_now` — JSON serializer re-asserts UTC + `Z` suffix.
 def _utc_now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 class DocSettings(Base):

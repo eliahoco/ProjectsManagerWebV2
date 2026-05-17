@@ -8,10 +8,23 @@ import socket
 import threading
 import time
 from chromadb.config import Settings
+from pathlib import Path
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import hashlib
 import json
 import logging
+
+try:
+    import httpx  # CB-2729: used to coerce a per-call timeout onto the
+    # chromadb HttpClient's internal httpx session (chromadb 0.5.x
+    # constructs `httpx.Client(timeout=None)`). httpx is a transitive dep
+    # via chromadb itself, but we import defensively so a future chromadb
+    # release that drops/replaces httpx degrades gracefully (the
+    # configurer below logs + skips instead of crashing init).
+    _HTTPX_TIMEOUT_AVAILABLE = True
+except ImportError:  # pragma: no cover — httpx is required by chromadb
+    httpx = None  # type: ignore[assignment]
+    _HTTPX_TIMEOUT_AVAILABLE = False
 
 from app.config import settings
 
@@ -40,11 +53,88 @@ def _safe_json_list(value: Optional[str]) -> List[str]:
     return []
 
 
-PERSISTENT_FALLBACK_PATH = "./data/chroma"
+def _configure_http_client_timeout(
+    client: Any, timeout_s: float
+) -> bool:
+    """CB-2729: coerce a per-call timeout onto the chromadb HttpClient's
+    underlying httpx session.
+
+    chromadb 0.5.x's `chromadb.api.fastapi.FastAPI.__init__` builds
+    `self._session = httpx.Client(timeout=None)` and never reconfigures
+    it — every heartbeat / list_collections / count() inherits the
+    no-timeout default. When the chromadb server hangs (stuck container,
+    CLOSE_WAIT socket, slow-loris), those calls block the caller's
+    thread indefinitely. The /api/system/rag/status endpoint hits all
+    three on every cache miss, so a single stuck dependency would
+    otherwise pin the FastAPI worker thread that handles the request.
+
+    The fix mutates `client._server._session.timeout` post-construction
+    (the only hook chromadb exposes — there is no public `timeout=`
+    kwarg on `chromadb.HttpClient` as of 0.5.23). Private attribute
+    access is intentional and load-bearing: the alternative is reaching
+    into chromadb's Settings (which only exposes per-operation timeouts
+    for query/sysdb/logservice — heartbeat is none of those) or running
+    our own httpx pool against the chromadb HTTP API directly. Both are
+    significantly more invasive.
+
+    Returns True on success, False if the internal layout changed or
+    httpx isn't importable. Failures log at WARNING (operators should
+    notice the regression) but never raise — we'd rather have a
+    timeout-less client than refuse to start the backend.
+
+    The defensive try/except is paired with a regression test
+    (`test_init_configures_http_timeout`) that asserts the timeout
+    landed on the session — if chromadb refactors `_session` away, the
+    test fails loudly at the same time as this returns False, so the
+    silent-degradation path is never reached in practice.
+    """
+    if not _HTTPX_TIMEOUT_AVAILABLE:
+        logger.warning(
+            "Cannot configure ChromaDB HTTP timeout — httpx not importable; "
+            "status-endpoint probes have no per-call timeout (CB-2729)"
+        )
+        return False
+    try:
+        # `client._server` is the chromadb FastAPI instance; `_session` is
+        # its httpx.Client. Setting `.timeout` here propagates to every
+        # subsequent `_session.request(...)` call (heartbeat / list /
+        # count all flow through that single method).
+        client._server._session.timeout = httpx.Timeout(timeout_s)
+        return True
+    except AttributeError as exc:
+        logger.warning(
+            "Could not configure ChromaDB HTTP timeout — chromadb internal "
+            "layout changed (%s); status-endpoint probes have no per-call "
+            "timeout (CB-2729)", exc,
+        )
+        return False
+
+
+# CB-2220: anchor to backend/ package root, not process CWD. A relative
+# "./data/chroma" silently moved with `os.getcwd()` — systemd unit with a
+# non-backend WorkingDirectory or a sibling helper script would write the
+# embedded SQLite fallback to a different disk location, making prior
+# embeddings appear missing.  Path(__file__).resolve() also collapses any
+# parent symlinks so the fallback can never land in a writable parent CWD
+# with unexpected permissions.
+PERSISTENT_FALLBACK_PATH = str(
+    Path(__file__).resolve().parent.parent / "data" / "chroma"
+)
 
 
 class RAGService:
     """Service for RAG (Retrieval Augmented Generation) using ChromaDB"""
+
+    # CB-2729: bound on `_status_cache_lock.acquire()` blocking when a
+    # caller misses the TTL cache. (1)+(2) of the CB-2729 fix already
+    # remove the worst-case event-loop pin (httpx timeout + asyncio.to_thread),
+    # but a short acquire bound is the belt-and-braces guarantee that
+    # status callers can never stack indefinitely on a slow probe even
+    # if the timeout configurer fails or chromadb internal layout changes
+    # mid-deploy. 0.5 s ≪ httpx 2 s ceiling ⇒ a healthy probe always
+    # completes before contention timeout fires; 0.5 s ≫ TCP-on-loopback
+    # round-trip ⇒ no false-positive contention drops in steady-state.
+    STATUS_LOCK_ACQUIRE_TIMEOUT_S: float = 0.5
 
     # CB-2218: TTL window for the status-payload cache (seconds).
     # The /api/system/rag/status endpoint is polled at 30 s by the always-
@@ -98,6 +188,36 @@ class RAGService:
         self._status_cache: Optional[Dict[str, Any]] = None
         self._status_cache_at: float = 0.0
         self._status_cache_lock = threading.Lock()
+        # CB-2663: serialize the reset+construct sequence shared by
+        # `_init_client_blocking()`, `_fallback_to_persistent()`, and the
+        # property-fallback in `client`. RAGService is a process-level
+        # singleton hung off `app.state.rag` and reached from async FastAPI
+        # handlers via `asyncio.to_thread()`; today only the lifespan calls
+        # the init paths so contention is zero, but a future runtime-
+        # reconnect surface (e.g. admin endpoint) racing with the property
+        # fallback would otherwise construct two clients on the same
+        # SQLite-backed PersistentClient path — undefined behaviour up to
+        # and including DB lock-file corruption. A `threading.Lock` (NOT
+        # `asyncio.Lock`) is the right primitive because every caller
+        # of these methods is sync and crosses the event-loop boundary
+        # via `to_thread`; an asyncio lock would simply not bind across
+        # the threadpool. The lock is only ever held during the short
+        # reset+construct window (microseconds at boot, dominated by the
+        # ChromaDB heartbeat timeout in degraded paths), so it is
+        # uncontended in the steady-state hot path that goes through
+        # `client` after `_client` is set.
+        #
+        # Lock-ordering convention (see CB-2663 audit, code-review LOW-2 +
+        # security LOW-3): if a future caller ever needs to hold both
+        # `_init_lock` and `_status_cache_lock` at the same time, ALWAYS
+        # acquire `_init_lock` first, then `_status_cache_lock`. Today no
+        # path holds both — the init paths write `_status_cache = None`
+        # under `_init_lock` without acquiring `_status_cache_lock` (see
+        # `_reset_state` docstring for the startup-only justification) —
+        # but pinning the order here prevents a future runtime-reconnect
+        # surface from inverting it and deadlocking against
+        # `get_status_payload()`.
+        self._init_lock = threading.Lock()
 
     @property
     def client(self):
@@ -106,13 +226,23 @@ class RAGService:
         Must be initialized at startup via _init_client_blocking() /
         _fallback_to_persistent() before the first request hits.
         If somehow still None, fall back synchronously (degraded path).
+
+        CB-2663: the `_client is None` check + fallback construction now
+        runs under `_init_lock` with double-checked locking. The outer
+        unlocked check keeps the steady-state hot path (`_client` already
+        set) lock-free; the inner re-check after acquire closes the TOCTOU
+        window where two threads could both observe `_client is None` and
+        each construct a duplicate `PersistentClient` on the same SQLite
+        path — the latent race CB-2663 was filed for.
         """
         if self._client is None:
-            logger.warning(
-                "ChromaDB client accessed before startup init; "
-                "falling back to PersistentClient synchronously"
-            )
-            self._fallback_to_persistent()
+            with self._init_lock:
+                if self._client is None:
+                    logger.warning(
+                        "ChromaDB client accessed before startup init; "
+                        "falling back to PersistentClient synchronously"
+                    )
+                    self._construct_persistent_client_locked()
         return self._client
 
     def _reset_state(self) -> None:
@@ -122,11 +252,28 @@ class RAGService:
         must reset identically — otherwise a future "reconnect" caller can
         leave `_collections` pointing at handles bound to a dead client
         (the half-initialised state CB-2043's reset block aimed to prevent).
+
+        CB-2663 contract: callers in the init paths hold `_init_lock`. This
+        method itself does NOT acquire the lock — it is the inner reset
+        primitive shared by `_init_client_blocking`,
+        `_fallback_to_persistent`, and the property-fallback in `client`,
+        all of which acquire `_init_lock` first. Tests that drive
+        `_reset_state()` directly to assert the reset contract are
+        single-threaded and exempt.
         """
         self._client = None
         self._mode = None
         self._endpoint = None
-        self._collections = {}
+        # CB-2663 (LOW bonus from same audit): mutate the existing dict in
+        # place rather than rebinding to a fresh `{}`. A concurrent reader
+        # mid-iteration over `_collections` (e.g. a snapshotting helper that
+        # captured `dict(rag._collections).items()` outside the lock) sees a
+        # uniformly emptied view rather than a frozen reference to a now-
+        # detached dict still bound to handles of the dead client. The
+        # primary lock-guard above already prevents *new* writers from
+        # racing; `.clear()` reduces blast radius if a future caller leaks
+        # an unsynchronised read of the dict.
+        self._collections.clear()
         # Reset health-edge tracking too — a reconnect should treat the new
         # client as a fresh subject. Without this, a healthy old client →
         # reset → degraded new client would silently log DEBUG instead of
@@ -138,15 +285,47 @@ class RAGService:
         # serve a stale prior-mode payload during the post-reset TTL window
         # — that would mask the very mode-transition the status surface
         # exists to expose, and let "fallback_active=False" linger on a
-        # client that has already fallen back. We do not take the cache
-        # lock here on purpose: `_reset_state()` is called from
-        # `_init_client_blocking()` / `_fallback_to_persistent()` which run
-        # at startup before any concurrent reader can reach the service,
-        # and adding a lock acquisition here would serialize cache reset
-        # against an in-flight `get_status_payload()` that has already
-        # passed the TTL gate but not yet written its result — defeating
-        # the point. The single-flight contract (lock held during compute)
-        # already guarantees no torn read of `_status_cache`.
+        # client that has already fallen back.
+        #
+        # CB-2729 sec audit (MEDIUM): we do not take `_status_cache_lock`
+        # here even though `_fallback_to_persistent()` is reachable post-
+        # startup via the property fallback in `client` (rag_service.py
+        # `client` getter). Two reasons that combination is safe today:
+        #
+        #   1. The property fallback only fires on the very first
+        #      `client` access — after init, `_client` is non-None and
+        #      the unlocked check skips the lock entirely, so the
+        #      runtime path that actually calls `_reset_state()` is
+        #      bounded to the first request hitting a service whose
+        #      lifespan startup failed. After that first reset the
+        #      property fallback never reaches `_reset_state()` again.
+        #   2. The TTL fast-path read in `get_status_payload()` reads
+        #      `_status_cache` and `_status_cache_at` as two atomic
+        #      attribute reads. Across a reset that happens between
+        #      those reads, the four torn-pair outcomes are:
+        #        (old_cache, old_at) — TTL math identical to before
+        #          the reset; serves stale at most once before the next
+        #          poll catches up.
+        #        (None, old_at)     — `cached is None` short-circuits;
+        #          lock acquired, recomputes against the new client.
+        #        (old_cache, 0.0)   — `now - 0.0` is huge, TTL gate
+        #          fails; lock acquired, recomputes.
+        #        (None, 0.0)        — `cached is None` short-circuits;
+        #          lock acquired, recomputes.
+        #      None of the four returns a payload from the wrong mode;
+        #      worst case is one redundant pre-reset stale read on the
+        #      caller that lost the race, then convergence on the next
+        #      poll. Adding a lock acquisition here would serialize
+        #      cache reset against in-flight cache reads, which would
+        #      defeat the point of the lock-free fast path that
+        #      CB-2729 introduced for the loop-pin fix.
+        #
+        # If a future runtime-reconnect surface (e.g. an admin endpoint
+        # that calls `_init_client_blocking()` mid-flight) is added, the
+        # convention pinned in `_init_lock`'s docstring requires the
+        # caller to acquire `_init_lock` first and then `_status_cache_lock`
+        # before mutating cache state — that gives the strict-consistency
+        # guarantee the current "torn-read is safe-by-arithmetic" relies on.
         self._status_cache = None
         self._status_cache_at = 0.0
 
@@ -155,40 +334,75 @@ class RAGService:
 
         Raises on any connectivity failure so the caller can fall back.
         Intended to be called via asyncio.to_thread() from the lifespan.
+
+        CB-2663: the entire reset+probe+construct sequence runs under
+        `_init_lock` so a future runtime-reconnect caller racing with
+        the property-fallback in `client` cannot construct duplicate
+        clients on the same backing store. Lock is uncontended at boot
+        (single lifespan caller) so there is no startup-latency cost.
+        On failure the lock is released by `with`-block unwind and
+        `_reset_state()` has already cleared `_client`/`_mode`/`_endpoint`,
+        so the next caller sees a clean slate.
         """
-        # CB-2043 (review): reset mode/client up front so a mid-init failure
-        # cannot leave stale `_mode` reporting HTTP while `_client` is None
-        # or still pointing at a previous backend.
-        self._reset_state()
+        with self._init_lock:
+            # CB-2043 (review): reset mode/client up front so a mid-init
+            # failure cannot leave stale `_mode` reporting HTTP while
+            # `_client` is None or still pointing at a previous backend.
+            self._reset_state()
 
-        host = settings.CHROMA_HOST
-        port = settings.CHROMA_PORT
+            host = settings.CHROMA_HOST
+            port = settings.CHROMA_PORT
 
-        # Fast TCP probe with 5 s timeout — avoids the 75 s macOS SYN hang
-        try:
-            conn = socket.create_connection((host, port), timeout=5)
-            conn.close()
-        except OSError as exc:
-            raise ConnectionError(
-                f"ChromaDB TCP probe failed ({host}:{port}): {exc}"
-            ) from exc
+            # Fast TCP probe with 5 s timeout — avoids the 75 s macOS SYN hang
+            try:
+                conn = socket.create_connection((host, port), timeout=5)
+                conn.close()
+            except OSError as exc:
+                raise ConnectionError(
+                    f"ChromaDB TCP probe failed ({host}:{port}): {exc}"
+                ) from exc
 
-        client = chromadb.HttpClient(host=host, port=port)
+            client = chromadb.HttpClient(host=host, port=port)
 
-        # Heartbeat confirms the server is actually responding to HTTP
-        try:
-            client.heartbeat()
-        except Exception as exc:
-            raise ConnectionError(
-                f"ChromaDB heartbeat failed ({host}:{port}): {exc}"
-            ) from exc
+            # CB-2729: configure a per-call HTTP timeout on the chromadb
+            # HttpClient before the first probe. chromadb 0.5.x constructs
+            # `_session = httpx.Client(timeout=None)` internally, so any
+            # subsequent heartbeat / list_collections / count() blocks
+            # indefinitely if the server hangs (CLOSE_WAIT, slow-loris,
+            # half-closed TCP). Without this, `get_status_payload()` could
+            # pin its worker thread for the full TCP keepalive interval —
+            # CB-2729's audit-finding DoS shape. Failure to configure the
+            # timeout (chromadb internals changed, httpx unavailable) is
+            # logged but non-fatal: degraded behaviour matches the prior
+            # status quo, which is strictly better than refusing to start.
+            _configure_http_client_timeout(
+                client, settings.CHROMA_HTTP_TIMEOUT_S
+            )
 
-        self._client = client
-        self._mode = "HTTP"
-        self._endpoint = f"{host}:{port}"
+            # Heartbeat confirms the server is actually responding to HTTP
+            try:
+                client.heartbeat()
+            except Exception as exc:
+                raise ConnectionError(
+                    f"ChromaDB heartbeat failed ({host}:{port}): {exc}"
+                ) from exc
 
-    def _fallback_to_persistent(self) -> None:
-        """Switch to a local PersistentClient (no external server needed)."""
+            self._client = client
+            self._mode = "HTTP"
+            self._endpoint = f"{host}:{port}"
+
+    def _construct_persistent_client_locked(self) -> None:
+        """CB-2663: reset+construct PersistentClient. Caller MUST hold `_init_lock`.
+
+        Extracted from `_fallback_to_persistent` so the property-fallback in
+        `client` can call the construction body while already holding the
+        lock (Python's `threading.Lock` is non-reentrant — having the public
+        `_fallback_to_persistent` method also acquire the lock would
+        otherwise deadlock the property-fallback path). All assignments to
+        `_client`/`_mode`/`_endpoint`/`_collections` happen here under the
+        lock, so any concurrent reader either sees the prior fully-
+        consistent state or the new one — never a torn mix.
+        """
         # CB-2043 (review): reset state so a PersistentClient(...) raise
         # cannot leave the prior HTTP `_mode` advertised next to a now-None
         # client.
@@ -201,16 +415,38 @@ class RAGService:
         self._mode = "PERSISTENT"
         self._endpoint = os.path.abspath(PERSISTENT_FALLBACK_PATH)
 
+    def _fallback_to_persistent(self) -> None:
+        """Switch to a local PersistentClient (no external server needed).
+
+        CB-2663: acquires `_init_lock` then delegates to
+        `_construct_persistent_client_locked()`. See that helper for the
+        rationale on the lock split.
+        """
+        with self._init_lock:
+            self._construct_persistent_client_locked()
+
     def describe_mode(self) -> str:
         """CB-2043: build a one-line summary of the active RAG backend.
 
         Format:
           RAG mode=HTTP host=<host> port=<port> collections=<N>
-          RAG mode=PERSISTENT path=<abspath> collections=<N>
+          RAG mode=PERSISTENT path_hash=<8-hex> collections=<N>
           RAG mode=UNINITIALIZED
 
         Collection count is best-effort — a count failure must never block
         startup logging, so we fall back to "?" rather than raise.
+
+        CB-2669: the PERSISTENT branch logs a stable blake2s digest of the
+        abspath instead of the path itself. CB-2216 redacted this abspath
+        from /api/system/rag/status because the endpoint is reachable by
+        any local Origin-less caller; logging the literal path here at
+        INFO via main.py's `[startup] %s` would re-disclose the same
+        string to anyone with read access to logs/backend.log, journald,
+        or a captured stdout pipe — defeating the CB-2216 redaction
+        off-band. The 4-byte digest preserves boot-log diagnostic value
+        (operators can still compare `path_hash` across boots to confirm
+        the fallback location is stable across restarts) without
+        revealing the underlying filesystem layout.
         """
         if self._mode is None or self._client is None:
             return "RAG mode=UNINITIALIZED"
@@ -229,10 +465,107 @@ class RAGService:
                 f"RAG mode=HTTP host={host or '?'} port={port or '?'} "
                 f"collections={count_str}"
             )
+        endpoint = self._endpoint
+        if endpoint:
+            path_hash = hashlib.blake2s(
+                endpoint.encode("utf-8"), digest_size=4
+            ).hexdigest()
+        else:
+            # CB-2669 (code-review M-1): reaching this branch means
+            # `_mode == "PERSISTENT"` and `_client` is set but `_endpoint`
+            # is empty — a half-init state that CB-2213's invariant tests
+            # are supposed to make impossible. Emit a WARN so a future
+            # refactor that breaks the invariant produces a loud signal
+            # instead of a silent `path_hash=?` lie.
+            logger.warning(
+                "describe_mode: PERSISTENT mode with empty _endpoint — "
+                "half-init invariant broken (CB-2213/CB-2669)"
+            )
+            path_hash = "?"
         return (
-            f"RAG mode=PERSISTENT path={self._endpoint or '?'} "
+            f"RAG mode=PERSISTENT path_hash={path_hash} "
             f"collections={count_str}"
         )
+
+    @staticmethod
+    def _clone_status_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """CB-2729 audit (HIGH-1): caller-safe copy of a status payload.
+
+        Used by every return path in `get_status_payload()` so callers
+        can never mutate (`payload["collections"].append(...)`,
+        `payload["healthy"] = False`, …) into the shared cache. Shallow-
+        copies the outer dict and the inner `collections` list, plus
+        each per-collection row dict — that's all the mutation surface
+        the payload carries. Other top-level fields are immutable
+        primitives (str, int, bool) so the outer `dict()` is enough.
+
+        Cheaper than `copy.deepcopy()` (microseconds vs. tens of
+        microseconds on the typical 8-collection payload) and tighter:
+        deepcopy would also copy inner dict values, but those are all
+        primitives so there's nothing left to share.
+        """
+        clone: Dict[str, Any] = dict(payload)
+        if "collections" in clone:
+            clone["collections"] = [dict(row) for row in clone["collections"]]
+        return clone
+
+    def _synthesize_degraded_payload(self) -> Dict[str, Any]:
+        """CB-2729: minimal payload for the contention-no-cache path.
+
+        Used when `_status_cache_lock.acquire()` times out AND no prior
+        cache exists to serve. Reflects the configured mode (so the
+        Service Monitor card still shows HTTP vs PERSISTENT correctly)
+        but reports `healthy=False` and zero collections — every probe
+        is skipped because another caller is mid-compute on the lock.
+
+        Mirrors the field shape of `_compute_status_payload()` so callers
+        can treat the result interchangeably; the only signal the
+        contention path leaks is `healthy=False`. CB-2216 path-redaction
+        is preserved (PERSISTENT mode reports `endpoint=""`,
+        `fallback_active=True`).
+
+        Reads `_mode` / `_endpoint` without the cache lock — those are
+        primitive attributes in CPython so single-attribute reads are
+        atomic at the bytecode level. Worst case is a torn read across
+        a concurrent reset (mode says HTTP, endpoint says ""); the
+        downstream consumer still sees `healthy=False` and the next
+        cache-miss call (TTL window 10s) will resolve to consistent state.
+        """
+        if self._mode is None or self._client is None:
+            return {
+                "mode": "UNINITIALIZED",
+                "endpoint": "",
+                "port": 0,
+                "fallback_active": False,
+                "collections": [],
+                "total_docs": 0,
+                "healthy": False,
+            }
+        if self._mode == "HTTP":
+            host_part, _, port_part = (self._endpoint or "").partition(":")
+            try:
+                port = int(port_part) if port_part else 0
+            except ValueError:
+                port = 0
+            return {
+                "mode": "HTTP",
+                "endpoint": host_part,
+                "port": port,
+                "fallback_active": False,
+                "collections": [],
+                "total_docs": 0,
+                "healthy": False,
+            }
+        # PERSISTENT — endpoint redacted per CB-2216 contract.
+        return {
+            "mode": "PERSISTENT",
+            "endpoint": "",
+            "port": 0,
+            "fallback_active": True,
+            "collections": [],
+            "total_docs": 0,
+            "healthy": False,
+        }
 
     def get_status_payload(self) -> Dict[str, Any]:
         """CB-2045: structured status snapshot for /api/system/rag/status.
@@ -252,24 +585,104 @@ class RAGService:
         (no probe → no new outcome → no log line), and the first probe
         after expiry still detects healthy⇄unhealthy transitions.
 
+        CB-2729: lock acquisition is bounded by
+        `STATUS_LOCK_ACQUIRE_TIMEOUT_S` (0.5 s). Steady-state: every
+        probe completes well under the bound (httpx 2 s ceiling +
+        ChromaDB-on-loopback ≪ 100 ms), so contention is unobservable.
+        Failure mode: a stuck ChromaDB stalls the lock holder for the
+        full httpx timeout (2 s); concurrent callers that arrive during
+        that window time out on the lock and serve the prior cached
+        payload with `healthy=False` overwritten — better than queueing
+        indefinitely and worse than blowing the cache, so the Service
+        Monitor card still renders meaningful state during the outage.
+        Combined with the `asyncio.to_thread` wrapper in `api/system.py`
+        and the per-call httpx timeout in `_init_client_blocking()`,
+        this caps the worst-case status-endpoint latency at ~2.5 s
+        regardless of dependency health, and prevents one stuck dep
+        from pinning the entire FastAPI worker thread.
+
         See `_compute_status_payload()` for the per-probe contract +
-        full payload shape.
+        full payload shape, `_synthesize_degraded_payload()` for the
+        contention-with-no-cache fallback shape.
         """
-        with self._status_cache_lock:
+        # Lock-free fast path: TTL hit. Reading `_status_cache` and
+        # `_status_cache_at` outside the lock is safe in CPython
+        # because individual attribute reads are atomic; a stale
+        # snapshot (cache value from one moment, timestamp from another)
+        # at worst causes a redundant lock acquire on the next call,
+        # never a torn payload. The lock is only ever needed to
+        # serialize the compute on a cache miss.
+        #
+        # CB-2729 audit follow-up (HIGH-1): every return path returns
+        # `dict(cached)` rather than the live cached dict object. The
+        # cached payload is shared state — handing the same reference
+        # back to many callers means a single misbehaving caller
+        # (`payload["collections"].sort()`, `payload["healthy"] = False`,
+        # …) can poison the cache for every other reader and break the
+        # contention path that copies the same dict to flag degraded
+        # state. Today no caller mutates (the FastAPI handler just
+        # splats it into a Pydantic model), but the asymmetry vs. the
+        # contention path's `dict(stale)` copy was flagged as a latent
+        # leak. Shallow copy is sufficient — the inner `collections`
+        # list contains plain dicts that the cache itself never re-uses
+        # across compute cycles (a fresh list is built on each
+        # `_compute_status_payload()` pass), so deep copying would only
+        # add cost without preventing a realistic mutation pattern.
+        now = time.monotonic()
+        cached = self._status_cache
+        cached_at = self._status_cache_at
+        if (
+            cached is not None
+            and (now - cached_at) < self.STATUS_CACHE_TTL_S
+        ):
+            return self._clone_status_payload(cached)
+
+        acquired = self._status_cache_lock.acquire(
+            timeout=self.STATUS_LOCK_ACQUIRE_TIMEOUT_S
+        )
+        if not acquired:
+            # CB-2729: contention bound exceeded — a prior caller is
+            # still inside `_compute_status_payload()`. Serve last-known
+            # state with healthy=False so the surface degrades visibly
+            # rather than blocking the worker thread. The next request
+            # in this TTL window will either find the cache populated
+            # (winner finished) or hit this same path again — either way
+            # the bound is preserved per call.
+            stale = self._status_cache
+            if stale is not None:
+                degraded = self._clone_status_payload(stale)
+                degraded["healthy"] = False
+                return degraded
+            return self._synthesize_degraded_payload()
+
+        try:
+            # Re-check TTL after acquire — the prior lock-holder may have
+            # already populated the cache while we were waiting.
             now = time.monotonic()
             cached = self._status_cache
             if (
                 cached is not None
                 and (now - self._status_cache_at) < self.STATUS_CACHE_TTL_S
             ):
-                return cached
+                # CB-2729 audit (HIGH-1): copy on the way out, same
+                # rationale as the lock-free fast path — caller-side
+                # mutation must never poison the cached dict or its
+                # `collections` sub-list.
+                return self._clone_status_payload(cached)
             payload = self._compute_status_payload()
             # Store + timestamp inside the lock so a concurrent caller
             # waiting on the lock sees a consistent (cache, timestamp)
             # pair when it acquires.
             self._status_cache = payload
             self._status_cache_at = now
-            return payload
+            # Fresh compute → return a copy too so the cached object
+            # and the returned object are independent from this call
+            # forward. (The first caller of a fresh probe used to share
+            # the dict with the cache; this asymmetry vs. subsequent
+            # cache-hit callers is the one HIGH-1 explicitly named.)
+            return self._clone_status_payload(payload)
+        finally:
+            self._status_cache_lock.release()
 
     def _compute_status_payload(self) -> Dict[str, Any]:
         """Actual ChromaDB probe — heartbeat + list_collections + per-col count.
@@ -396,18 +809,22 @@ class RAGService:
             logger.info("RAG list_collections recovered")
         self._last_list_collections_ok = list_ok
 
-        for col in collections:
-            # `name` is kept locally for diagnostic logging only — CB-2217
-            # forbids it from entering the payload (project enumeration leak
-            # via `project_<cuid_prefix>`).
-            name = getattr(col, "name", None) or str(col)
+        for idx, col in enumerate(collections):
             try:
                 count = col.count()
                 total_docs += int(count)
             except Exception as exc:
+                # CB-2669: log the loop index, not the collection name.
+                # CB-2217 forbids the name from the HTTP payload because
+                # `project_<cuid_prefix>` enumerates projects; including the
+                # name in a DEBUG log re-discloses the same string off-band
+                # to anyone who flips the logger to DEBUG (or scrapes a
+                # captured stdout pipe). The index is sufficient to
+                # correlate the log line with the position-aligned
+                # `collections_payload` entry returned to the operator.
                 logger.debug(
-                    "count() failed for collection %s in get_status_payload: %s",
-                    name, exc,
+                    "count() failed for collection #%d in get_status_payload: %s",
+                    idx, exc,
                 )
                 count = None
                 healthy = False

@@ -26,12 +26,16 @@ import {
 } from 'lucide-react';
 import type { FeatureDocumentationData } from '@/hooks/useCodeBoard';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn, _toUtcIso } from '@/lib/utils';
 import {
   MARKDOWN_LINK_COMPONENTS,
   PROSE_CLASSES,
   SAFE_URL_TRANSFORM,
 } from './markdownPresets';
+
+// CB-2730 — re-export for tests + downstream callers that already import
+// `_toUtcIso` from this module (CB-2377 contract).
+export { _toUtcIso };
 
 // ---------------------------------------------------------------------------
 // Props
@@ -62,10 +66,17 @@ function parseTechStack(raw: string | undefined | null): string[] {
 /**
  * T2.2.4 — Format a UTC ISO timestamp as "Xm ago", "Xh ago", "Xd ago".
  * Falls back to the locale date string for anything older than 30 days.
+ *
+ * CB-2377 — A naive ISO string (no `Z`/offset) is parsed as *local* time per
+ * ECMA-262 §21.4.3.2, which produced an "Xh ago" drift equal to the browser's
+ * UTC offset for every freshly-indexed FeatureDocumentation row. Backend now
+ * serializes with `Z`; the `_toUtcIso` guard (CB-2730 promoted to
+ * `@/lib/utils`) keeps any stray naive ISO interpreted as UTC.
  */
 export function formatIndexedAt(iso: string): string {
+  const utcIso = _toUtcIso(iso);
   const now = Date.now();
-  const then = new Date(iso).getTime();
+  const then = new Date(utcIso).getTime();
   if (Number.isNaN(then)) return 'unknown';
 
   const diffMs = now - then;
@@ -78,7 +89,7 @@ export function formatIndexedAt(iso: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay <= 30) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(utcIso).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

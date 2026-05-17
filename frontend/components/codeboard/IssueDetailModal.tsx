@@ -46,6 +46,8 @@ import {
 } from '@/hooks/useCodeBoard';
 import { ExecuteButton } from './ExecuteButton';
 import { ShortcutBadge } from './KeyboardShortcutsHelp';
+import { ParentBreadcrumb } from './ParentBreadcrumb';
+import { HierarchyTreeSection } from './HierarchyTreeSection';
 import { cn } from '@/lib/utils';
 import { useKeyboardShortcuts, SHORTCUTS, formatShortcut, type ShortcutHandler } from '@/hooks/use-keyboard-shortcuts';
 import { useToast } from '@/components/ui/toast';
@@ -180,12 +182,6 @@ export function IssueDetailModal({
   // Fetch linked commits
   const { data: linkedCommits } = useLinkedCommits(issue?.id || null);
 
-  // Find parent issue
-  const parent = useMemo(() => {
-    if (!issue?.parentId || !issues.length) return null;
-    return issues.find((i) => i.id === issue.parentId);
-  }, [issue?.parentId, issues]);
-
   // Get child issues
   const children = useMemo(() => {
     if (issueWithChildren?.children && issueWithChildren.children.length > 0) {
@@ -297,7 +293,7 @@ export function IssueDetailModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-4 max-h-[90vh] bg-zinc-900 rounded-xl border border-zinc-800 shadow-xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-5xl mx-4 max-h-[90vh] bg-zinc-900 rounded-xl border border-zinc-800 shadow-xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-3">
@@ -356,28 +352,12 @@ export function IssueDetailModal({
 
         {/* Content - Scrollable */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          {/* Parent Breadcrumb */}
-          {parent && (
-            <div
-              className="flex items-center gap-2 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors"
-              onClick={() => onIssueClick?.(parent)}
-            >
-              <span className="text-zinc-500 text-sm">Part of:</span>
-              <span className="text-base">
-                {ISSUE_TYPES.find((t) => t.type === parent.type)?.icon}
-              </span>
-              <span className="text-sm font-mono text-zinc-400">{parent.key}</span>
-              <ChevronRight className="w-4 h-4 text-zinc-600" />
-              <span
-                className={cn(
-                  'text-sm font-medium',
-                  parent.type === 'EPIC' && 'text-purple-400',
-                  parent.type === 'STORY' && 'text-blue-400'
-                )}
-              >
-                {parent.title}
-              </span>
-            </div>
+          {/* Parent Breadcrumb — CB-2728: API-driven, works even when parent not in local issues array */}
+          {issue.parentId && (
+            <ParentBreadcrumb
+              issueId={issue.id}
+              className="px-1"
+            />
           )}
 
           {/* Title & Description */}
@@ -695,35 +675,49 @@ export function IssueDetailModal({
               </div>
             )}
 
-          {/* Child Issues */}
-          {(issue.type === 'EPIC' || issue.type === 'STORY') && (
-            <div className="space-y-3">
+          {/* Hierarchy Tree — CB-2728: shown for any issue with children (incl. FEATURE/EPIC/STORY/BUG).
+               Wraps HierarchyTreeSection in a compact scrollable container for the modal. */}
+          {children.length > 0 && issue.projectId && (
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-zinc-400">
-                  {issue.type === 'EPIC' ? 'Stories' : 'Tasks'} ({children.length})
+                  {issue.type === 'EPIC' ? 'Stories' : issue.type === 'STORY' ? 'Tasks' : 'Children'} ({children.length})
                 </h3>
-                {children.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                    >
-                      {selectedChildren.size === children.length ? (
-                        <CheckSquare className="w-4 h-4 text-cyan-400" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                      {selectedChildren.size === children.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  </div>
-                )}
               </div>
-              {children.length === 0 && (
-                <p className="text-xs text-zinc-500">
-                  No {issue.type === 'EPIC' ? 'stories' : 'tasks'} yet
-                </p>
-              )}
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+              <div className="max-h-[400px] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900">
+                <HierarchyTreeSection
+                  issueId={issue.id}
+                  projectId={issue.projectId}
+                  viewKind={
+                    issue.type === 'FEATURE'
+                      ? 'feature'
+                      : issue.type === 'BUG'
+                      ? 'bug'
+                      : 'task'
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Batch execute — keep the checkbox-based quick-execute for EPIC/STORY */}
+          {(issue.type === 'EPIC' || issue.type === 'STORY') && children.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500">Quick execute</span>
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  {selectedChildren.size === children.length ? (
+                    <CheckSquare className="w-4 h-4 text-cyan-400" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  {selectedChildren.size === children.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="space-y-1 max-h-[160px] overflow-y-auto">
                 {children.map((child) => {
                   const childType = ISSUE_TYPES.find((t) => t.type === child.type);
                   const childStatus = STATUS_COLUMNS.find((s) => s.status === child.status);
@@ -732,7 +726,7 @@ export function IssueDetailModal({
                     <div
                       key={child.id}
                       className={cn(
-                        'flex items-center gap-3 p-3 rounded-lg transition-colors',
+                        'flex items-center gap-2 p-2 rounded-lg transition-colors',
                         'bg-zinc-800/50 hover:bg-zinc-800 border-l-4',
                         child.type === 'STORY' && 'border-l-blue-500',
                         child.type === 'TASK' && 'border-l-zinc-500',
@@ -749,21 +743,21 @@ export function IssueDetailModal({
                         className="shrink-0 text-zinc-400 hover:text-cyan-400 transition-colors"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-cyan-400" />
+                          <CheckSquare className="w-4 h-4 text-cyan-400" />
                         ) : (
-                          <Square className="w-5 h-5" />
+                          <Square className="w-4 h-4" />
                         )}
                       </button>
                       <div
-                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                        className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
                         onClick={() => onIssueClick?.(child)}
                       >
-                        <span className="text-base">{childType?.icon}</span>
+                        <span className="text-sm">{childType?.icon}</span>
                         <span className="text-xs font-mono text-zinc-500">{child.key}</span>
-                        <span className="text-sm flex-1 truncate">{child.title}</span>
+                        <span className="text-xs flex-1 truncate">{child.title}</span>
                         <span
                           className={cn(
-                            'text-xs px-2 py-0.5 rounded shrink-0',
+                            'text-xs px-1.5 py-0.5 rounded shrink-0',
                             child.status === 'DONE' && 'bg-green-900/30 text-green-400',
                             child.status === 'IN_PROGRESS' && 'bg-blue-900/30 text-blue-400',
                             child.status === 'BACKLOG' && 'bg-zinc-700 text-zinc-400',

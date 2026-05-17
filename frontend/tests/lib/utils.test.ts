@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cn, formatDate, formatRelativeTime, capitalize, getProjectTypeDisplay, getServiceTypeColor } from '@/lib/utils';
+import { cn, formatDate, formatRelativeTime, capitalize, getProjectTypeDisplay, getServiceTypeColor, _toUtcIso } from '@/lib/utils';
 
 describe('Utility Functions', () => {
   describe('cn (class name merger)', () => {
@@ -172,6 +172,53 @@ describe('Utility Functions', () => {
     it('should return OTHER color for unknown types', () => {
       expect(getServiceTypeColor('UNKNOWN_TYPE')).toBe('bg-gray-500');
       expect(getServiceTypeColor('anything')).toBe('bg-gray-500');
+    });
+  });
+
+  /**
+   * CB-2730 — `_toUtcIso` was promoted to `@/lib/utils` from
+   * `FeatureDocumentationView.tsx` (where CB-2377 first introduced it). These
+   * direct assertions pin the contract independently of `new Date()`'s
+   * ambient-TZ behavior, so they fail even when CI runs in UTC.
+   *
+   * Mirrors the CB-2377 component-level assertions and remains the canonical
+   * source of truth for the helper. The original
+   * `FeatureDocumentationView.test.tsx` cases stay green via the named
+   * re-export from that module.
+   */
+  describe('_toUtcIso (CB-2730 — promoted to shared util)', () => {
+    it('appends Z to a naive datetime ISO', () => {
+      expect(_toUtcIso('2026-05-07T12:00:25')).toBe('2026-05-07T12:00:25Z');
+    });
+
+    it('appends Z to a naive datetime ISO with subsecond precision', () => {
+      expect(_toUtcIso('2026-05-07T12:00:25.123')).toBe(
+        '2026-05-07T12:00:25.123Z',
+      );
+    });
+
+    it('leaves an explicit Z untouched', () => {
+      expect(_toUtcIso('2026-05-07T12:00:25Z')).toBe('2026-05-07T12:00:25Z');
+    });
+
+    it('leaves an explicit +HH:MM offset untouched', () => {
+      expect(_toUtcIso('2026-05-07T14:55:30+03:00')).toBe(
+        '2026-05-07T14:55:30+03:00',
+      );
+    });
+
+    it('leaves an explicit ±HHMM offset untouched', () => {
+      expect(_toUtcIso('2026-05-07T07:55:30-0500')).toBe(
+        '2026-05-07T07:55:30-0500',
+      );
+    });
+
+    it('does not touch a date-only ISO (already UTC midnight per spec)', () => {
+      expect(_toUtcIso('2026-05-07')).toBe('2026-05-07');
+    });
+
+    it('returns falsy input as-is', () => {
+      expect(_toUtcIso('')).toBe('');
     });
   });
 });

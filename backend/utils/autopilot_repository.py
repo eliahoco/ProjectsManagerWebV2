@@ -24,6 +24,14 @@ Design notes:
 - Internal asyncio fields on ``AutoPilotQueue`` (_task, _pause_event, etc.)
   are reset to defaults on rehydration — they cannot survive a process
   restart and must be recreated by the runtime.
+
+CB-2748 additions:
+- ``transition_state`` — the ONLY way callers should change queue state;
+  validates legality, persists atomically, emits STATE_TRANSITION event.
+- ``checkpoint`` — writes lastCheckpointAt and emits CHECKPOINT_WRITTEN.
+- ``set_subprocess_pid`` — persists subprocess PID on task record.
+- ``_persist`` (in service) now re-raises OperationalError on disk-full /
+  locked conditions instead of swallowing all exceptions (G3 fix).
 """
 
 from __future__ import annotations
@@ -35,14 +43,19 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.autopilot import (
     AutoPilotEvent,
+    AutoPilotEventType,
     AutoPilotQueueRecord,
     AutoPilotTaskRecord,
+    is_transition_allowed,
 )
+from models.database import AsyncSessionLocal
+from utils.exhaustion_detector import redact_secrets as _redact_secrets  # CB-2765
 
 
 logger = logging.getLogger(__name__)
@@ -109,6 +122,8 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
             createdAt=queue.created_at,
             updatedAt=datetime.utcnow(),
             completedAt=queue.completed_at,
+            # CB-2794: persist circuit-breaker counter so it survives restarts
+            autoResumeAttempts=queue.auto_resume_attempts,
         )
         session.add(record)
     else:
@@ -121,6 +136,8 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
         record.config = config_json
         record.updatedAt = datetime.utcnow()
         record.completedAt = queue.completed_at
+        # CB-2794: persist circuit-breaker counter so it survives restarts
+        record.autoResumeAttempts = queue.auto_resume_attempts
 
     # Upsert tasks. Map by issue_id+order — a queue's tasks are immutable in
     # ordering, so we can match by ``order``.
@@ -137,12 +154,17 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
                 queueId=queue.id,
                 sequence=task.order,
                 issueId=task.issue_id,
+                # CB-2673: persist key/title so rehydrated tasks have populated
+                # identifiers without requiring a JOIN on every resume.
+                issueKey=task.issue_key or None,
+                issueTitle=task.issue_title or None,
                 status=task_status,
                 attempts=task.retry_count,
                 sessionId=task.session_id,
                 startedAt=task.started_at,
                 completedAt=task.completed_at,
-                failureReason=task.error,
+                # CB-2765: redact secrets from error before persisting to DB
+                failureReason=_redact_secrets(task.error) if task.error else task.error,
             )
             session.add(new_task)
         else:
@@ -151,7 +173,15 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
             existing_task.sessionId = task.session_id
             existing_task.startedAt = task.started_at
             existing_task.completedAt = task.completed_at
-            existing_task.failureReason = task.error
+            # CB-2765: redact secrets from error before persisting to DB
+            existing_task.failureReason = _redact_secrets(task.error) if task.error else task.error
+            # CB-2673: update key/title if we now have them (e.g. after a
+            # backfill or the first persist that comes after a rehydration
+            # with the defensive fallback in T5).
+            if task.issue_key:
+                existing_task.issueKey = task.issue_key
+            if task.issue_title:
+                existing_task.issueTitle = task.issue_title
 
     # Flush so caller can commit cleanly together with sibling writes.
     await session.flush()
@@ -273,12 +303,22 @@ async def list_events(
 async def mark_running_tasks_failed_on_recovery(
     session: AsyncSession, queue_id: str, reason: str = "backend_crash_recovery"
 ) -> int:
-    """When rehydrating, any task left in ``running`` state was killed by the
-    backend crash. Mark them ``failed`` with the given reason AND bump the
-    parent queue's pauseReason to ``crash_recovery`` so the recovery API
-    surfaces the right banner. Caller commits.
+    """When rehydrating, any task left in ``running`` state was interrupted by
+    the backend crash — it did NOT fail due to a real execution error.
 
-    Returns the number of tasks reverted.
+    CB-2738 semantics:
+    - Reset interrupted tasks to ``pending`` (NOT ``failed``) so they are
+      re-run on the next resume.  ``failed`` is reserved for tasks where the
+      subprocess returned non-zero or raised an exception during execution.
+    - Clear ``sessionId``, ``startedAt``, ``failureReason`` so the task
+      looks identical to one that was never started.
+    - The ``reason`` parameter is kept for the INFO log (emitted by the
+      service layer's ``rehydrate_from_db``), not stored on the task row.
+
+    Bump the parent queue to ``paused / crash_recovery`` so the recovery API
+    surfaces the right banner and the user must manually resume. Caller commits.
+
+    Returns the number of tasks reset to pending.
     """
     result = await session.execute(
         select(AutoPilotTaskRecord)
@@ -287,9 +327,13 @@ async def mark_running_tasks_failed_on_recovery(
     )
     rows = list(result.scalars().all())
     for task in rows:
-        task.status = "failed"
-        task.failureReason = reason
-        task.completedAt = datetime.utcnow()
+        # Reset to pending — a backend restart is not a task failure.
+        # The task will be re-run when the user resumes the queue.
+        task.status = "pending"
+        task.failureReason = None
+        task.sessionId = None
+        task.startedAt = None
+        task.completedAt = None
 
     # Bump the queue itself to a crash-recovery paused state. The service
     # layer's rehydrate flow then surfaces this through the recovery API.
@@ -320,3 +364,254 @@ async def queue_status_counts(session: AsyncSession) -> dict:
         .group_by(AutoPilotQueueRecord.status)
     )
     return {status: int(count) for status, count in result.all()}
+
+
+# ---------------------------------------------------------------------------
+# CB-2748: State-machine transition helper
+# ---------------------------------------------------------------------------
+
+
+class IllegalStateTransitionError(ValueError):
+    """Raised when a caller attempts a forbidden state-machine transition."""
+
+
+async def transition_state(
+    queue_id: str,
+    new_state: str,
+    new_reason: Optional[str] = None,
+    *,
+    emit_event: bool = True,
+    extra_payload: Optional[dict] = None,
+) -> None:
+    """Atomically transition a queue to a new state and persist the change.
+
+    This is the **only** authorised way to change queue state (CB-2748).
+    It:
+      1. Validates that the transition is legal per the state-machine table.
+      2. Writes the new ``state`` / ``stateReason`` (and mirrors to ``status``
+         / ``pauseReason`` for backward compat) inside a single transaction.
+      3. Emits a ``STATE_TRANSITION`` audit event (unless ``emit_event=False``).
+
+    Args:
+        queue_id: The ``AutoPilotQueueRecord.id`` to update.
+        new_state: Target state string (e.g. ``"paused"``, ``"running"``).
+        new_reason: Optional reason string (e.g. ``"crash_recovery"``).
+        emit_event: Whether to append a STATE_TRANSITION event (default True).
+        extra_payload: Additional fields merged into the event payload.
+
+    Raises:
+        IllegalStateTransitionError: If the transition is not in the
+            allowed-transitions table.
+        OperationalError: On SQLite I/O errors (disk full, locked) — the
+            caller must handle this and stop task execution.
+        ValueError: If ``queue_id`` does not exist in the DB.
+    """
+    async with AsyncSessionLocal() as db:
+        async with db.begin():
+            result = await db.execute(
+                select(AutoPilotQueueRecord).where(AutoPilotQueueRecord.id == queue_id)
+            )
+            record = result.scalar_one_or_none()
+            if record is None:
+                raise ValueError(f"Queue {queue_id!r} not found in DB")
+
+            from_state = record.state or record.status  # fall back to legacy status
+            from_reason = record.stateReason or record.pauseReason
+
+            if not is_transition_allowed(from_state, new_state):
+                raise IllegalStateTransitionError(
+                    f"Illegal transition {from_state!r} → {new_state!r} for queue {queue_id}"
+                )
+
+            now = datetime.utcnow()
+            record.state = new_state
+            record.stateReason = new_reason
+            # Mirror to legacy columns so existing callers keep working.
+            record.status = new_state
+            record.pauseReason = new_reason
+            record.updatedAt = now
+
+            if emit_event:
+                payload = {
+                    "from_state": from_state,
+                    "from_reason": from_reason,
+                    "to_state": new_state,
+                    "to_reason": new_reason,
+                    **(extra_payload or {}),
+                }
+                await record_event(db, queue_id, AutoPilotEventType.STATE_TRANSITION, payload)
+
+            # Transaction commits on context exit; rolls back on any exception.
+
+
+# ---------------------------------------------------------------------------
+# CB-2748: Checkpoint helper
+# ---------------------------------------------------------------------------
+
+
+async def checkpoint(queue_id: str) -> None:
+    """Write ``lastCheckpointAt = now()`` and emit a CHECKPOINT_WRITTEN event.
+
+    Called after every successful task completion to record durable progress.
+    A crash between checkpoints means the queue can recover to the last
+    checkpoint position without re-running already-completed tasks.
+
+    Raises:
+        OperationalError: On SQLite I/O errors — caller must handle.
+    """
+    async with AsyncSessionLocal() as db:
+        async with db.begin():
+            result = await db.execute(
+                select(AutoPilotQueueRecord).where(AutoPilotQueueRecord.id == queue_id)
+            )
+            record = result.scalar_one_or_none()
+            if record is None:
+                logger.warning("checkpoint: queue %s not found — skipping", queue_id)
+                return
+
+            now = datetime.utcnow()
+            record.lastCheckpointAt = now
+            record.updatedAt = now
+
+            await record_event(
+                db,
+                queue_id,
+                AutoPilotEventType.CHECKPOINT_WRITTEN,
+                {"checkpoint_at": now.isoformat()},
+            )
+
+
+# ---------------------------------------------------------------------------
+# CB-2748: Subprocess PID tracking
+# ---------------------------------------------------------------------------
+
+
+async def get_task_record_id(queue_id: str, sequence: int) -> Optional[str]:
+    """Return the AutoPilotTaskRecord.id for the given queue + sequence number.
+
+    Used by CB-2756: the service needs the DB UUID to call set_subprocess_pid
+    without carrying the DB ID on the in-memory QueueTask dataclass.
+
+    Returns None if not found (e.g. persistence disabled, task not yet saved).
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(AutoPilotTaskRecord.id).where(
+                    AutoPilotTaskRecord.queueId == queue_id,
+                    AutoPilotTaskRecord.sequence == sequence,
+                )
+            )
+            row = result.first()
+            return row[0] if row else None
+    except Exception:
+        logger.warning(
+            "get_task_record_id: lookup failed for queue=%s seq=%d", queue_id, sequence
+        )
+        return None
+
+
+async def set_subprocess_pid(
+    task_id: str, pid: Optional[int], queue_id: Optional[str] = None
+) -> None:
+    """Persist the subprocess PID on an AutoPilotTaskRecord (CB-2748 G2 fix).
+
+    When ``pid`` is ``None``, the column is cleared (task finished/aborted).
+    Emits SUBPROCESS_PID_RECORDED when ``pid`` is non-None and queue_id is given.
+
+    Args:
+        task_id: ``AutoPilotTaskRecord.id``
+        pid: Process ID of the live claude subprocess, or None to clear.
+        queue_id: Required to emit the SUBPROCESS_PID_RECORDED event;
+                  pass None to skip the event (e.g. on cleanup).
+
+    Raises:
+        OperationalError: On SQLite I/O errors — caller should log and continue
+            (PID tracking is best-effort; failure means orphan detection may
+            be incomplete on the next boot, but does not lose task state).
+    """
+    async with AsyncSessionLocal() as db:
+        async with db.begin():
+            result = await db.execute(
+                select(AutoPilotTaskRecord).where(AutoPilotTaskRecord.id == task_id)
+            )
+            task_record = result.scalar_one_or_none()
+            if task_record is None:
+                logger.warning(
+                    "set_subprocess_pid: task record %s not found — skipping", task_id
+                )
+                return
+
+            task_record.subprocessPid = pid
+            task_record.lastProgressAt = datetime.utcnow()
+
+            if pid is not None and queue_id:
+                await record_event(
+                    db,
+                    queue_id,
+                    AutoPilotEventType.SUBPROCESS_PID_RECORDED,
+                    {"task_id": task_id, "pid": pid},
+                )
+
+
+# ---------------------------------------------------------------------------
+# CB-2748: _persist exception classifier
+# ---------------------------------------------------------------------------
+
+#: SQLite error substrings that indicate disk-full or lock conditions.
+#: These are CRITICAL — caller must stop the queue loop immediately.
+_DISK_FULL_SUBSTRINGS: tuple[str, ...] = (
+    "disk i/o error",
+    "no space left",
+    "enospc",
+    "database disk image is malformed",
+    "database is full",
+)
+
+_LOCK_SUBSTRINGS: tuple[str, ...] = (
+    "database is locked",
+    "unable to open database",
+)
+
+
+def classify_operational_error(exc: OperationalError) -> str:
+    """Classify an SQLAlchemy OperationalError into a persistence-failure category.
+
+    Returns:
+        ``"disk_full"``  — ENOSPC / disk I/O error → stop queue loop immediately.
+        ``"db_locked"``  — concurrent write lock → may be transient.
+        ``"other"``      — unknown OperationalError subtype.
+    """
+    msg = str(exc).lower()
+    if any(s in msg for s in _DISK_FULL_SUBSTRINGS):
+        return "disk_full"
+    if any(s in msg for s in _LOCK_SUBSTRINGS):
+        return "db_locked"
+    return "other"
+
+
+async def emit_persist_failed_event(
+    queue_id: str,
+    event_type: str,
+    error_msg: str,
+) -> None:
+    """Best-effort: emit a PERSIST_FAILED or DISK_FULL_DETECTED event.
+
+    Used by the service's ``_persist`` on exception so there is an audit trail
+    even when the primary write failed. A second DB open is attempted; if that
+    also fails, the error is logged and swallowed (we cannot do more).
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            async with db.begin():
+                await record_event(
+                    db,
+                    queue_id,
+                    event_type,
+                    {"error": error_msg[:512]},  # cap to avoid secondary bloat
+                )
+    except Exception:
+        logger.exception(
+            "emit_persist_failed_event: secondary write also failed for queue %s",
+            queue_id,
+        )

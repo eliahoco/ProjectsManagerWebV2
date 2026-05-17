@@ -31,12 +31,15 @@ from sqlalchemy.ext.asyncio import (
 
 from api.documentation import router as documentation_router
 from app.errors import setup_exception_handlers
+from app.rate_limit import limiter as _shared_limiter
 from models.database import Base, get_db
 from models.documentation import (
     ExecutionSummary,
     ImplementationNote,
 )
 from models.issue import Issue, Project
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 
 @pytest_asyncio.fixture
@@ -73,6 +76,19 @@ async def test_app_and_db():
 
     local_app = FastAPI()
     setup_exception_handlers(local_app)
+
+    # CB-2662: wire the shared slowapi limiter onto the local app so that
+    # `@limiter.limit("5/minute")` decorators (e.g. on POST
+    # /features/{id}/documentation/generate) resolve and `RateLimitExceeded`
+    # gets translated to 429 in tests too. Reset the bucket per-test so the
+    # ~22 tests that exercise /generate never spill into the same 5/min
+    # window — each test starts with a clean rate-limit state.
+    _shared_limiter.reset()
+    local_app.state.limiter = _shared_limiter
+    local_app.add_exception_handler(
+        RateLimitExceeded, _rate_limit_exceeded_handler
+    )
+
     local_app.include_router(documentation_router, prefix="/api")
     local_app.dependency_overrides[get_db] = _override_get_db
 
@@ -1553,3 +1569,93 @@ async def test_projectId_blank_rejected(test_db, client):
         f"/api/issues/{issue.id}/documentation?projectId="
     )
     assert resp.status_code == 422
+
+
+# ---- CB-2662: per-route rate limit on POST /features/{id}/documentation/generate ----
+#
+# The doc-gen endpoint pins a request handler for up to 120s and triggers a
+# real AI provider call, so the global 200/min/IP cap is too loose. The
+# per-route 5/min limit (`_DOC_GEN_RATE_LIMIT` in api/documentation.py) caps
+# token-burn + serverless-concurrency abuse from a single IP that knows or
+# guesses a valid (projectId, issueId) pair.
+#
+# These tests run inside a single 60s window — `_shared_limiter.reset()` in
+# the fixture ensures every other test starts with an empty bucket so the
+# cap can never spill into unrelated regression tests.
+
+@pytest.mark.asyncio
+async def test_generate_feature_documentation_rate_limit_boundary(
+    test_db, client, disable_ai_aggregation
+):
+    """First 5 calls in 60s must succeed; the 6th must be throttled with 429.
+
+    Asserts the per-route slowapi limit is wired and that the
+    `RateLimitExceeded → 429` exception handler is reachable. Uses the
+    deterministic (no-AI) path so the boundary is purely about request
+    counting, not provider latency.
+    """
+    feature = await _create_feature(test_db)
+    url = (
+        f"/api/features/{feature.id}/documentation/generate"
+        f"?projectId={feature.projectId}"
+    )
+
+    successes = 0
+    for i in range(5):
+        resp = await client.post(url)
+        assert resp.status_code == 200, (
+            f"call {i + 1}/5 inside the cap should succeed, "
+            f"got {resp.status_code}: {resp.text}"
+        )
+        successes += 1
+    assert successes == 5
+
+    # 6th call inside the same window must be throttled.
+    throttled = await client.post(url)
+    assert throttled.status_code == 429, (
+        f"6th call should hit the 5/minute cap, got {throttled.status_code}: "
+        f"{throttled.text}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_feature_documentation_rate_limit_isolated_per_test(
+    test_db, client, disable_ai_aggregation
+):
+    """The fixture must reset the limiter so a sibling test never starts
+    pre-throttled. This guards against the bucket spilling across tests
+    and turning the suite flaky once enough /generate calls accumulate.
+    """
+    feature = await _create_feature(test_db)
+    url = (
+        f"/api/features/{feature.id}/documentation/generate"
+        f"?projectId={feature.projectId}"
+    )
+
+    # Fresh bucket → first call must always succeed regardless of how many
+    # /generate calls happened in the previous test.
+    resp = await client.post(url)
+    assert resp.status_code == 200, (
+        f"sibling test must start with fresh limiter, got {resp.status_code}"
+    )
+
+
+def test_rate_limit_singleton_identity():
+    """Test fixture must operate on the SAME `Limiter` the production
+    handler is bound to.
+
+    Catches a class of regression where someone refactors the limiter
+    plumbing (e.g. inadvertently constructs a second `Limiter()` in
+    `api/documentation.py`) — the boundary test would still pass because
+    the test fixture resets the wrong instance, and production would be
+    silently unprotected. Asserting identity here makes that failure
+    mode loud at unit-test time.
+    """
+    from app.rate_limit import limiter as production_limiter
+    from api import documentation as documentation_module
+
+    # Same `limiter` object is closed over by `@limiter.limit(...)` on the
+    # POST generate handler. Any re-binding in `documentation.py` would
+    # break this assertion.
+    assert documentation_module.limiter is production_limiter
+    assert _shared_limiter is production_limiter

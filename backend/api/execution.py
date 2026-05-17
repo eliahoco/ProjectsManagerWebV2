@@ -3,11 +3,13 @@ Execution API - Endpoints for AI task execution
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from app.rate_limit import limiter
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional, List, Literal
 from pydantic import BaseModel
+from app.security import InternalAuthDep  # CB-2766
 from datetime import datetime
 import asyncio
 import json
@@ -963,6 +965,37 @@ async def create_queue(
 
     # Create the queue (convert Pydantic models to dicts for service)
     tasks_data = [t.model_dump() for t in request.tasks]
+
+    # CB-2734: backfill any empty issue_key / issue_title from the Issue table
+    # before handing tasks to the service.  If the frontend sends empty strings
+    # (e.g. due to a stale cache or a race on the client), save_queue would
+    # persist NULL values — the exact regression fixed here.  We authorita-
+    # tively source key + title from the DB so the first save_queue call is
+    # always correct.
+    missing_issue_ids = [
+        t["issue_id"]
+        for t in tasks_data
+        if not t.get("issue_key") or not t.get("issue_title")
+    ]
+    if missing_issue_ids:
+        issue_rows_result = await db.execute(
+            select(Issue).where(Issue.id.in_(missing_issue_ids))
+        )
+        issue_map = {i.id: i for i in issue_rows_result.scalars().all()}
+        for t in tasks_data:
+            if not t.get("issue_key") or not t.get("issue_title"):
+                issue = issue_map.get(t["issue_id"])
+                if issue:
+                    if not t.get("issue_key"):
+                        t["issue_key"] = issue.key or ""
+                    if not t.get("issue_title"):
+                        t["issue_title"] = issue.title or ""
+                    logger.warning(
+                        "[CB-2734] Backfilled missing issue_key/title at queue-create time "
+                        "for issue_id=%s → key=%r title=%r",
+                        t["issue_id"], t["issue_key"], t["issue_title"][:50],
+                    )
+
     queue = autopilot_queue_service.create_queue(
         feature_id=request.feature_id,
         feature_key=request.feature_key,
@@ -981,7 +1014,7 @@ async def create_queue(
             name=f"autopilot-queue-{queue.id}",
         )
 
-    return autopilot_queue_service.get_queue_status(queue.id)
+    return await autopilot_queue_service.get_queue_status(queue.id)
 
 
 @router.get("/queue/active")
@@ -992,37 +1025,119 @@ async def get_active_queue():
         return {"active": False, "queue": None}
     return {
         "active": True,
-        "queue": autopilot_queue_service.get_queue_status(active.id),
+        "queue": await autopilot_queue_service.get_queue_status(active.id),
     }
 
 
-@router.get("/queue/recovery-status")
+@router.get("/queue/recovery-status", dependencies=[InternalAuthDep])  # CB-2766
 async def get_queue_recovery_status():
-    """Return queues that were rehydrated after a backend crash (CB-1951 E2.3.1).
+    """Return ALL recoverable queues plus zombie + auto_resume_pending info.
 
-    The frontend AutoPilotFloatingBar uses this on mount to render the
-    crash-recovery banner. Once the user resumes / aborts a queue, the
-    backend drops it from the recovery set so subsequent polls return
-    empty for that queue.
+    CB-2750 enriched shape (backwards-compatible — existing fields preserved):
+
+    {
+      "recovered_count": int,
+      "queues": [...],            # backward-compat: list of recovered queue statuses
+      "recoverable": [...],       # CB-2750: all non-terminal recovered queues
+      "zombie": [...],            # CB-2750: zombie queue entries
+      "auto_resume_pending": [...] # CB-2750: queues with armed auto-resume timers
+    }
+
+    Each entry now has shape (CB-2798 S5 RC6 fix — single source of truth):
+      {queue_id, key, state, reason, reset_time, attempt_count,
+       suggested_action, classification}
+
+    "state" is ALWAYS derived from queue.status.value via _serialize_queue —
+    never hard-coded.  "classification" is one of:
+      'recoverable' | 'zombie' | 'auto_resume_pending'
+
+    suggested_action values:
+      'resume'        — PAUSED, user can resume
+      'wait'          — WAITING_RESET, auto-resume timer is armed
+      'retry-failed'  — has failed tasks, resumable
+      'force-recover' — zombie, needs manual investigation
+      'abort'         — circuit-breaker tripped, recommend abort
     """
+    from services.autopilot_queue_service import QueueStatus
+
     recovered = autopilot_queue_service.get_recovered_queues()
+    zombie_ids = autopilot_queue_service.get_zombie_queue_ids()
+    resume_handle_ids = set(autopilot_queue_service._resume_handles.keys())
+
+    def _suggested_action(q) -> str:
+        if q.id in zombie_ids:
+            return "force-recover"
+        if q.auto_resume_attempts > autopilot_queue_service._AUTO_RESUME_MAX_ATTEMPTS:
+            return "abort"
+        if q.status == QueueStatus.WAITING_RESET:
+            return "wait"
+        failed_tasks = [t for t in q.tasks if t.status.value == "failed"]
+        if failed_tasks:
+            return "retry-failed"
+        return "resume"
+
+    def _entry(q, classification: str) -> dict:
+        """Build a per-queue entry using the canonical serializer so 'state'
+        always matches queue.status.value (CB-2798 RC6 fix)."""
+        return {
+            "queue_id": q.id,
+            "key": q.feature_key,
+            # CB-2798: state comes from q.status.value — no hard-coded literals.
+            "state": q.status.value,
+            "reason": q.pause_reason,
+            "reset_time": q.reset_time.isoformat() if q.reset_time else None,
+            "attempt_count": q.auto_resume_attempts,
+            "suggested_action": _suggested_action(q),
+            # CB-2798: classification field so consumers don't need list position.
+            "classification": classification,
+        }
+
+    recoverable_entries = [_entry(q, "recoverable") for q in recovered]
+
+    zombie_entries = []
+    for qid in zombie_ids:
+        q = await autopilot_queue_service.get_or_load_queue(qid)
+        if q is None:
+            continue
+        zombie_entries.append(_entry(q, "zombie"))
+
+    auto_resume_entries = []
+    for qid in resume_handle_ids:
+        q = await autopilot_queue_service.get_or_load_queue(qid)
+        if q is None:
+            continue
+        auto_resume_entries.append(_entry(q, "auto_resume_pending"))
+
     return {
+        # CB-1951 backward-compat fields
         "recovered_count": len(recovered),
         "queues": [
-            autopilot_queue_service.get_queue_status(q.id)
+            await autopilot_queue_service.get_queue_status(q.id)
             for q in recovered
         ],
+        # CB-2750 enriched fields
+        "recoverable": recoverable_entries,
+        "zombie": zombie_entries,
+        "auto_resume_pending": auto_resume_entries,
     }
 
 
-@router.post("/queue/{queue_id}/clear-recovery")
+@router.post("/queue/{queue_id}/clear-recovery", dependencies=[InternalAuthDep])  # CB-2766
 async def clear_queue_recovery(queue_id: str):
-    """Drop a queue from the post-crash recovery set after user takes action."""
-    autopilot_queue_service.clear_recovery_state(queue_id)
-    return {"ok": True, "queue_id": queue_id}
+    """Drop a queue from the post-crash recovery set after user takes action.
+
+    CB-2798 (S5 RC5 fix): now awaits the expanded clear_recovery_state which
+    cancels the auto-resume timer, removes from zombie/recovery sets, and
+    transitions the queue to PAUSED/manual_cleared.  Returns 404 if the queue
+    is not found in memory or DB.
+    """
+    result = await autopilot_queue_service.clear_recovery_state(queue_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error", "not_found"))
+    return {"ok": True, "queue_id": queue_id, **result}
 
 
-@router.get("/queue/events")
+@router.get("/queue/events", dependencies=[InternalAuthDep])  # CB-2766
 async def queue_events_stream(request: Request):
     """Server-Sent Events stream of AutoPilot lifecycle events (CB-1951 E5.3.1).
 
@@ -1092,7 +1207,7 @@ class _PersistenceFlagBody(BaseModel):
     enabled: bool
 
 
-@router.post("/queue/settings/persistence-enabled")
+@router.post("/queue/settings/persistence-enabled", dependencies=[InternalAuthDep])  # CB-2766
 async def set_persistence_flag(body: _PersistenceFlagBody):
     """Toggle the AutoPilot persistence feature flag at runtime (E10).
 
@@ -1104,7 +1219,7 @@ async def set_persistence_flag(body: _PersistenceFlagBody):
     return {"enabled": autopilot_queue_service.get_persistence_enabled()}
 
 
-@router.get("/queue/metrics")
+@router.get("/queue/metrics", dependencies=[InternalAuthDep])  # CB-2766
 async def get_queue_metrics(db: AsyncSession = Depends(get_db)):
     """Return AutoPilot queue + event metrics (CB-1951 E6.3.1).
 
@@ -1194,16 +1309,16 @@ async def get_available_models():
 @router.get("/queue/{queue_id}")
 async def get_queue_status(queue_id: str):
     """Get full status for a specific autopilot queue."""
-    status = autopilot_queue_service.get_queue_status(queue_id)
+    status = await autopilot_queue_service.get_queue_status(queue_id)
     if not status:
         raise HTTPException(status_code=404, detail="Queue not found")
     return status
 
 
-@router.post("/queue/{queue_id}/pause")
+@router.post("/queue/{queue_id}/pause", dependencies=[InternalAuthDep])  # CB-2766
 async def pause_queue(queue_id: str):
     """Pause the queue.  The current task finishes, then the queue waits."""
-    success = autopilot_queue_service.pause_queue(queue_id)
+    success = await autopilot_queue_service.pause_queue(queue_id)
     if not success:
         raise HTTPException(
             status_code=400,
@@ -1212,22 +1327,162 @@ async def pause_queue(queue_id: str):
     return {"success": True, "status": "paused"}
 
 
-@router.post("/queue/{queue_id}/resume")
-async def resume_queue(queue_id: str):
-    """Resume a paused or waiting queue."""
-    success = autopilot_queue_service.resume_queue(queue_id)
+@router.post("/queue/{queue_id}/resume", dependencies=[InternalAuthDep])  # CB-2766
+async def resume_queue(
+    queue_id: str,
+    retry_failed: bool = Query(False, description="Reset all FAILED tasks to PENDING before resuming"),
+):
+    """Resume a paused or waiting queue.
+
+    CB-2796 (S3): structured error contract replacing the old flat 400.
+
+    * 404 NOT_FOUND   — queue not found in memory or DB.
+    * 409 CONFLICT    — wrong state / circuit-breaker tripped / no pending tasks.
+    * 200 OK          — resumed successfully.
+
+    ``retry_failed=true`` atomically resets all FAILED tasks back to PENDING
+    before the normal resume path runs (fixes RC3a).
+
+    CB-2676: after a backend crash the ``run_queue`` asyncio coroutine is gone.
+    ``resume_queue()`` sets the pause event but there is nothing waiting on it,
+    so no subprocess ever starts. We detect this case by checking whether
+    ``queue._task`` is None or already done and, if so, re-launch ``run_queue``
+    as a new tracked asyncio task.
+    """
+    from fastapi.responses import JSONResponse
+    from services.autopilot_queue_service import QueueStatus, TaskStatus
+
+    # ── 1. Existence check ──────────────────────────────────────────────────
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
+
+    # ── 2. Optional: reset failed tasks first (retry_failed=true) ───────────
+    # CB-2793 Fix2: acquire the per-queue lock ONCE and run both reset and resume
+    # inside the same critical section to eliminate the TOCTOU window (concurrent
+    # abort/pause/skip could race between the two previously separate lock
+    # acquisitions). _reset_failed_tasks_locked() is the lock-free inner body;
+    # resume_queue() re-acquires the same lock after we release it here.
+    if retry_failed:
+        _lock = autopilot_queue_service._resume_locks.setdefault(queue_id, asyncio.Lock())
+        async with _lock:
+            await autopilot_queue_service._reset_failed_tasks_locked(queue_id)
+            # Reload after mutation so checks below see updated statuses.
+            queue = autopilot_queue_service.get_queue(queue_id)
+        # resume_queue acquires the lock again; since asyncio is single-threaded
+        # and we have no awaits between the release above and this call, no
+        # concurrent coroutine can interleave.
+        success = await autopilot_queue_service.resume_queue(queue_id)
+    else:
+        # ── 3. Attempt the resume ──────────────────────────────────────────
+        success = await autopilot_queue_service.resume_queue(queue_id)
+
     if not success:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot resume — queue is not paused or does not exist",
+        # Reload queue to build the diagnostic payload.
+        queue = autopilot_queue_service.get_queue(queue_id) or queue
+
+        pending_count = sum(1 for t in queue.tasks if t.status == TaskStatus.PENDING)
+        failed_count = sum(1 for t in queue.tasks if t.status == TaskStatus.FAILED)
+        completed_count = sum(1 for t in queue.tasks if t.status == TaskStatus.COMPLETED)
+        current_status = queue.status.value if queue.status else "unknown"
+        pause_reason = queue.pause_reason
+        auto_resume_attempts = queue.auto_resume_attempts
+
+        # Map root cause → human message + actionable suggestion.
+        breaker_tripped = pause_reason == autopilot_queue_service._CIRCUIT_BREAKER_PAUSE_REASON
+
+        if breaker_tripped and failed_count > 0:
+            message = (
+                f"Circuit breaker tripped after {auto_resume_attempts} auto-resume attempts "
+                f"({failed_count} failed task(s) remain)."
+            )
+            suggestion = (
+                "Use POST .../reset-failed-tasks then resume, "
+                "or POST resume?retry_failed=true"
+            )
+        elif breaker_tripped:
+            message = (
+                f"Circuit breaker tripped after {auto_resume_attempts} auto-resume attempts. "
+                "All remaining tasks completed or skipped."
+            )
+            suggestion = "Wait for token reset, then POST resume?retry_failed=false"
+        elif pending_count == 0 and failed_count == 0:
+            message = "Queue already finished — all tasks are completed or skipped."
+            suggestion = "Queue already finished — nothing to resume"
+        elif pending_count == 0 and failed_count > 0:
+            message = (
+                f"No pending tasks remain ({failed_count} task(s) failed). "
+                "Reset them first to retry."
+            )
+            suggestion = (
+                "Use POST .../reset-failed-tasks then resume, "
+                "or POST resume?retry_failed=true"
+            )
+        else:
+            message = (
+                f"Queue is in state '{current_status}'; cannot resume from this state."
+            )
+            suggestion = f"Queue is in state {current_status}; cannot resume from this state"
+
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "error": "CONFLICT",
+                "code": "QUEUE_NOT_RESUMABLE",
+                "message": message,
+                "details": {
+                    "queue_id": queue_id,
+                    "status": current_status,
+                    "pause_reason": pause_reason,
+                    "auto_resume_attempts": auto_resume_attempts,
+                    "current_index": queue.current_index,
+                    "pending_count": pending_count,
+                    "failed_count": failed_count,
+                    "completed_count": completed_count,
+                    "suggestion": suggestion,
+                },
+            },
         )
+
+    # ── 4. Re-launch the execution loop if it was lost after a crash ─────────
+    # CB-2676/CB-2681: re-launch the execution loop if it isn't running.
+    # Delegates to the shared _ensure_run_queue_task helper (idempotent,
+    # race-safe) so all three resume sites use the same logic.
+    # CB-2745: after resume_queue (which uses get_or_load_queue), the queue
+    # is guaranteed to be in _queues — use get_queue (sync) here.
+    live_queue = autopilot_queue_service.get_queue(queue_id)
+    if live_queue is not None:
+        autopilot_queue_service._ensure_run_queue_task(live_queue)
+
     return {"success": True, "status": "resumed"}
 
 
-@router.post("/queue/{queue_id}/skip")
+@router.post("/queue/{queue_id}/reset-failed-tasks", dependencies=[InternalAuthDep])  # CB-2796
+@limiter.limit("5/minute")  # CB-2793 Security Fix4: rate-limit to prevent repeated DB-walk abuse
+async def reset_failed_tasks(request: Request, queue_id: str):
+    """Reset all FAILED tasks in the queue back to PENDING.
+
+    CB-2796 (S3): new endpoint that allows the user to unblock a queue where
+    every remaining task has failed, without requiring DB surgery.
+
+    Returns:
+        200 — ``{"queue_id": ..., "reset_count": int, "task_ids": [...], "task_keys": [...]}``
+        404 — queue not found.
+        429 — rate limit exceeded (5 calls/minute per IP).
+    """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
+
+    result = await autopilot_queue_service.reset_failed_tasks(queue_id)
+    return result
+
+
+@router.post("/queue/{queue_id}/skip", dependencies=[InternalAuthDep])  # CB-2766
 async def skip_current_task(queue_id: str):
     """Skip the currently executing task and move to the next one."""
-    success = autopilot_queue_service.skip_current(queue_id)
+    success = await autopilot_queue_service.skip_current(queue_id)
     if not success:
         raise HTTPException(
             status_code=400,
@@ -1236,7 +1491,7 @@ async def skip_current_task(queue_id: str):
     return {"success": True}
 
 
-@router.post("/queue/{queue_id}/abort")
+@router.post("/queue/{queue_id}/abort", dependencies=[InternalAuthDep])  # CB-2766
 async def abort_queue(queue_id: str, request: AbortQueueRequest):
     """
     Abort the queue entirely.
@@ -1248,9 +1503,10 @@ async def abort_queue(queue_id: str, request: AbortQueueRequest):
     - "reset_todo": PATCH all pending tasks back to TODO in the database
     """
     # Handle reset_todo action: reset pending issues in DB, then abort with "leave"
+    # CB-2745: use get_or_load_queue so DB-only paused queues are found.
     abort_action = request.action
     if request.action == "reset_todo":
-        queue = autopilot_queue_service.get_queue(queue_id)
+        queue = await autopilot_queue_service.get_or_load_queue(queue_id)
         if queue:
             async with AsyncSessionLocal() as session_db:
                 for task in queue.tasks:
@@ -1271,7 +1527,7 @@ async def abort_queue(queue_id: str, request: AbortQueueRequest):
     return {"success": True, "status": "aborted", "action": request.action}
 
 
-@router.post("/queue/{queue_id}/wait-for-reset")
+@router.post("/queue/{queue_id}/wait-for-reset", dependencies=[InternalAuthDep])  # CB-2766
 async def wait_for_token_reset(
     queue_id: str,
     request: WaitForResetRequest,
@@ -1282,7 +1538,8 @@ async def wait_for_token_reset(
     If reset_time is provided (e.g. "3:00 PM"), the service will sleep
     until that time.  Otherwise it defaults to 60 minutes.
     """
-    queue = autopilot_queue_service.get_queue(queue_id)
+    # CB-2745: use get_or_load_queue so DB-only paused queues are found.
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -1297,13 +1554,97 @@ async def wait_for_token_reset(
     }
 
 
+@router.post("/queue/{queue_id}/task/{task_order}/reset", dependencies=[InternalAuthDep])  # CB-2766
+async def reset_queue_task(queue_id: str, task_order: int):
+    """Reset a single task within a queue back to ``pending`` so it will be
+    re-run on the next resume.
+
+    CB-2740 dependency: the react-specialist's retry-button UI calls this
+    endpoint to allow users to manually reset specific tasks that were
+    skipped or failed (including legacy crash-recovery failed tasks).
+
+    The queue must be PAUSED (not running) when this endpoint is called.
+    The task is identified by its zero-based ``order`` index (not the DB id).
+
+    Returns 404 if the queue or task is not found.
+    Returns 409 if the queue is currently running (unsafe to mutate live task).
+    """
+    from services.autopilot_queue_service import QueueStatus, TaskStatus  # noqa: PLC0415
+
+    # CB-2743: use get_or_load_queue so DB-only paused queues (i.e. after a
+    # backend restart where rehydration hasn't run yet) can still be found.
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    if not queue:
+        raise HTTPException(status_code=404, detail="Queue not found")
+
+    if queue.status == QueueStatus.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset a task while the queue is running; pause first.",
+        )
+
+    task = next((t for t in queue.tasks if t.order == task_order), None)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task with order={task_order} not found in queue {queue_id}",
+        )
+
+    # Reset in-memory state.
+    old_status = task.status
+    task.status = TaskStatus.PENDING
+    task.error = None
+    task.session_id = None
+    task.started_at = None
+    task.completed_at = None
+
+    # CB-2744 Part A: rewind current_index so resume picks up the reset task.
+    # Find the lowest order among all pending tasks — if it is below the
+    # current cursor, move the cursor back so the queue loop will reach it.
+    pending_orders = [t.order for t in queue.tasks if t.status == TaskStatus.PENDING]
+    if pending_orders:
+        lowest_pending = min(pending_orders)
+        if lowest_pending < queue.current_index:
+            logger.info(
+                "[AutoPilot] CB-2744: rewinding current_index %d → %d for queue %s after task reset.",
+                queue.current_index, lowest_pending, queue_id,
+            )
+            queue.current_index = lowest_pending
+
+    # Persist the updated task row to the DB.
+    try:
+        from utils.autopilot_repository import save_queue  # noqa: PLC0415
+        async with AsyncSessionLocal() as db:
+            await save_queue(db, queue)
+            await db.commit()
+    except Exception:
+        logger.exception(
+            "Failed to persist task reset for queue=%s task_order=%d",
+            queue_id, task_order,
+        )
+        # Non-fatal — in-memory state is correct; DB will sync on next persist.
+
+    logger.info(
+        "[AutoPilot] Task order=%d in queue %s reset from %s → pending by user.",
+        task_order, queue_id, old_status,
+    )
+    return {
+        "success": True,
+        "queue_id": queue_id,
+        "task_order": task_order,
+        "previous_status": old_status.value if hasattr(old_status, "value") else str(old_status),
+        "new_status": "pending",
+        "current_index": queue.current_index,
+    }
+
+
 @router.post("/queue/{queue_id}/switch-model")
 async def switch_queue_model(
     queue_id: str,
     request: SwitchModelRequest,
 ):
     """Switch the execution provider/model and resume the queue."""
-    success = autopilot_queue_service.switch_model(
+    success = await autopilot_queue_service.switch_model(
         queue_id, request.provider, request.model
     )
     if not success:
@@ -1328,7 +1669,7 @@ async def stream_queue_status(queue_id: str, request: Request):
                 logger.debug("SSE client disconnected from stream_queue_status (queue=%s)", queue_id)
                 break
             try:
-                status = autopilot_queue_service.get_queue_status(queue_id)
+                status = await autopilot_queue_service.get_queue_status(queue_id)
                 if not status:
                     yield f"event: error\ndata: {json.dumps({'error': 'Queue not found'})}\n\n"
                     break

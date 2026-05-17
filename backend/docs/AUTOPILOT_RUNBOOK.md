@@ -3,6 +3,10 @@
 This runbook covers diagnosis and recovery procedures for the AutoPilot
 queue subsystem after the CB-1951 persistence + crash recovery work.
 
+> Sister runbook: see `backend/docs/DOC_PIPELINE_RUNBOOK.md` for the
+> FeatureDocumentation pipeline, including the per-route rate limit on
+> `POST /api/features/{id}/documentation/generate` (CB-2662).
+
 ## TL;DR — common emergencies
 
 | Symptom | Section |

@@ -239,6 +239,10 @@ async def test_record_event_appends(session):
 
 @pytest.mark.asyncio
 async def test_mark_running_tasks_failed_on_recovery(session):
+    """CB-2738: tasks that were RUNNING at crash time must be reset to PENDING
+    (NOT failed) — a backend restart is not a task failure.  The queue itself
+    is still flipped to paused/crash_recovery so the user must resume manually.
+    """
     q = _make_queue(n_tasks=4, status=QueueStatus.RUNNING)
     # Pretend tasks 1 and 2 were running when backend died
     q.tasks[1].status = TaskStatus.RUNNING
@@ -255,9 +259,13 @@ async def test_mark_running_tasks_failed_on_recovery(session):
     record = await load_queue(session, q.id)
     statuses = {t.sequence: (t.status, t.failureReason) for t in record.tasks}
     assert statuses[0] == ("completed", None)
-    assert statuses[1][0] == "failed"
-    assert statuses[1][1] == "backend_crash_recovery"
-    assert statuses[2][0] == "failed"
+    # CB-2738: interrupted → pending, no failure reason, cleared sessionId/startedAt
+    assert statuses[1] == ("pending", None), (
+        f"CB-2738: interrupted task must be pending, got {statuses[1]}"
+    )
+    assert statuses[2] == ("pending", None), (
+        f"CB-2738: interrupted task must be pending, got {statuses[2]}"
+    )
     assert statuses[3] == ("pending", None)
     # Recovery should also flip the queue itself to paused/crash_recovery
     assert record.status == "paused"

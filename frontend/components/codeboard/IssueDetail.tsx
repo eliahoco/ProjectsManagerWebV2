@@ -11,6 +11,8 @@ import { Issue, ISSUE_TYPES, PRIORITIES, STATUS_COLUMNS, IssueStatus, Priority, 
 import { useIssueCommits, useLinkedCommits, useIssue, useStartExecution, useGenerateDocumentation, useExecutionSummaries, CommitLink } from '@/hooks/useCodeBoard';
 import { ExecuteButton } from './ExecuteButton';
 import { IssueSearchBar, highlightMatch, matchesSearch } from './IssueSearchBar';
+import { ParentBreadcrumb } from './ParentBreadcrumb';
+import { HierarchyTreeSection } from './HierarchyTreeSection';
 import { cn } from '@/lib/utils';
 
 interface IssueDetailProps {
@@ -67,12 +69,6 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
 
   // Fetch linked commits (from our commit linking system)
   const { data: linkedCommits } = useLinkedCommits(issue?.id || null);
-
-  // Find parent issue from local issues array
-  const parent = useMemo(() => {
-    if (!issue?.parentId || !issues.length) return null;
-    return issues.find(i => i.id === issue.parentId);
-  }, [issue?.parentId, issues.length, issues]);
 
   // Get child issues - prefer API response (has all children regardless of filters)
   // Fall back to filtered issues array if API hasn't loaded yet
@@ -239,7 +235,7 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
       />
 
       {/* Panel */}
-      <div className="relative w-full max-w-xl bg-zinc-900 border-l border-zinc-800 overflow-y-auto">
+      <div className="relative w-full max-w-4xl bg-zinc-900 border-l border-zinc-800 overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-zinc-900 border-b border-zinc-800">
           <div className="flex items-center gap-3">
@@ -297,24 +293,12 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Parent Breadcrumb */}
-          {parent && (
-            <div
-              className="flex items-center gap-2 p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors"
-              onClick={() => onIssueClick?.(parent)}
-            >
-              <span className="text-zinc-500 text-sm">Part of:</span>
-              <span className="text-base">{ISSUE_TYPES.find(t => t.type === parent.type)?.icon}</span>
-              <span className="text-sm font-mono text-zinc-400">{parent.key}</span>
-              <ChevronRight className="w-4 h-4 text-zinc-600" />
-              <span className={cn(
-                'text-sm font-medium',
-                parent.type === 'EPIC' && 'text-purple-400',
-                parent.type === 'STORY' && 'text-blue-400'
-              )}>
-                {parent.title}
-              </span>
-            </div>
+          {/* Parent Breadcrumb — CB-2728: API-driven, works even when parent not in local issues array */}
+          {issue.parentId && (
+            <ParentBreadcrumb
+              issueId={issue.id}
+              className="px-1"
+            />
           )}
 
           {/* Title */}
@@ -697,36 +681,51 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
             </div>
           )}
 
-          {/* Child Issues */}
-          {(issue.type === 'EPIC' || issue.type === 'STORY') && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-zinc-400">
-                  {issue.type === 'EPIC' ? 'Stories' : 'Tasks'} ({searchQuery ? `${children.length}/${allChildren.length}` : children.length})
-                </h3>
-                {children.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleSelectAll}
-                      className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                    >
-                      {selectedChildren.size === children.length ? (
-                        <CheckSquare className="w-4 h-4 text-cyan-400" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                      {selectedChildren.size === children.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  </div>
-                )}
+          {/* Hierarchy Tree — CB-2728: shown for any issue with children, incl. AutoPilot button */}
+          {allChildren.length > 0 && issue.projectId && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-zinc-400">
+                {issue.type === 'EPIC' ? 'Stories' : issue.type === 'STORY' ? 'Tasks' : 'Children'} ({allChildren.length})
+              </h3>
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
+                <HierarchyTreeSection
+                  issueId={issue.id}
+                  projectId={issue.projectId}
+                  viewKind={
+                    issue.type === 'FEATURE'
+                      ? 'feature'
+                      : issue.type === 'BUG'
+                      ? 'bug'
+                      : 'task'
+                  }
+                />
               </div>
-              {children.length === 0 && !searchQuery && (
-                <p className="text-xs text-zinc-500">No {issue.type === 'EPIC' ? 'stories' : 'tasks'} yet</p>
-              )}
+            </div>
+          )}
+
+          {/* Quick execute batch — checkbox-based selector for EPIC/STORY */}
+          {(issue.type === 'EPIC' || issue.type === 'STORY') && allChildren.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500">
+                  Quick execute ({searchQuery ? `${children.length}/${allChildren.length} filtered` : `${allChildren.length}`})
+                </span>
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  {selectedChildren.size === children.length ? (
+                    <CheckSquare className="w-4 h-4 text-cyan-400" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  {selectedChildren.size === children.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
               {children.length === 0 && searchQuery && allChildren.length > 0 && (
                 <p className="text-xs text-zinc-500">No matching {issue.type === 'EPIC' ? 'stories' : 'tasks'} found</p>
               )}
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              <div className="space-y-1 max-h-[200px] overflow-y-auto">
                 {children.map(child => {
                   const childType = ISSUE_TYPES.find(t => t.type === child.type);
                   const childStatus = STATUS_COLUMNS.find(s => s.status === child.status);
@@ -735,7 +734,7 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
                     <div
                       key={child.id}
                       className={cn(
-                        'flex items-center gap-3 p-3 rounded-lg transition-colors',
+                        'flex items-center gap-2 p-2 rounded-lg transition-colors',
                         'bg-zinc-800/50 hover:bg-zinc-800 border-l-4',
                         child.type === 'STORY' && 'border-l-blue-500',
                         child.type === 'TASK' && 'border-l-zinc-500',
@@ -753,21 +752,21 @@ export function IssueDetail({ issue, issues = [], isOpen, onClose, onUpdate, onD
                         className="shrink-0 text-zinc-400 hover:text-cyan-400 transition-colors"
                       >
                         {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-cyan-400" />
+                          <CheckSquare className="w-4 h-4 text-cyan-400" />
                         ) : (
-                          <Square className="w-5 h-5" />
+                          <Square className="w-4 h-4" />
                         )}
                       </button>
                       {/* Clickable content */}
                       <div
-                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                        className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
                         onClick={() => onIssueClick?.(child)}
                       >
-                        <span className="text-base">{childType?.icon}</span>
+                        <span className="text-sm">{childType?.icon}</span>
                         <span className="text-xs font-mono text-zinc-500">{highlightMatch(child.key, searchQuery)}</span>
-                        <span className="text-sm flex-1 truncate">{highlightMatch(child.title, searchQuery)}</span>
+                        <span className="text-xs flex-1 truncate">{highlightMatch(child.title, searchQuery)}</span>
                         <span className={cn(
-                          'text-xs px-2 py-0.5 rounded shrink-0',
+                          'text-xs px-1.5 py-0.5 rounded shrink-0',
                           child.status === 'DONE' && 'bg-green-900/30 text-green-400',
                           child.status === 'IN_PROGRESS' && 'bg-blue-900/30 text-blue-400',
                           child.status === 'BACKLOG' && 'bg-zinc-700 text-zinc-400',

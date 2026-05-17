@@ -3,9 +3,18 @@
 Silent fallback to the embedded SQLite store (`backend/data/chroma/`) is how
 we ended up running on stale local embeddings for weeks. The startup log line
 fed by `describe_mode()` makes that fallback impossible to miss going forward.
+
+CB-2669: the PERSISTENT branch logs a hashed digest of the abspath (not the
+literal path). The HTTP /api/system/rag/status payload had its abspath
+redacted by CB-2216; logging the same string at INFO via main.py's
+`[startup] %s` would re-disclose it off-band to anyone with read access to
+logs/backend.log. These tests pin both the new hashed format AND the
+absence of the literal abspath in the log line.
 """
 
+import hashlib
 import os
+import re
 from unittest.mock import MagicMock, patch
 
 import chromadb
@@ -44,7 +53,11 @@ def test_describe_mode_http_after_successful_init(monkeypatch):
 
 
 def test_describe_mode_persistent_after_fallback():
-    """After _fallback_to_persistent, mode=PERSISTENT with abspath + count."""
+    """After _fallback_to_persistent, mode=PERSISTENT logs hashed path + count.
+
+    CB-2669: the literal abspath MUST NOT appear in the log line — it would
+    re-disclose the string CB-2216 redacted from the HTTP status payload.
+    """
     fake_persistent = MagicMock()
     fake_persistent.list_collections = MagicMock(return_value=[MagicMock()])
 
@@ -53,8 +66,20 @@ def test_describe_mode_persistent_after_fallback():
         rag._fallback_to_persistent()
 
     expected_path = os.path.abspath(PERSISTENT_FALLBACK_PATH)
+    expected_hash = hashlib.blake2s(
+        expected_path.encode("utf-8"), digest_size=4
+    ).hexdigest()
+
     line = rag.describe_mode()
-    assert line == f"RAG mode=PERSISTENT path={expected_path} collections=1"
+    assert line == (
+        f"RAG mode=PERSISTENT path_hash={expected_hash} collections=1"
+    )
+
+    # Belt+suspenders: the abspath must not appear anywhere in the line,
+    # not even substring-form. Guards against future format regressions
+    # that re-introduce `path=<abspath>` alongside the hash.
+    assert expected_path not in line
+    assert "path=" not in line  # only `path_hash=` is permitted
 
 
 def test_describe_mode_swallows_collection_count_failure():
@@ -67,5 +92,9 @@ def test_describe_mode_swallows_collection_count_failure():
         rag._fallback_to_persistent()
 
     line = rag.describe_mode()
-    assert line.startswith("RAG mode=PERSISTENT path=")
-    assert line.endswith("collections=?")
+    # CB-2669: hashed path token, not literal abspath.
+    assert re.match(
+        r"^RAG mode=PERSISTENT path_hash=[0-9a-f]{8} collections=\?$", line
+    ), line
+    expected_path = os.path.abspath(PERSISTENT_FALLBACK_PATH)
+    assert expected_path not in line

@@ -88,6 +88,65 @@ function makeIssue(overrides: Partial<Issue> & { id: string; key: string; type: 
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+// ─── CB-2789: initialSelectedIds pre-seeds selection ─────────────────────────
+
+describe('FeatureExecutionPanel — initialSelectedIds (CB-2789)', () => {
+  const featureIssue = makeIssue({ id: 'f-2', key: 'CB-200', type: 'FEATURE', title: 'Feature' });
+  const task1 = makeIssue({ id: 't-1', key: 'CB-201', type: 'TASK', status: 'BACKLOG', title: 'Task 1', parentId: 'f-2' });
+  const task2 = makeIssue({ id: 't-2', key: 'CB-202', type: 'TASK', status: 'BACKLOG', title: 'Task 2', parentId: 'f-2' });
+
+  beforeEach(() => {
+    mockDescendants.length = 0;
+    mockDescendants.push(task1, task2);
+    mockStartAutoPilot.mockClear();
+  });
+
+  it('pre-selects only the provided ids when initialSelectedIds is non-empty', () => {
+    render(
+      <FeatureExecutionPanel
+        feature={featureIssue}
+        allIssues={[featureIssue, task1, task2]}
+        projectId="p-1"
+        isOpen={true}
+        onClose={vi.fn()}
+        initialSelectedIds={new Set(['t-1'])}
+      />
+    );
+    // Only 1 of 2 tasks should be pre-selected
+    expect(screen.getByText(/1 items? selected/i)).toBeInTheDocument();
+  });
+
+  it('falls back to all executable when initialSelectedIds has no matching executables', () => {
+    render(
+      <FeatureExecutionPanel
+        feature={featureIssue}
+        allIssues={[featureIssue, task1, task2]}
+        projectId="p-1"
+        isOpen={true}
+        onClose={vi.fn()}
+        initialSelectedIds={new Set(['non-existent-id'])}
+      />
+    );
+    // Falls back to all 2 tasks selected
+    expect(screen.getByText(/2 items? selected/i)).toBeInTheDocument();
+  });
+
+  it('selects all when initialSelectedIds is absent (backwards-compat)', () => {
+    render(
+      <FeatureExecutionPanel
+        feature={featureIssue}
+        allIssues={[featureIssue, task1, task2]}
+        projectId="p-1"
+        isOpen={true}
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/2 items? selected/i)).toBeInTheDocument();
+  });
+});
+
+// ─── Original test suite ──────────────────────────────────────────────────────
+
 describe('FeatureExecutionPanel — BUG executable (CB-2383)', () => {
   const featureIssue = makeIssue({ id: 'f-1', key: 'CB-1', type: 'FEATURE', title: 'My Feature' });
   const bugIssue = makeIssue({

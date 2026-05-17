@@ -1608,3 +1608,136 @@ anything happnaed to the app? i can't reach the UI
 
 ---
 
+## 2026-05-09 23:25:23
+
+it run the failed task and stop/disappeard suddenly, not sure if it finished or just crashed again... but still there are tasks that were not completed in 2038 it is 95% there are 39 bugs 34 completed out of the 39 and it's efecting stories and epics
+
+---
+
+## 2026-05-09 23:26:25
+
+Just start the auto one again. And ask to complete them. But since there were so many bugs, so many fixes, I wanna make sure that we're not destroy anything you already fixed or built. So what I want for you is an audit to those tasks to make sure we really need them. That they are not touching anything you completed and did and fixed. And if we need them and they're important, I'll just start them from the autopilot. If not, we can cancel them.
+
+---
+
+## 2026-05-10 00:06:05
+
+started them from the codeboard, monitor the progress of them
+
+---
+
+## 2026-05-10 00:10:24
+
+I want to ask you to open the witdh of the project manager UI to be a bit wider when accessing the codeboard feature pages and tasks, and any kind of issue
+in the rest of the pages it is taking the whole witdh of the screen and there it is really tight, please fix that, no Jonny i approve you to do that with no change request, just adjest the withd to all pages that it is small like the feature page
+
+---
+
+## 2026-05-10 00:12:05
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:13:02
+
+I don't see it wider, are you sure?
+
+---
+
+## 2026-05-10 00:17:00
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:22:00
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:27:01
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:32:01
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:37:00
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 00:42:00
+
+Continue monitoring autopilot queue 6fd8408b (CB-2217, CB-2783, CB-2784, CB-2785, CB-2786, CB-2787 under CB-2038). Check status via `curl -s http://localhost:8401/api/execute/queue/6fd8408b-349d-4c9a-8665-7fe2fb41c6b7`, report concisely (caveman mode). If queue paused/failed, diagnose. If still running, schedule next wakeup.
+
+---
+
+## 2026-05-10 12:05:10
+
+there is a bug in the selection in the feature page. If I select just, for example, an epic and want to start the auto part or just for this epic, first of all, the autopilot on the top right size always show all of them. There's another one next to the actions to move all the selected to waiting QA and to select it to done. which show the right number, but once I click I click it, it adds some unrelated stories into the selection and there is no option to deselect one of them. It's either select everything in the floating window that is being open or nothing. I need you to open the Chrome agent. Go to f twenty eight and try to select only link one thirty five, which is an epic. It will select three stories with tasks underneath and three additional tasks in total, it will be twenty five tasks. It will select twenty nine issues. But when you press the small autopilot, which says twenty five on it, it will show you also story number ten forty nine. And you will see you cannot deselect or select only one of them. You have the option only to deselect and select all of them. And in addition, you will see that it also added some more tasks from story ten forty nine that were never selected.
+
+---
+
+## 2026-05-10 12:07:16
+
+Because you're looking on the wrong project. look on project LinkedIn job hunter. Search for link dash one twenty four
+
+---
+
+## 2026-05-10 12:15:00
+
+journey, but do it right. check the architecture and make sure you are touching things that won't break anything else. Do a deep research for the code that you're gonna touch and change, and only then fix it. But you can definitely open a bug on that.
+
+---
+
+## 2026-05-10 14:37:12
+
+I really don't understand the question here. What page are we talking about? Is this the floating feature implementation implementation page? Or is the feature with all the list of the tasks page? What page are we talking about and which one of the buttons are we talking about? And what the hell you are trying to do
+
+---
+
+## 2026-05-10 14:44:02
+
+all clear , with regards to the top right button - keep it and fix it, it is basicly to run the whole feature tasks so that is fine as is, the one in the action line will show if you chose part of the tasks, the manual bubtton is also broken it messed everything up when i pressed it. i don't understand wht we need that, instead a button "run now" (with some nice scephisticated button on each raw can be nice(run a task will open a window to ask if to run all the sub tasks related to the task. in case you press it on a story, it will open a flowting window ask if he should run it also on the tasks and subtasks undernith with an option to chose (similer to the auto pilot) same for running epic or bug. i hope it is clear enogh
+
+---
+
+## 2026-05-10 15:11:45
+
+You probably didn't test it in the Chrome to make sure it's working because nothing has changed besides the button has removed, the manual button, which is still exist in the floating window. Buddy, go and do professional work. I'm not accepting this thing ever again. Go. Open the code. And when you finish, you need to do a manual user testing, acceptance testing. So check it yourself and see that nothing has changed.
+
+---
+
+## 2026-05-10 16:53:16
+
+credits run out and the queue of the auto pilot crashed again marking all tasks as faild, i We're sure that we fix this thing and put this behind us. This supposed to be working not just for back end restore, but also for credits consumed. Now everything is failed. and I don't see the keel, and I don't see the autopilot. I'm talking about epic link 124
+
+---
+
+## 2026-05-10 21:57:37
+
+בםמאןמוק
+
+---
+
+## 2026-05-10 21:57:42
+
+continue
+
+---
+
+## 2026-05-10 22:05:19
+
+jonny do it right, plan the fix and do it in a proffesional way, make sure to test from the chrome, if needed simulate credits consumed
+
+---
+

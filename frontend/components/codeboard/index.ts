@@ -94,3 +94,9 @@ export {
   type IssueDetailTemplateProps,
   type TabConfig,
 } from './IssueDetailTemplate';
+
+// Extracted hierarchy tree + parent breadcrumb (CB-2684)
+export { HierarchyTreeSection } from './HierarchyTreeSection';
+export type { HierarchyTreeSectionProps } from './HierarchyTreeSection';
+export { ParentBreadcrumb } from './ParentBreadcrumb';
+export type { ParentBreadcrumbProps } from './ParentBreadcrumb';

@@ -1303,3 +1303,123 @@ we are still on 76% jonny, check what's left you to do, you skipped some tasks a
 
 ---
 
+## 2026-05-09 12:45:08
+
+Yes. That works. But on the floating window, HLMS, it says autopilot recover after back end restart with the number c b two zero three eight. And then it says review and choose how to proceed. Resume, skip current task, or abort, but it's also automatically continuing. So it's not supposed to automatically start. It's supposed to pause. And if I press resume, it's supposed to resume everything. Maybe it is, and you press the recent button. I'm not sure. I'm just saying that it's resuming the autopilot automatically. If that's what you implemented, fine. But if it's not what you meant to implement, supposed to do it only by pressing the resume button, it's basically doing it now automatically and not wait for user approval. Maybe it can be an option in the settings. to automatically continue if the back end is restarting? Or -- weight and pen... pending user approval. But at the moment, it has both thing. It's asking to review and choose how to proceed, and it's actually automatically continuing.
+
+---
+
+## 2026-05-09 12:46:42
+
+the first one is not true. The banner does dismiss if you press the button. You just did it with current command or API command, so it just stayed over there. So it's not a bug. If I press resume, it will disappear. The feature for setting toggle for auto resume, maybe we can forget it for now because once I deployed it in affordable server, it shouldn't happen. The back end shouldn't restart at all, so I don't wanna have a feature which is not necessary. And it's actually a bug. So, no, I don't want both both of them.
+
+---
+
+## 2026-05-09 12:47:58
+
+Did you have anything on the queue next to... after this thing? we were in middle of planning the AI project workspace, the studio backlog and everything. Was it in this chat session or other chat session?
+
+---
+
+## 2026-05-09 12:50:01
+
+No. I said I'm gonna run it from the UI, from the code mode, but I want you to present me again what we are doing. But, Johnny, present me it by storytelling, by understanding exactly how the customer was gonna use it, what are the windows that are going to be there, and draw me the workflow, the workspace. I want to get a fully understanding on... from the user perspective, what it's going to be look like, operate like, and what it will give in advance to what it... I have today. I don't want a story of twenty five pages. Try to do it in a human language, very understanding. And then I want to see the full agile planning, which agent's skill is going to be responsible for each one of them. What is the correct order for the development? What's gonna be after what? I mean, you should do it by phases, but remember that clipboard doesn't know phases. Quad board known feature, epic stories, tasks. So it needs to be in a common sense.
+
+---
+
+## 2026-05-09 12:52:18
+
+stopping you right now, and you'll have to write everything again because your first sentence is not true. Today, if I have an idea, I'm not opening the code one and just type it. In the code board, I have feature we implemented called AI feature breakdown which I can keep a title a very detailed specification give it a feature tag and then it's generating a hierarchical breakdown of the feature so something does exist here it's not for project but it's for feature and there's basically no control there is no conversation about that It's just creating it, and that's it. In a great project, I don't think we have anything like that. So... yes. But start again, please. But be more accurate.
+
+---
+
+## 2026-05-09 13:31:20
+
+This new approach need to be an addition version for the project manager. So first of all, we need to save it to Git and sync to GitHub. This is, uh, like, a major release, what we have now. And from here, we're gonna... let's say, do project manager v three. which will be much more advanced to this one. But I don't wanna lose all the functionality we did and reinvest until now. This is working good. So We need to save it. as a GA. after twenty three... thirty eight. I'll finish. I'm in the future. c b twenty thirty eight will complete. So we'll always have a way to go back to this stage. That's first thing. Second thing, the new approach need to include a hive of agents. The agents that we have today and the skills are nice. I don't know how much we use that. I want a statistic now. but we're gonna build it in a little bit different way. I wanna have a full software development department. and builds from agency skills. You can go to this link and see what I've just built from Claude UI chat. Of course, it wasn't tested. He just build it. Look at it. See how we take what we did with Johnny because Johnny works perfectly fine. First, we're gonna see if the agents and everything worked and combine it with a hive, a network of agents that are working together. This is the link for what I built inside Claude. I want you just to go and take a look. We're not pushing anything for development yet. This needs, as I said, a deep, deep architecture and planning. But you can already go and save. Once we complete the c b twenty thirty eight,
+
+---
+
+## 2026-05-09 16:44:18
+
+continue
+
+---
+
+## 2026-05-09 16:46:26
+
+talking this discussion again because the autopilot again didn't stop and resume when the credits ran out. Instead, everything failed, and I don't see it anymore. It's like crashed or closed. Remember, there are two scenarios. One, that the back end is restarting for any reason. And the major thing is that during the development, the credits are consumed. Needs to wait for renewal of the credits, which exactly that's the situation right now. I already have credits that was reset an hour ago, but it stopped in the morning. and I don't see the queue anymore running.
+
+---
+
+## 2026-05-09 16:46:40
+
+parking this discussion again because the autopilot again didn't stop and resume when the credits ran out. Instead, everything failed, and I don't see it anymore. It's like crashed or closed. Remember, there are two scenarios. One, that the back end is restarting for any reason. And the major thing is that during the development, the credits are consumed. Needs to wait for renewal of the credits, which exactly that's the situation right now. I already have credits that was reset an hour ago, but it stopped in the morning. and I don't see the queue anymore running.
+
+---
+
+## 2026-05-09 16:49:47
+
+want a final fix for this thing, but including everything. When I'm putting an autopilot and I'm digging, I don't care what happens. Even the power is... I don't know. Stopping and the computer is restarting. When it comes back, it need to complete what it started. If it's a restart of the back end, if the credits have been consumed, then it may be waiting for a reset. I don't mind, but it shouldn't stop. and, like, nothing happened.
+
+---
+
+## 2026-05-09 16:50:24
+
+jonay So I'm a fix for that. Implement it and run it. I'm leaving the computer. I'm gonna come back when everything is perfectly working. Don't forget to audit code, security audit, and also Chrome user experience testing. You need to check that it's working on all levels.
+
+---
+
+## 2026-05-09 19:34:48
+
+I think you totally lost it. Your trying again and again and again. Now the beacon has restarted. I tried to retry it. With the button saying retry, and it just doesn't work It's stuck. And, twenty thirty eight is on pause. It's not resuming even if I press the play button. And instead of fixing it, you created another floating with opacity window on the left side. And I already have one on the right side. Come on, man. What the hell have you spent so much so many credits? I really, really think you lost it. Go do your homework. Understand what you did. And what you tried to achieve because I don't understand. You just completed I don't know how many epics with no tasks. That's the reason everything fails. You're not working with your instruction. You're not working with your bible. Totally wrong, man. I asking you to check with Chrome agent what you did, what is the result, and if you think that's what was expected from you.
+
+---
+
+## 2026-05-09 19:43:04
+
+Johnny. Whatever you're gonna do, I wanna say full, agile, top to bottom planning. I don't want to guess anymore. I don't want to do duplicate jobs anymore. I wanna see top to bottom. And super executive summary. What you're gonna do with the Agile plan. I wanna see it. Top to bottom. Third time I'm saying it, I wanna repeat that. And it needs to be relevant. You're not gonna build everything from scratch. Just fix this bug, period.
+
+---
+
+## 2026-05-09 19:44:27
+
+Is this another feature? What the hell is going on? This is a regression. It's a bug. Why it's it has another feature. We already built that. There is a feature for that with everything. Take that feature, and open bugs that are and open bugs that are just linked to That feature. We're gonna fix this storyboard letter. For now, I don't want another feature. Which has nothing related or relation to the feature that was supposed to work. I hope I make myself clear.
+
+---
+
+## 2026-05-09 19:46:13
+
+I didn't say don't use the agents. Use the agent's skills whatever is needed to do it. A very super professional work. I just want it to be fixed once and for all. That's all. It's approved.
+
+---
+
+## 2026-05-09 21:13:35
+
+OK i'll have to test it as it goes, but currntly 1951 still has some backlog and in progress statuses to some of the storyes and tasks,can you check to see if they are needed or can put on CWQ since you already fix it
+
+---
+
+## 2026-05-09 22:30:15
+
+I don't know the the feature will be Stuck. Because of manual QA. Manual QA should be done by an agent called Claude Chrom. That's the manual QA. Manual QA you are doing, not me. Basically a client QA. So either you do that or you remove that. The rest of them do what is needed. To close this feature. And move it to complete waiting QA.
+
+---
+
+## 2026-05-09 22:48:45
+
+the retry still doesn't work, and now i have 2 buttons for retry, it is not resetung the failed status, and it moved it to "ToDo" on the code board and nothing moving, you can see for yourself if you open the codeboard access
+
+---
+
+## 2026-05-09 23:09:26
+
+yes
+
+---
+
+## 2026-05-18 00:12:29
+
+next time talk to me anly when you finish, don't ask me if you should do somethiong
+
+---
+

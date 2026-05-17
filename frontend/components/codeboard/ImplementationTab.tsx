@@ -35,7 +35,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
+import { cn, _toUtcIso } from '@/lib/utils';
 import {
   PROSE_CLASSES,
   SAFE_URL_TRANSFORM,
@@ -79,8 +79,12 @@ function formatDuration(seconds: number): string {
   return rem === 0 ? `${mins}m` : `${mins}m ${rem}s`;
 }
 
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
+// CB-2730 — apply `_toUtcIso` so naive ISO strings (older ExecutionSummary /
+// ImplementationNote rows, or any future surface that re-introduces the naive
+// shape) parse as UTC, not browser-local time. Exported for direct Vitest
+// coverage (mirrors CB-2377).
+export function formatTimestamp(iso: string): string {
+  const d = new Date(_toUtcIso(iso));
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString(undefined, {
     year: 'numeric',

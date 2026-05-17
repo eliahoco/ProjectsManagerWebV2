@@ -207,7 +207,7 @@ export default function GroupDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-900 p-6">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto">
           <div className="animate-pulse space-y-4">
             <div className="h-4 w-32 rounded bg-zinc-700" />
             <div className="h-8 w-1/3 rounded bg-zinc-700" />
@@ -222,7 +222,7 @@ export default function GroupDetailPage() {
   if (error || !group) {
     return (
       <div className="min-h-screen bg-zinc-900 p-6">
-        <div className="mx-auto max-w-5xl py-12 text-center">
+        <div className="mx-auto py-12 text-center">
           <h1 className="text-2xl font-bold text-zinc-100">
             {error ? 'Error loading group' : 'Group not found'}
           </h1>
@@ -243,7 +243,7 @@ export default function GroupDetailPage() {
 
   return (
     <div className="min-h-screen bg-zinc-900 p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto space-y-6">
         <button
           type="button"
           onClick={() => router.push('/codeboard')}

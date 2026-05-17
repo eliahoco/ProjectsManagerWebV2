@@ -64,11 +64,33 @@ docker run --rm -v projectsmanagerwebv2production_chroma_data:/dest \
 # -> 0
 
 # 3. Tar source on host, extract into volume (overwrite the empty init).
+#    Hardening note (CB-2219, security-auditor pass on CB-2049):
+#    alpine:3.20 ships BusyBox tar, which is historically more permissive
+#    about `..` components than GNU tar and offers fewer hardening knobs.
+#    The source here is the trusted local filesystem, so risk is
+#    theoretical for the executed run; the flags below keep the runbook
+#    safe if it is ever re-used against an untrusted tarball. Any escape
+#    is in any case bounded to the throwaway container's rootfs and the
+#    mounted volume — the host filesystem is unreachable.
+#
+#    `apk add --no-cache tar` swaps GNU tar in for BusyBox tar before
+#    extraction, so the long options below are recognised (BusyBox tar
+#    errors out on unknown long options rather than honouring them).
+#      -C /dest            : extract into /dest specifically — guards
+#                            against the case where `cd /dest` above
+#                            silently failed and CWD is still `/`.
+#      --no-same-owner     : ignore embedded uid/gid (we re-chown in step 4).
+#      --no-overwrite-dir  : refuse to replace an existing dir with a non-dir.
+#      --anchored          : no-op today (no `--exclude`/include patterns);
+#                            included so any future filter additions match
+#                            from the start of the member name, not as a
+#                            substring.
 cd backend/data/chroma
 tar -cf - . | docker run -i --rm \
   -v projectsmanagerwebv2production_chroma_data:/dest \
-  alpine:3.20 sh -c 'cd /dest && rm -rf ./* ./.[!.]* 2>/dev/null;
-    tar xf -'
+  alpine:3.20 sh -c 'apk add --no-cache tar >/dev/null;
+    cd /dest && rm -rf ./* ./.[!.]* 2>/dev/null;
+    tar xf - -C /dest --no-same-owner --no-overwrite-dir --anchored'
 
 # 4. Normalise ownership to root (chroma container runs as root).
 docker run --rm -v projectsmanagerwebv2production_chroma_data:/dest \

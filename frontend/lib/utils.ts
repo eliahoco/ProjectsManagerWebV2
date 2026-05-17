@@ -13,6 +13,32 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * CB-2377 / CB-2730 — Defense-in-depth UTC normalizer for naive ISO strings.
+ *
+ * Backend documentation-pipeline responses now serialize all datetimes with the
+ * `Z` suffix via Pydantic `field_serializer`. This guard keeps any stray naive
+ * ISO interpreted as UTC so a future regression on a different surface does not
+ * silently re-introduce the off-by-tz-offset relative-time bug.
+ *
+ * Behavior:
+ *   - Empty / falsy → returned as-is (caller handles "unknown").
+ *   - Date-only ISO (`YYYY-MM-DD`, no `T`) → returned as-is. Spec already
+ *     defines these as UTC midnight; appending `Z` is non-standard.
+ *   - ISO with explicit `Z` or `±HH:MM` / `±HHMM` offset → returned as-is.
+ *   - Otherwise → append `Z`.
+ *
+ * Originally inlined in `components/codeboard/FeatureDocumentationView.tsx`
+ * (CB-2377). CB-2730 promoted it to a shared util so the
+ * documentation-settings page and ImplementationTab use the same guard
+ * (FeatureDocumentationView re-exports for test compatibility).
+ */
+export function _toUtcIso(iso: string): string {
+  if (!iso) return iso;
+  if (!iso.includes('T')) return iso;
+  return /Z|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`;
+}
+
+/**
  * Format a date to a readable string
  */
 export function formatDate(date: Date | string): string {

@@ -32,6 +32,17 @@ def _make_transport() -> ASGITransport:
     return ASGITransport(app=app)
 
 
+def _auth_headers() -> dict:
+    """Headers required to clear `app.security.require_local_or_token`
+    under the conftest-configured INTERNAL_API_TOKEN (CB-2666). When the
+    token is empty (legacy dev), this resolves to an empty dict and the
+    dependency falls through.
+    """
+    from app.config import settings
+    token = settings.INTERNAL_API_TOKEN
+    return {"X-Internal-Token": token} if token else {}
+
+
 # ---------------------------------------------------------------------------
 # T1 — Event-loop block detection on /api/git/* endpoints
 # ---------------------------------------------------------------------------
@@ -47,7 +58,7 @@ async def test_git_endpoint_no_event_loop_block_under_concurrency():
     transport = _make_transport()
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Discover a project id from the DB
-        r = await client.get("/api/projects")
+        r = await client.get("/api/projects", headers=_auth_headers())
         assert r.status_code == 200
         projects = r.json()
         if not projects:
@@ -170,7 +181,7 @@ async def test_health_always_responds_quickly():
     transport = _make_transport()
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Discover a project id — fall back to a non-existent one (404 is fine for load)
-        r = await client.get("/api/projects")
+        r = await client.get("/api/projects", headers=_auth_headers())
         if r.status_code == 200 and r.json():
             project_id = r.json()[0]["id"]
         else:

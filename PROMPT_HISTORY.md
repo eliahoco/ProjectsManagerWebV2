@@ -10388,3 +10388,2851 @@ yes
 
 ---
 
+## 2026-05-08 12:12:45
+
+Johnny, you did a mistake. CB2385 is the epic the e one, inside the feature, If I'm going to start and initiate the feature, I'm going to start the 2384, which is the feature itself. I'm gonna mark e one, use autopilot. So please be very, very precise with the actions.
+
+---
+
+## 2026-05-08 12:17:11
+
+OK before we are going to start this huge feature and i'll do it from the UI i would like to report a bug 
+Johnny, this is a bug report related to the implementation you did regarding resuming the autopilot job after a backend
+   restart. It actually give the alert and shows that the backend has restarted and ask if I want to continue or stop.
+  But when I press resume, it's basically stuck. You can see the toggle on the main feature that is turning around with
+  nothing and no result. The list of the tasks that were in this autopilot is empty. And the one which failed just show
+  failed, and the rest of them are showing pending with no description. Just look on the UI through the Chrome agent and
+  see that. And basically, it's stuck. It doesn't move. It doesn't do anything. So Johnny, you know how to report a bug,
+  Use the skills that you have here and that you have inside the project manager. Because we configured that very good
+  over there. And report the bug that's related to this feature.
+
+---
+
+## 2026-05-08 17:13:38
+
+continue
+
+---
+
+## 2026-05-08 17:26:10
+
+I see you just opened a book. How How do you tie it into the original feature I think we worked on that. This is just a floating bug. It's not related to anything. Journey. Look on the documentation. Check the rules that we put into the code board on how to open and manage bugs that are related to regression
+
+---
+
+## 2026-05-08 18:07:18
+
+i see that the tasks are link to the bug, that is good but there is no view for a bug, maybe using the feature few can be also be use for a bug view, not sure but look through chrome and suggest a way to view it, at the moment i see the bug and the tasks, opening the task show therer is a link to the bug but in the bug i can't see it's childrean tasks nither run them under auto pilot, to run the bug fix with the tasks and work to create a better view
+
+---
+
+## 2026-05-08 18:08:50
+
+Only way to see everything is to look from the feature view. That show basically everything. But if I click on the bug, I don't see anything related to the feature or to its tasks.
+
+---
+
+## 2026-05-08 18:09:28
+
+Let's first of all run-in the back with the tusks and then write an improvement for the Front end.
+
+---
+
+## 2026-05-08 20:31:16
+
+i accept the propoasal but wheer is the agile plan?
+
+---
+
+## 2026-05-08 20:33:09
+
+you are typing to much unrelevent information, i want an executive summery and questions if you have one by one, you are throuwing on me to much info
+
+---
+
+## 2026-05-08 20:33:51
+
+storytelling please, what is taht all about and how the system will behave?
+
+---
+
+## 2026-05-08 20:35:14
+
+yes and when you finish this thing let me know so i can run 2671 to complete the rest of the stuck proccesses
+
+---
+
+## 2026-05-08 21:45:38
+
+i don't understand what you were doing in this bug, if i now open the bug CB-2371 i don't see the tasks below it or the story it belongs.. it is still a view with nothing mentained that it's related to anything
+
+---
+
+## 2026-05-09 00:38:27
+
+have we fixed the resum dev bug?
+
+---
+
+## 2026-05-09 00:39:17
+
+have you closed the bug?
+
+---
+
+## 2026-05-09 00:39:53
+
+Okay. That's fine. What was the feature ID? That are reported as stop after back end restart and didn't complete
+
+---
+
+## 2026-05-09 00:40:14
+
+Starting it again now.
+
+---
+
+## 2026-05-09 00:41:01
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2662: Add per-route rate limit to /features/{id}/documentation/generate before any non-localhost exposure**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2054: E2: FeatureDocumentation Frontend [IN_PROGRESS]
+    _Build the missing UI for FeatureDocumentation. Backend endpoints (GET / POST generate) already exist at `/api/features/{id}/documentation` but have NO frontend. Make them reachable + render the 6 markdown sections + metrics._
+    - **BUG CB-2662: Add per-route rate limit to /features/{id}/documentation/generate before any non-localhost exposure ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (5):
+  - CB-2055: S2.1: Hooks + types [WAITING QA]
+  - CB-2059: S2.2: Page + view components [WAITING QA]
+  - CB-2064: S2.3: Entry points (tab + empty state) [WAITING QA]
+  - CB-2375: Documentation Generate UI returns 504 — proxy timeout (15s) shorter than LLM run (30s+) [WAITING QA]
+  - CB-2376: useGenerateFeatureDoc mutation does not invalidate documentation query on 504/error — UI stays stale [WAITING QA]
+In Progress (1):
+  - CB-2067: S2.4: E2 audit + regression + Chrome QA [IN PROGRESS]
+
+## Task Description
+**Source**: Security audit during CB-2375 (per-route timeout allowlist).
+Severity in audit: **MEDIUM** (DoS amplification on the LLM endpoint).
+
+## Risk
+After CB-2375, the proxy + client-side timeout for
+`POST /features/{id}/documentation/generate` is 120 s. Backend protection
+today is:
+- **slowapi global** `200/min` per-IP (`backend/app/main.py:26`)
+- **`projectId` scoping** (CB-2117 IDOR fix)
+
+That's enough for current local/single-tenant deployment, but on the
+public internet (or any multi-tenant deploy) a single attacker who knows
+or guesses a valid `projectId`+`issueId` pair can sustain ~200 concurrent
+calls/min, each pinning a Next.js route handler for up to 2 minutes plus
+a real backend AI provider call (token cost). On serverless/Vercel each
+in-flight request burns concurrency.
+
+## Fix (recommended)
+1. Add a per-route slowapi limit, e.g. `@limiter.limit("5/minute")` on
+   `POST /api/features/{issue_id}/documentation/generate` in
+   `backend/api/documentation.py:319`. Tune to whatever cap matches
+   observed legitimate user behaviour (real users click Regenerate
+   maybe twice an hour).
+2. Long-term: convert the endpoint to job-and-poll
+   (POST → 202 + jobId, GET /status → ready / pending) so request handlers
+   release immediately and a worker pool caps actual concurrency. This is
+   option 3 from CB-2375 and was deliberately deferred.
+
+## Acceptance
+- New per-route limit enforced on `POST /features/{id}/documentation/generate`
+  with a clear 429 response when exceeded.
+- pytest covers the limit boundary (5 successes + 1 throttled in <60 s).
+- Documentation runbook (`backend/docs/AUTOPILOT_RUNBOOK.md` or a new
+  doc-pipeline runbook) references the limit and the long-term plan.
+
+## Severity
+MEDIUM — not blocking CB-2054 acceptance on local/single-tenant. Must be
+resolved BEFORE any public/multi-tenant exposure.
+
+## Evidence
+See CB-2375 close-out comment for the security audit transcript and the
+proxy + client-side timeout pairing this ticket protects against abuse of.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 00:42:26
+
+what was the one that was marked as failed and what happaned with the status, i don't see fail status in my codeboard
+
+---
+
+## 2026-05-09 00:47:14
+
+ii changed his satus to backlog
+
+---
+
+## 2026-05-09 00:49:44
+
+A
+
+---
+
+## 2026-05-09 00:57:17
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (12):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+Not Started (10):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect)
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+
+## Task Description
+**Severity:** MEDIUM (DoS amplification on RAG backend; affects AI execution responsiveness)
+
+**Location:** `backend/services/rag_service.py:202-236`, `frontend/components/service-monitor.tsx:122,228-230`
+
+**Problem**
+
+Each call to `get_status_payload()` performs:
+1. `client.heartbeat()` (HTTP mode)
+2. `client.list_collections()`
+3. `col.count()` per collection (linear in N — currently 8)
+
+`RagStatusCard` is mounted in the always-visible global `ServiceMonitor` and polls every 30 s. With M open tabs and N collections, this is `M·(N+2)` ChromaDB round-trips every 30 s.
+
+Default FastAPI rate limit is 200/min — far above accidental hit, but ChromaDB itself has no rate limit. A noisy multi-tab session (or a forgotten dev-tools tab open overnight) could degrade RAG responsiveness for AI execution exactly when the user needs it.
+
+**Fix (pick one)**
+
+- Server-side cache: memoize `get_status_payload()` for ~10 s (TTL cache) so concurrent polls share one ChromaDB pass.
+- Skip `col.count()` per collection when the prior payload was computed within the last poll window (return cached counts).
+- Page Visibility gating on the frontend (also tracked under CB-2215 F-6) reduces but does not eliminate this.
+
+**Found in:** security-auditor pass on CB-2049.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:03:47
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (13):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+Not Started (10):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect)
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** LOW (defence-in-depth on a one-shot operational runbook; source is trusted)
+
+**Location:** `docs/runbooks/2026-05-02-chroma-volume-migration.md:67-71`
+
+**Problem**
+
+Migration step 3 pipes `tar -cf - .` from `backend/data/chroma` into `tar xf -` inside an alpine container, with no traversal-hardening flags:
+
+```bash
+tar -cf - . | docker run -i --rm \
+  -v projectsmanagerwebv2production_chroma_data:/dest \
+  alpine:3.20 sh -c 'cd /dest && rm -rf ./* ./.[!.]* 2>/dev/null;
+    tar xf -'
+```
+
+Modern GNU tar strips leading `/` and refuses traversal above cwd by default, but **alpine ships BusyBox tar**, which is more permissive. A hostile tarball entry like `../etc/passwd` could in principle escape `/dest` to the throwaway container's `/etc` (volume-bounded — does NOT reach the host).
+
+Source is the trusted local filesystem, so risk is theoretical for the already-executed run. The companion `rm -rf ./* ./.[!.]*` is correctly bounded to `/dest` (no traversal there).
+
+No user input flows into the commands; static paths only.
+
+**Fix**
+
+When this runbook is reused, add hardening flags:
+```bash
+tar xf - -C /dest --no-same-owner --no-overwrite-dir
+```
+And consider `--anchored` on extraction for paranoia.
+
+No change needed for the already-completed run.
+
+**Found in:** security-auditor pass on CB-2049.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:07:41
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (14):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+Not Started (9):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect)
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** LOW (reliability/operational; not strictly security)
+
+**Location:** `backend/services/rag_service.py:41`
+
+**Problem**
+
+```python
+PERSISTENT_FALLBACK_PATH = "./data/chroma"
+```
+
+The path is relative and resolves against the process working directory. If the backend is launched from anywhere other than `backend/` (e.g. systemd unit with `WorkingDirectory=/`, a sibling helper script, or a future container with a different `WORKDIR`), the fallback writes to a different disk location and previously-indexed embeddings appear missing.
+
+Not a direct security issue, but if symlinks or a writable parent CWD ever get involved, the fallback could land in an unexpected location with unexpected permissions.
+
+**Fix**
+
+Anchor the path relative to `__file__` or a backend-package root constant:
+
+```python
+from pathlib import Path
+PERSISTENT_FALLBACK_PATH = str(
+    Path(__file__).resolve().parent.parent / "data" / "chroma"
+)
+```
+
+**Found in:** security-auditor pass on CB-2049.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:12:34
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2377: [CB-2077 F-1] MEDIUM: FeatureDocumentation lastIndexedAt renders 'Xh ago' off by browser TZ offset (naive UTC ISO from backend)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2054: E2: FeatureDocumentation Frontend [IN_PROGRESS]
+    _Build the missing UI for FeatureDocumentation. Backend endpoints (GET / POST generate) already exist at `/api/features/{id}/documentation` but have NO frontend. Make them reachable + render the 6 markdown sections + metrics._
+    - STORY CB-2067: S2.4: E2 audit + regression + Chrome QA [IN_PROGRESS]
+      - **BUG CB-2377: [CB-2077 F-1] MEDIUM: FeatureDocumentation lastIndexedAt renders 'Xh ago' off by browser TZ offset (naive UTC ISO from backend) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (10):
+  - CB-2068: T2.4.1: code-reviewer on E2 diff (hooks + page + view + tab integration) [WAITING QA]
+  - CB-2069: T2.4.2: security-auditor on E2 — markdown XSS + JSON.parse defense + URL transform [WAITING QA]
+  - CB-2070: T2.4.3: Chrome visual QA — empty + populated states + FEATURE-only gating [WAITING QA]
+  - CB-2071: T2.4.4: E2 full regression — open FEATURE → Generate → verify all 6 sections + Chroma indexed [WAITING QA]
+  - CB-2072: [QA] E2-1: Documentation tab visible only on FEATURE-type issues [WAITING QA]
+  - CB-2073: [QA] E2-2: Empty state shows when no FeatureDocumentation row exists [WAITING QA]
+  - CB-2074: [QA] E2-3: Generate button creates row + all 6 sections populate [WAITING QA]
+  - CB-2075: [QA] E2-4: Regenerate updates row, doesn't duplicate [WAITING QA]
+  - CB-2076: [QA] E2-5: techStack badges render from JSON array [WAITING QA]
+  - CB-2077: [QA] E2-6: Last-indexed timestamp updates after regenerate [WAITING QA]
+
+## Task Description
+**Severity:** MEDIUM. The visible relative-time on the Documentation tab is wrong by exactly the user's UTC offset for every freshly-indexed FeatureDocumentation row. In Asia/Jerusalem (UTC+3 IDT) a regenerate that just finished renders as `3h ago`. Misleading UX; users will think the indexer is stale or broken. Acceptance for CB-2077 itself still passes because the underlying `datetime` attribute on `<time>` is correct and the DB row's `lastIndexedAt` does advance — but the human-readable string is wrong.
+
+**Found during:** Manual QA of CB-2077 (E2-6: timestamp updates after regenerate). See `docs/research/cb-2077-qa-report.md` for full procedure + evidence.
+
+**Reproduction**
+
+1. Browser TZ != UTC (Eli's machine is `Asia/Jerusalem`).
+2. Open any FEATURE issue with an existing FeatureDocumentation row.
+3. Click Regenerate. Wait for response.
+4. Observe: `Indexed Xh ago` and `Last updated Xh ago` where X = absolute value of the local UTC offset (3 in IDT, 2 in IST). Expected: `just now` / `<1m ago`.
+
+**Root cause**
+
+`backend/services/documentation_generator.py:1725`:
+```py
+row.lastIndexedAt = datetime.utcnow()
+```
+
+`datetime.utcnow()` returns a *naive* datetime. SQLAlchemy stores it; Pydantic serializes it as ISO 8601 **without** a `Z` suffix (e.g. `2026-05-06T22:46:59.675402`).
+
+`frontend/components/codeboard/FeatureDocumentationView.tsx:66-86` (`formatIndexedAt`):
+```ts
+const then = new Date(iso).getTime();
+```
+
+Per ECMA-262 §21.4.3.2: an ISO string with no time-zone designator is interpreted as **local** time. With browser TZ = UTC+3, the string `22:46:59` parses to 19:46:59 UTC. Compared against `Date.now()` (true UTC), the diff is the browser's offset → 3 hours.
+
+Verified live in the running browser via `page.evaluate`:
+```
+iso          = "2026-05-06T22:46:59.675402"
+parsed_utc   = "2026-05-06T19:46:59.675Z"   <- shifted by -3h
+now_utc      = "2026-05-06T22:48:17.106Z"
+diff_sec     = 10877   (== 3h2m)
+tz           = "Asia/Jerusalem"   tz_offset_min = -180
+```
+
+The `<time datetime="...">` attribute itself carries the correct ISO string, so machine-readable consumers (screen readers, copy-paste) get the right value. Only the human-readable relative text is wrong.
+
+**Fix candidates**
+
+**Option A (preferred — backend correctness):** make all server-emitted timestamps tz-aware UTC so JSON output gets the `Z` suffix.
+- `documentation_generator.py:1725` -> `datetime.now(timezone.utc)`.
+- Audit other `datetime.utcnow()` callers in the documentation pipeline (and elsewhere that gets serialized to the frontend) for the same bug; sweep with grep.
+- Verify SQLAlchemy column type / Pydantic model output emits the `Z` suffix.
+
+**Option B (frontend defensive):** in `formatIndexedAt`, treat a missing tz designator as UTC by appending `Z` before constructing `Date`. One-line guard. Useful as defense-in-depth even after Option A lands.
+
+**Option C (both):** Option A primary, Option B as belt-and-suspenders so future regressions on the backend don't silently re-introduce the same bug.
+
+**Acceptance**
+
+- Regenerate from Asia/Jerusalem browser → `Indexed just now` (within 60 s of the regenerate response).
+- 5 minutes later → `Indexed 5m ago`.
+- Test must run with browser TZ explicitly set to a non-UTC zone (Playwright `tz_id` option) so the bug cannot hide behind a UTC-only test environment.
+- Add a Vitest case in `frontend/tests/components/FeatureDocumentationView.test.tsx` that mocks `Date.now()`, passes a no-tz ISO, and asserts `just now` (not `Xh ago`) — this would have caught the bug.
+
+**Out of scope**
+
+A full sweep of every `datetime.utcnow()` in the backend is out of scope for this ticket — file follow-ups if the audit reveals other surfaces (ExecutionSummary, ImplementationNote may have the same shape).
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:30:37
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2078: E3: Documentation Settings Panel [COMPLETED_WAITING_QA]
+    _Add user control over the auto-documentation feature. Today it's auto-on with no toggle, retention, or visibility. This epic adds a settings page + retention task._
+    - STORY CB-2089: S3.3: E3 audit + regression + Chrome QA [COMPLETED_WAITING_QA]
+      - **BUG CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (10):
+  - CB-2090: T3.3.1: code-reviewer on E3 diff (model + endpoints + retention task + UI) [WAITING QA]
+  - CB-2091: T3.3.2: security-auditor on E3 — PATCH validation + retention SQL safety [WAITING QA]
+  - CB-2092: T3.3.3: Chrome visual QA — settings page + toggle + recent list [WAITING QA]
+  - CB-2093: T3.3.4: E3 full regression — toggle off → exec → no summary; toggle on → exec → summary; retention purges [WAITING QA]
+  - CB-2094: [QA] E3-1: autoGenerate toggle persists across reload [WAITING QA]
+  - CB-2095: [QA] E3-2: autoGenerate=false skips doc-gen hook on next exec [WAITING QA]
+  - CB-2096: [QA] E3-3: Retention purges ExecutionSummary older than retentionDays [WAITING QA]
+  - CB-2097: [QA] E3-4: maxPerIssue caps row count per issue [WAITING QA]
+  - CB-2098: [QA] E3-5: Recent summaries list shows latest 20 ordered DESC [WAITING QA]
+  - CB-2099: [QA] E3-6: Manual re-trigger button starts exec [WAITING QA]
+Not Started (1):
+  - CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE
+
+## Task Description
+Found during CB-2099 manual QA on 2026-05-07.
+
+**Symptom**: React hydration warning in console:
+```
+<%s> cannot contain a nested %s.
+tbody <div>
+```
+
+**Cause**: `SummaryRow` in `frontend/app/settings/documentation/page.tsx:322` returns:
+```tsx
+<>
+  {confirming && <ConfirmDialog .../>}
+  <tr>...</tr>
+</>
+```
+When `confirming === true`, the dialog `<div role="dialog">` becomes a direct child of `<tbody>`, which is invalid HTML.
+
+**Fix options**:
+1. Render `<ConfirmDialog>` from a portal (`createPortal` to `document.body`).
+2. Lift `confirming` state up to `RecentSummariesPanel` and render the dialog outside the `<table>` element entirely.
+
+Option 1 is the simplest and matches how modals are usually rendered in this app.
+
+**Acceptance**:
+- No hydration warning in browser console when opening Re-run dialog.
+- Dialog still renders centered with backdrop and is dismissible.
+
+Sibling: CB-2099, CB-2101.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:36:57
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2078: E3: Documentation Settings Panel [COMPLETED_WAITING_QA]
+    _Add user control over the auto-documentation feature. Today it's auto-on with no toggle, retention, or visibility. This epic adds a settings page + retention task._
+    - STORY CB-2089: S3.3: E3 audit + regression + Chrome QA [COMPLETED_WAITING_QA]
+      - **BUG CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (11):
+  - CB-2090: T3.3.1: code-reviewer on E3 diff (model + endpoints + retention task + UI) [WAITING QA]
+  - CB-2091: T3.3.2: security-auditor on E3 — PATCH validation + retention SQL safety [WAITING QA]
+  - CB-2092: T3.3.3: Chrome visual QA — settings page + toggle + recent list [WAITING QA]
+  - CB-2093: T3.3.4: E3 full regression — toggle off → exec → no summary; toggle on → exec → summary; retention purges [WAITING QA]
+  - CB-2094: [QA] E3-1: autoGenerate toggle persists across reload [WAITING QA]
+  - CB-2095: [QA] E3-2: autoGenerate=false skips doc-gen hook on next exec [WAITING QA]
+  - CB-2096: [QA] E3-3: Retention purges ExecutionSummary older than retentionDays [WAITING QA]
+  - CB-2097: [QA] E3-4: maxPerIssue caps row count per issue [WAITING QA]
+  - CB-2098: [QA] E3-5: Recent summaries list shows latest 20 ordered DESC [WAITING QA]
+  - CB-2099: [QA] E3-6: Manual re-trigger button starts exec [WAITING QA]
+  - CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow [WAITING QA]
+Not Started (1):
+  - CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby)
+
+## Task Description
+Found during CB-2099 manual QA on 2026-05-07.
+
+**Symptom**: Clicking Re-run on any summary row whose underlying issue is in `COMPLETED_WAITING_QA` or `DONE` creates a session that immediately fails with:
+```
+Dependency check failed: CB-XXXX has status COMPLETED_WAITING_QA. Must be one of BACKLOG, IN_PROGRESS, TODO to execute.
+```
+
+Because the Recent Summaries list is mostly populated by issues that just finished executing (and therefore landed in CWQ), most rows in the list will fast-fail when Re-run is used.
+
+**Fix options** (any one works):
+1. **Pre-disable**: hide / disable the Re-run button when the issue's current status is not eligible.
+2. **Force flag**: send `force: true` from `ConfirmDialog` so the backend bypasses the dep-check and re-executes the issue regardless of status. Matches how 'Re-run' is meant to behave.
+3. **Inline toast on failure**: catch the dep-check error and show a toast (`This issue is already in CWQ. Re-open to re-run.`) instead of leaving a failed session row in the bar.
+
+Recommendation: option 2 (force=true) since the user has already explicitly confirmed re-trigger in the dialog.
+
+**Acceptance**:
+- Re-run on a CWQ/DONE summary either (a) is disabled, or (b) actually re-executes the issue end-to-end.
+- No silent failed-session noise in GlobalAgentStatusBar.
+
+Sibling: CB-2099, CB-2100.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:44:04
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (15):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+Not Started (8):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Source**: security-auditor pass on CB-2212.
+**Severity**: MEDIUM (latent — no current trigger; future admin reconnect endpoint will expose).
+
+## Problem
+`RAGService` is a process-level singleton consumed by async FastAPI handlers. The new `_reset_state()` helper plus the subsequent client construction in `_init_client_blocking` / `_fallback_to_persistent` are NOT guarded by a lock.
+
+Today these paths run only at lifespan startup (single-threaded) and the property-fallback at `backend/services/rag_service.py:65-71` is a 'should never happen' degraded path. So practical risk is bounded.
+
+But once any future code (e.g. an admin reconnect endpoint, the same caller CB-2212 was written to defend against) calls `_init_client_blocking` while another async caller is in the property fallback, both can race to construct duplicate `PersistentClient` instances on the same SQLite-backed path -> potential lock contention or corruption.
+
+## Fix proposal
+Wrap the reset+construct sequence in a `threading.Lock` (these are sync paths called via `asyncio.to_thread()` from the lifespan, so a thread-lock is the right primitive). Acquire at the top of `_init_client_blocking` and `_fallback_to_persistent`, release after the new client is fully assigned. The property-fallback at line 65-71 should also acquire the same lock before checking `_client is None` to close the TOCTOU window.
+
+## Bonus (LOW from same audit)
+Consider `self._collections.clear()` instead of `self._collections = {}` so any concurrent caller holding a local reference to the dict (e.g. mid-iteration in `get_status_payload`) sees a uniformly cleared view rather than reading stale handles bound to a dead client.
+
+## Acceptance
+- All three paths share a single `threading.Lock`.
+- Test reproduces the race today (two threads racing into `_init_client_blocking` create only one client).
+- No regression in startup latency (lock is uncontended at boot).
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 01:58:48
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (16):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+Not Started (7):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** LOW (over-fetch on every tab return; cosmetic)
+
+**Location:** `frontend/components/service-monitor.tsx` — `RagStatusCard`
+useEffect with `visibilitychange` listener (CB-2215 F-6 fix).
+
+**Problem**
+
+CB-2215 added a `visibilitychange` handler that fires an immediate
+`fetchStatusRef.current()` when the tab becomes visible again. This is
+correct for "card is current the moment user looks at it" but the existing
+`setInterval` continues on its original 30 s phase. So if the tab returns
+29 s into the cycle, you get an immediate refresh and another fetch 1 s
+later — a tiny per-tab over-fetch.
+
+Today the impact is minimal (one extra fetch per visibility return per
+tab). But on a heavy multi-tab dev workstation it's avoidable churn, and
+it'll matter more once CB-2218 lands the heartbeat / list_collections /
+per-collection-count fan-out fix.
+
+**Fix**
+
+Inside `onVisibility`, when becoming visible:
+
+```ts
+if (intervalRef.current) clearInterval(intervalRef.current);
+fetchStatusRef.current();
+intervalRef.current = setInterval(tick, RAG_STATUS_POLL_MS);
+```
+
+Requires hoisting `interval` into a ref so it's reachable from the
+visibility handler. Alternatively, migrate the card to React Query as
+the original F-6 finding suggested — RQ handles this natively.
+
+**Found in:** code-reviewer pass on CB-2215 (F-6 follow-up).
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 02:06:13
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (17):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+Not Started (6):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** LOW (internal-only API; consumers limited to one frontend)
+
+**Location:** `backend/api/system.py` — `RagStatusResponse.endpoint`
+(renamed from `host` per CB-2215 F-5).
+
+**Problem**
+
+CB-2215 (F-5) renamed the Pydantic field `host` -> `endpoint` on the
+`/api/system/rag/status` response. The internal frontend was updated in
+the same commit, but:
+
+1. The change is published in the OpenAPI spec — any third party (or
+   stale browser tab loaded from the old bundle) keying on `host` will
+   silently see `undefined`. The client coercer
+   (`normalizeRagStatus` in `service-monitor.tsx`) defaults missing
+   `endpoint` to `''`, so the failure mode is "endpoint shows blank"
+   rather than an exception. Acceptable but worth visibility.
+
+2. No back-compat alias was added (e.g., `host: str = Field(alias=...)`
+   or duplicate field on the response).
+
+3. No CHANGELOG entry / migration note was written.
+
+**Fix (pick one)**
+
+A. Add a deprecation-window alias on the response model emitting both
+   `host` (deprecated) and `endpoint` for one release, then drop. Most
+   conservative; preserves any external consumer.
+
+B. Document the breaking change in `docs/runbooks/` (or whatever the
+   project uses for API-change notes) and let it ride. The endpoint is
+   internal-only per `system.py:10-17` (loopback bind, no auth, no
+   public consumers besides Service Monitor) — the cost of a flag-day
+   rename is essentially zero.
+
+Recommend B given the perimeter, but file this so the decision is
+deliberate rather than implicit.
+
+**Found in:** code-reviewer pass on CB-2215 (F-5 follow-up).
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 02:13:27
+
+<task-notification>
+<task-id>bvxblm2hl</task-id>
+<tool-use-id>toolu_01QDmbEnAeRHm6vsCsieev88</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/6603735a-90c2-48d2-b866-6259d088b4cb/tasks/bvxblm2hl.output</output-file>
+<status>completed</status>
+<summary>Background command "Confirm consumers" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-05-09 02:13:36
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (18):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+Not Started (5):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** HIGH (re-disclosure of the data CB-2217 just redacted, via a sibling endpoint; same threat model)
+
+**Location:** `backend/api/projects.py:16-39`
+
+**Problem**
+
+`GET /api/projects` returns the full project list to any local Origin-less caller (the validate_origin middleware in `backend/app/main.py` lets server-to-server requests through by design). Each row contains:
+- `id` — the FULL CUID (CB-2217 just redacted the 8-char   prefix from /api/system/rag/status)
+- `path` — the absolute filesystem path of the project   directory (worse than the CB-2216 PERSISTENT-mode abspath   leak that just shipped)
+- `name`, `description`, `type`, `version`
+
+An attacker with any local foothold can `curl /api/projects` and recover the full pre-CB-2217 picture in one request — the CB-2217 redaction of `collections[].name` is rendered moot.
+
+**Found in:** security-auditor pass on CB-2217 fix (2026-05-08).
+
+**Fix options**
+
+- Apply consistent perimeter discipline: gate read endpoints   behind a loopback-token / shared-secret check when   `ALLOW_LAN=true`, OR
+- Accept that `/api/system/rag/status` was never the weakest   link and re-evaluate whether CB-2217's redaction is the   right priority vs auth-perimeter work.
+
+**Reproduction**
+
+```bash
+curl http://localhost:8401/api/projects | jq '.[0]'
+# returns: {"id":"<full-cuid>","path":"/abs/path",...}
+```
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 02:35:18
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (19):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+Not Started (4):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** HIGH (re-binds the anonymous `count` array from CB-2217 to specific project_ids in one extra request)
+
+**Location:** `backend/api/search.py:190-212`
+
+**Problem**
+
+`GET /api/search/{project_id}/stats` returns `{project_id, indexed_count, ...}` for any caller-supplied project_id. Combined with H-1 (full project enumeration via /api/projects) an attacker can:
+
+1. `GET /api/projects` → list of all project_ids
+2. For each project_id: `GET /api/search/{id}/stats` →    per-project indexed doc count bound to a real project_id
+
+This defeats the entire point of CB-2217's anonymization — the `count` distribution that CB-2217 tried to make non-attributable becomes attributable in one extra hop.
+
+**Found in:** security-auditor pass on CB-2217 fix (2026-05-08).
+
+**Fix options**
+
+- Same authn perimeter as H-1 — these endpoints share the   threat model.
+- OR collapse `indexed_count` into the same redaction   discipline as CB-2217 (return only aggregate, never   per-project).
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 02:53:21
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (20):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+Not Started (4):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape
+
+## Task Description
+**Severity:** MEDIUM (reconnaissance — publishes every route, schema, and parameter shape to any Origin-less local caller)
+
+**Location:** `backend/app/main.py:339-344` (FastAPI() constructed without docs_url=None / redoc_url=None / openapi_url=None)
+
+**Problem**
+
+`/docs`, `/redoc`, and `/openapi.json` are enabled by default. An attacker who finds /api/projects or /api/system/rag/status via H-1/H-2 can also fetch /openapi.json to enumerate every route, every project_id path param, every request/response schema — substantial reconnaissance arbitrage on top of the explicit data leaks.
+
+Note: the CURRENT /openapi.json schema correctly drops `name` from RagCollectionStatus (CB-2217 is reflected). This ticket is about the surface map, not schema re-disclosure.
+
+**Found in:** security-auditor pass on CB-2217 fix (2026-05-08).
+
+**Fix**
+
+- Disable in non-dev: `FastAPI(docs_url=None,   redoc_url=None, openapi_url=None)` when   settings.ENVIRONMENT != 'dev'.
+- OR gate behind same loopback-token / shared-secret as   H-1/H-2 if/when that lands.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 03:05:21
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (21):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+Not Started (3):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape
+
+## Task Description
+**Severity:** LOW (off-band re-disclosure of the abspath CB-2216 just redacted from the HTTP payload)
+
+**Location:** `backend/services/rag_service.py:188-190` (describe_mode emits `path={self._endpoint}`), `backend/app/main.py:275` (lifespan logs it at INFO via `[startup] %s`)
+
+**Problem**
+
+CB-2216 redacted the PERSISTENT-mode abspath from /api/system/rag/status's HTTP payload because the endpoint is reachable by any local Origin-less caller. But the boot log line still contains the abspath at INFO level — any attacker with read access to `logs/backend.log`, journald, or a captured stdout pipe recovers exactly what CB-2216 redacted.
+
+Same finding applies (less severely) to the CB-2217 diagnostic log: `count() failed for collection %s` at `rag_service.py:322-325` keeps the redacted-from-payload name in DEBUG-level logs (which are gated by INFO default — but a future operator flipping to DEBUG restores the leak).
+
+**Found in:** security-auditor pass on CB-2217 fix (2026-05-08), L-1 + L-2.
+
+**Fix options**
+
+- describe_mode(): log a stable hash of the abspath   (`hashlib.blake2s(path, digest_size=4).hexdigest()`)   instead of the literal path.
+- count() failed log: switch from `name` to collection   index (`#%d`).
+- Belt+suspenders: file rotation + restrictive log   permissions on `logs/backend.log`.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 03:13:21
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (22):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+Not Started (2):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape
+
+## Task Description
+**Source**: security-auditor pass on CB-2218 (TTL-cached single-flight wrapper for `/api/system/rag/status`).
+**Severity**: MEDIUM (different DoS shape than CB-2218 fixed; latent — requires a stuck/half-closed ChromaDB connection to trigger).
+
+## Problem
+`RAGService.get_status_payload()` (rag_service.py:258-272) holds `_status_cache_lock` for the full duration of `_compute_status_payload()` to enforce single-flight on cache miss. The probe issues `client.heartbeat()` + `client.list_collections()` + `col.count()` per collection against the chromadb HTTP client, which has **no per-call timeout configured**.
+
+If ChromaDB hangs (stuck server, half-closed TCP socket in CLOSE_WAIT, slow-loris), every concurrent status request queues on the lock. The FastAPI handler at `api/system.py:106-114` calls `get_status_payload()` synchronously inside the async endpoint — no `asyncio.to_thread` — so a stuck ChromaDB pins the event-loop worker thread and blocks every other request handled by that worker.
+
+**Net result**: CB-2218 collapsed the M·(N+2) RT amplifier to (N+2) per 10s, but introduced a new DoS shape where one stuck dependency stalls the entire status-endpoint queue plus any other async handlers sharing the worker.
+
+## Fix proposal
+1. Configure a request timeout on the chromadb HttpClient at construction (`_init_client_blocking()` in rag_service.py:153-188). 2 s is a safe ceiling — heartbeat / list_collections / count() should all return well below that against a healthy server.
+2. Wrap `rag.get_status_payload()` in `asyncio.to_thread(...)` at the API layer (`api/system.py:106-114`) so the synchronous probe runs off the event loop.
+3. Use `_status_cache_lock.acquire(timeout=0.5)` with a short bound; on contention, return the prior cached payload with `healthy=False` rather than queue indefinitely. (Optional belt-and-braces; (1)+(2) already remove the worst case.)
+
+## Files
+- `backend/services/rag_service.py:153-188` (HttpClient construct)
+- `backend/services/rag_service.py:258-272` (lock-held compute)
+- `backend/api/system.py:106-114` (sync call inside async handler)
+
+## Acceptance
+- `httpx.ReadTimeout` (or chromadb-equivalent) cannot block the status endpoint for more than ~2 s.
+- A simulated stuck-chromadb test (mock `client.heartbeat` to `time.sleep(60)`) returns within 5 s with `healthy=False`.
+- Concurrent unrelated FastAPI requests handled by the same worker do NOT stall while the status endpoint is hung.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 03:13:49
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2730: [CB-2377 follow-up] Audit + tz-aware sweep of remaining datetime.utcnow() callers in documentation pipeline**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2054: E2: FeatureDocumentation Frontend [IN_PROGRESS]
+    _Build the missing UI for FeatureDocumentation. Backend endpoints (GET / POST generate) already exist at `/api/features/{id}/documentation` but have NO frontend. Make them reachable + render the 6 markdown sections + metrics._
+    - STORY CB-2067: S2.4: E2 audit + regression + Chrome QA [IN_PROGRESS]
+      - **TASK CB-2730: [CB-2377 follow-up] Audit + tz-aware sweep of remaining datetime.utcnow() callers in documentation pipeline ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (11):
+  - CB-2068: T2.4.1: code-reviewer on E2 diff (hooks + page + view + tab integration) [WAITING QA]
+  - CB-2069: T2.4.2: security-auditor on E2 — markdown XSS + JSON.parse defense + URL transform [WAITING QA]
+  - CB-2070: T2.4.3: Chrome visual QA — empty + populated states + FEATURE-only gating [WAITING QA]
+  - CB-2071: T2.4.4: E2 full regression — open FEATURE → Generate → verify all 6 sections + Chroma indexed [WAITING QA]
+  - CB-2072: [QA] E2-1: Documentation tab visible only on FEATURE-type issues [WAITING QA]
+  - CB-2073: [QA] E2-2: Empty state shows when no FeatureDocumentation row exists [WAITING QA]
+  - CB-2074: [QA] E2-3: Generate button creates row + all 6 sections populate [WAITING QA]
+  - CB-2075: [QA] E2-4: Regenerate updates row, doesn't duplicate [WAITING QA]
+  - CB-2076: [QA] E2-5: techStack badges render from JSON array [WAITING QA]
+  - CB-2077: [QA] E2-6: Last-indexed timestamp updates after regenerate [WAITING QA]
+  - CB-2377: [CB-2077 F-1] MEDIUM: FeatureDocumentation lastIndexedAt renders 'Xh ago' off by browser TZ offset (naive UTC ISO from backend) [WAITING QA]
+
+## Task Description
+**Source**: CB-2377 (FeatureDocumentation lastIndexedAt TZ bug).
+
+CB-2377 fixed *one* surface — `FeatureDocumentation.lastIndexedAt` — by
+combining (a) tz-aware UTC at write, (b) Pydantic `field_serializer` that
+emits `Z` suffix, and (c) frontend `_toUtcIso` defense-in-depth guard.
+
+The same naive-ISO bug pattern is *suspected* on two other surfaces in the
+documentation pipeline that were explicitly out-of-scope for CB-2377:
+
+1. **ExecutionSummary timestamps**
+   - `backend/services/documentation_generator.py:515` still calls
+     `datetime.utcnow()` for `executed_at`.
+   - `ExecutionSummary.executedAt`, `createdAt`, `updatedAt` columns are
+     naive `DateTime` (Prisma-owned schema, SQLite).
+   - `ExecutionSummaryResponse` has no `Z`-emitting serializer.
+   - Any frontend surface that builds `new Date(iso)` directly off these
+     fields will under-/over-shoot by the browser TZ offset.
+
+2. **ImplementationNote timestamps**
+   - `models/documentation.py` defines `_utc_now()` returning naive
+     `datetime.utcnow()`.
+   - `createdAt` / `updatedAt` columns also naive `DateTime`.
+   - Same Prisma-owned schema; same JSON serialization shape.
+
+**Acceptance**
+
+- Grep all `datetime.utcnow()` callers under `backend/services/` and
+  `backend/models/` whose values reach a frontend response.
+- Convert each call site to `datetime.now(timezone.utc)`.
+- Add (or reuse) Pydantic `field_serializer` with `_isoformat_utc_z` from
+  `models/schemas.py` on every response model that exposes a datetime
+  derived from one of those columns. Specifically:
+  - `ExecutionSummaryResponse`
+  - `ImplementationNoteResponse`
+  - any other response model the audit surfaces.
+- Smoke-test each affected response with `curl | jq` and confirm every
+  datetime field ends in `Z`.
+- Add a Vitest case for any frontend component that renders one of these
+  timestamps via `new Date(iso)`, mirroring the CB-2377 pattern.
+
+**Out of scope**
+
+- Migrating the underlying SQLAlchemy column to `DateTime(timezone=True)`
+  (Prisma owns the schema; would require a Prisma migration first).
+- Sweep of `datetime.utcnow()` outside the documentation pipeline (file a
+  separate epic if other surfaces are affected).
+
+**Why MEDIUM not HIGH**: same severity profile as CB-2377 — wrong relative
+time string is misleading but the underlying ISO attribute is correct, so
+machine-readable consumers (screen readers, copy-paste, analytics) get the
+right value. UX-only impact.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 03:13:54
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2078: E3: Documentation Settings Panel [COMPLETED_WAITING_QA]
+    _Add user control over the auto-documentation feature. Today it's auto-on with no toggle, retention, or visibility. This epic adds a settings page + retention task._
+    - STORY CB-2089: S3.3: E3 audit + regression + Chrome QA [COMPLETED_WAITING_QA]
+      - **BUG CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (12):
+  - CB-2090: T3.3.1: code-reviewer on E3 diff (model + endpoints + retention task + UI) [WAITING QA]
+  - CB-2091: T3.3.2: security-auditor on E3 — PATCH validation + retention SQL safety [WAITING QA]
+  - CB-2092: T3.3.3: Chrome visual QA — settings page + toggle + recent list [WAITING QA]
+  - CB-2093: T3.3.4: E3 full regression — toggle off → exec → no summary; toggle on → exec → summary; retention purges [WAITING QA]
+  - CB-2094: [QA] E3-1: autoGenerate toggle persists across reload [WAITING QA]
+  - CB-2095: [QA] E3-2: autoGenerate=false skips doc-gen hook on next exec [WAITING QA]
+  - CB-2096: [QA] E3-3: Retention purges ExecutionSummary older than retentionDays [WAITING QA]
+  - CB-2097: [QA] E3-4: maxPerIssue caps row count per issue [WAITING QA]
+  - CB-2098: [QA] E3-5: Recent summaries list shows latest 20 ordered DESC [WAITING QA]
+  - CB-2099: [QA] E3-6: Manual re-trigger button starts exec [WAITING QA]
+  - CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow [WAITING QA]
+  - CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE [WAITING QA]
+
+## Task Description
+Surfaced by code-reviewer during the CB-2378 portal-fix audit on 2026-05-09.
+
+Pre-existing — not introduced by CB-2378 — but newly visible now that the dialog is a true top-level overlay.
+
+**Gaps:**
+- No focus trap (Tab can escape the dialog into the background page).
+- No initial focus on Confirm/Cancel button when dialog opens.
+- No Escape-key handler to close the dialog.
+- No body scroll lock — background page scrolls behind backdrop.
+- No `aria-labelledby` linking the heading to the dialog.
+- Backdrop has no `onClick={onCancel}` (debatable — depends on UX policy).
+
+**File**: `frontend/app/settings/documentation/page.tsx` — `ConfirmDialog` (~line 254).
+
+**Suggested fix**: extract a reusable `<Modal>` primitive in `frontend/components/ui/` (focus trap via `react-focus-lock` or homegrown, scroll lock via `overflow:hidden` on body, Escape handler via `useEffect` keydown listener, aria attributes wired up).
+
+**Acceptance**:
+- Tab-cycle stays inside the dialog while open.
+- Escape closes the dialog.
+- Body does not scroll while dialog is open.
+- Screen reader announces the dialog title.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 03:13:59
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (22):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+Not Started (2):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop
+
+## Task Description
+**Severity:** HIGH — a partial fix on `/stats`
+(CB-2667) leaves five sibling endpoints under `backend/api/search.py`
+exposed to the SAME threat model that CB-2667 closed. Until these are
+gated, the CB-2666 + CB-2667 perimeter is incomplete on any non-loopback
+deploy.
+
+**Discovery:** security-auditor pass on the CB-2667 fix
+(2026-05-09). H-1 is filed here rather than rolled into CB-2667 to
+keep the original ticket scope-pure (single endpoint per fix).
+
+## Affected endpoints
+
+| Method | Path | Disclosure / Amplification |
+|---|---|---|
+| GET    | `/api/search/{project_id}` | per-project semantic search results (issue content disclosure) |
+| GET    | `/api/search/{project_id}/similar` | per-project similar-issue results (issue content disclosure) |
+| POST   | `/api/search/{project_id}/embed/{issue_id}` | mutates arbitrary collection — DoS amplification + IDOR write |
+| DELETE | `/api/search/{project_id}/embed/{issue_id}` | deletes arbitrary embeddings — destructive IDOR |
+| POST   | `/api/search/{project_id}/embed-all` | iterates EVERY Issue with `projectId == X` and embeds them — server-side fan-out, validates guessed CUIDs by 200-with-`embedded>0` |
+
+## Fix recommendation
+
+Apply the SAME pattern CB-2666 / CB-2667 established:
+
+```python
+@router.get(
+    "/{project_id}",
+    dependencies=[InternalAuthDep],
+)
+@limiter.limit("30/minute")
+async def search_issues(request: Request, ...):
+    ...
+```
+
+The two write endpoints (`POST /embed*`, `DELETE /embed*`,
+`POST /embed-all`) deserve a STRICTER cap (suggest 10/minute) — they
+are DoS-amplifying, not just disclosure. `embed-all` in particular
+walks every Issue row matching `projectId` and embeds each one
+synchronously, so a single request can pin the worker for seconds
+on a large project.
+
+## Runbook update needed
+
+`backend/docs/DOC_PIPELINE_RUNBOOK.md` §3 currently lists `/stats`
+as the only gated search endpoint. After this fix lands, extend
+the table to cover all six routes under `/api/search/*` and note
+the stricter cap on the write endpoints.
+
+## Test parity
+
+Mirror the `TestSearchStatsEndpointPerimeter` class — one parametrized
+class per endpoint (or one shared parametrized fixture covering the
+endpoint + method matrix) covering: token unset, missing header,
+valid header, wrong header, Origin spoof, AST-walk source-text pin.
+
+## Reproduction (post CB-2667, pre this fix)
+
+With `INTERNAL_API_TOKEN=""` (default loopback dev):
+
+```bash
+# All 5 still 200 — same as before CB-2667
+curl -s 'http://localhost:8401/api/search/<any-cuid>?q=foo' | head -c 200
+curl -s 'http://localhost:8401/api/search/<any-cuid>/similar?title=foo' | head -c 200
+```
+
+With token set:
+
+```bash
+# /stats now 401 (CB-2667 fix), but the 5 siblings still 200 — gap.
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>/stats'
+# → 401
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>?q=foo'
+# → 200 (this is the gap)
+```
+
+## Threat-model linkage
+
+CB-2217 (anonymous `count[]`) → CB-2666 H-1 (project_id list, gated)
+→ CB-2667 H-2 (`/stats` per-project count, gated) → THIS (`/search/*`
+sibling endpoints, ungated). Closing this finishes the perimeter
+the CB-2217 redaction was supposed to provide.
+
+_Filed by security-auditor agent during CB-2667 audit pass._
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 10:33:12
+
+not stopped because credits were consumed, and I'm back in the same position I was yesterday. The task that was running is on failed state, and all the list has been deleted. You can see it in the Chrome if you connect. So I'm not sure we already fixed that or run the fix. We had a plan. to fix this thing. I need to check and see if this is a regression or we didn't touch the bug when it still exist and open.
+
+---
+
+## 2026-05-09 10:33:39
+
+the auto pilot stopped because credits were consumed, and I'm back in the same position I was yesterday. The task that was running is on failed state, and all the list has been deleted. You can see it in the Chrome if you connect. So I'm not sure we already fixed that or run the fix. We had a plan. to fix this thing. I need to check and see if this is a regression or we didn't touch the bug when it still exist and open.
+
+---
+
+## 2026-05-09 10:37:08
+
+The question is, is that the same bug? If it's the same bug, just reopen the bug. Add what you need to add in the description or in the comments, and just work to fix that once and for all.
+
+---
+
+## 2026-05-09 11:00:26
+
+What will happen to the failed tasks? How do I enabled them... put them in the backlog. I don't have a failed status in my statuses list. It's listed as failed, but it's hard coded. So how do I resend them? and why they are Marcus' fave if the back end is restarted. They should Marcus fail only if something has happened during the the government and we couldn't complete the development. But once it's resumed, they're supposed to go back to backlog. least have the option to resend them to the backlog.
+
+---
+
+## 2026-05-09 11:29:38
+
+have you tried to retry all failed tasks, becouse i tried and it shoud 0 reset 4 failed to reset
+
+---
+
+## 2026-05-09 11:58:38
+
+OK No. They are not on failed status. But when I press the start button, because it's paused now, so resume, it doesn't do anything. So I'm not sure what it did, but it's not going back, and it's not continue.
+
+---
+
+## 2026-05-09 12:08:54
+
+yes run the full regression now
+
+---
+
+## 2026-05-09 12:38:52
+
+understand what you want from me The application is not running. I can't access it. So I don't like just manage to kill the background and the watchdog, but I can't access anything.
+
+---
+
+## 2026-05-09 12:42:28
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (22):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+Not Started (2):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape
+
+## Task Description
+**Source**: security-auditor pass on CB-2218 (TTL-cached single-flight wrapper for `/api/system/rag/status`).
+**Severity**: MEDIUM (different DoS shape than CB-2218 fixed; latent — requires a stuck/half-closed ChromaDB connection to trigger).
+
+## Problem
+`RAGService.get_status_payload()` (rag_service.py:258-272) holds `_status_cache_lock` for the full duration of `_compute_status_payload()` to enforce single-flight on cache miss. The probe issues `client.heartbeat()` + `client.list_collections()` + `col.count()` per collection against the chromadb HTTP client, which has **no per-call timeout configured**.
+
+If ChromaDB hangs (stuck server, half-closed TCP socket in CLOSE_WAIT, slow-loris), every concurrent status request queues on the lock. The FastAPI handler at `api/system.py:106-114` calls `get_status_payload()` synchronously inside the async endpoint — no `asyncio.to_thread` — so a stuck ChromaDB pins the event-loop worker thread and blocks every other request handled by that worker.
+
+**Net result**: CB-2218 collapsed the M·(N+2) RT amplifier to (N+2) per 10s, but introduced a new DoS shape where one stuck dependency stalls the entire status-endpoint queue plus any other async handlers sharing the worker.
+
+## Fix proposal
+1. Configure a request timeout on the chromadb HttpClient at construction (`_init_client_blocking()` in rag_service.py:153-188). 2 s is a safe ceiling — heartbeat / list_collections / count() should all return well below that against a healthy server.
+2. Wrap `rag.get_status_payload()` in `asyncio.to_thread(...)` at the API layer (`api/system.py:106-114`) so the synchronous probe runs off the event loop.
+3. Use `_status_cache_lock.acquire(timeout=0.5)` with a short bound; on contention, return the prior cached payload with `healthy=False` rather than queue indefinitely. (Optional belt-and-braces; (1)+(2) already remove the worst case.)
+
+## Files
+- `backend/services/rag_service.py:153-188` (HttpClient construct)
+- `backend/services/rag_service.py:258-272` (lock-held compute)
+- `backend/api/system.py:106-114` (sync call inside async handler)
+
+## Acceptance
+- `httpx.ReadTimeout` (or chromadb-equivalent) cannot block the status endpoint for more than ~2 s.
+- A simulated stuck-chromadb test (mock `client.heartbeat` to `time.sleep(60)`) returns within 5 s with `healthy=False`.
+- Concurrent unrelated FastAPI requests handled by the same worker do NOT stall while the status endpoint is hung.
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 12:59:15
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2730: [CB-2377 follow-up] Audit + tz-aware sweep of remaining datetime.utcnow() callers in documentation pipeline**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2054: E2: FeatureDocumentation Frontend [IN_PROGRESS]
+    _Build the missing UI for FeatureDocumentation. Backend endpoints (GET / POST generate) already exist at `/api/features/{id}/documentation` but have NO frontend. Make them reachable + render the 6 markdown sections + metrics._
+    - STORY CB-2067: S2.4: E2 audit + regression + Chrome QA [IN_PROGRESS]
+      - **TASK CB-2730: [CB-2377 follow-up] Audit + tz-aware sweep of remaining datetime.utcnow() callers in documentation pipeline ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (11):
+  - CB-2068: T2.4.1: code-reviewer on E2 diff (hooks + page + view + tab integration) [WAITING QA]
+  - CB-2069: T2.4.2: security-auditor on E2 — markdown XSS + JSON.parse defense + URL transform [WAITING QA]
+  - CB-2070: T2.4.3: Chrome visual QA — empty + populated states + FEATURE-only gating [WAITING QA]
+  - CB-2071: T2.4.4: E2 full regression — open FEATURE → Generate → verify all 6 sections + Chroma indexed [WAITING QA]
+  - CB-2072: [QA] E2-1: Documentation tab visible only on FEATURE-type issues [WAITING QA]
+  - CB-2073: [QA] E2-2: Empty state shows when no FeatureDocumentation row exists [WAITING QA]
+  - CB-2074: [QA] E2-3: Generate button creates row + all 6 sections populate [WAITING QA]
+  - CB-2075: [QA] E2-4: Regenerate updates row, doesn't duplicate [WAITING QA]
+  - CB-2076: [QA] E2-5: techStack badges render from JSON array [WAITING QA]
+  - CB-2077: [QA] E2-6: Last-indexed timestamp updates after regenerate [WAITING QA]
+  - CB-2377: [CB-2077 F-1] MEDIUM: FeatureDocumentation lastIndexedAt renders 'Xh ago' off by browser TZ offset (naive UTC ISO from backend) [WAITING QA]
+
+## Task Description
+**Source**: CB-2377 (FeatureDocumentation lastIndexedAt TZ bug).
+
+CB-2377 fixed *one* surface — `FeatureDocumentation.lastIndexedAt` — by
+combining (a) tz-aware UTC at write, (b) Pydantic `field_serializer` that
+emits `Z` suffix, and (c) frontend `_toUtcIso` defense-in-depth guard.
+
+The same naive-ISO bug pattern is *suspected* on two other surfaces in the
+documentation pipeline that were explicitly out-of-scope for CB-2377:
+
+1. **ExecutionSummary timestamps**
+   - `backend/services/documentation_generator.py:515` still calls
+     `datetime.utcnow()` for `executed_at`.
+   - `ExecutionSummary.executedAt`, `createdAt`, `updatedAt` columns are
+     naive `DateTime` (Prisma-owned schema, SQLite).
+   - `ExecutionSummaryResponse` has no `Z`-emitting serializer.
+   - Any frontend surface that builds `new Date(iso)` directly off these
+     fields will under-/over-shoot by the browser TZ offset.
+
+2. **ImplementationNote timestamps**
+   - `models/documentation.py` defines `_utc_now()` returning naive
+     `datetime.utcnow()`.
+   - `createdAt` / `updatedAt` columns also naive `DateTime`.
+   - Same Prisma-owned schema; same JSON serialization shape.
+
+**Acceptance**
+
+- Grep all `datetime.utcnow()` callers under `backend/services/` and
+  `backend/models/` whose values reach a frontend response.
+- Convert each call site to `datetime.now(timezone.utc)`.
+- Add (or reuse) Pydantic `field_serializer` with `_isoformat_utc_z` from
+  `models/schemas.py` on every response model that exposes a datetime
+  derived from one of those columns. Specifically:
+  - `ExecutionSummaryResponse`
+  - `ImplementationNoteResponse`
+  - any other response model the audit surfaces.
+- Smoke-test each affected response with `curl | jq` and confirm every
+  datetime field ends in `Z`.
+- Add a Vitest case for any frontend component that renders one of these
+  timestamps via `new Date(iso)`, mirroring the CB-2377 pattern.
+
+**Out of scope**
+
+- Migrating the underlying SQLAlchemy column to `DateTime(timezone=True)`
+  (Prisma owns the schema; would require a Prisma migration first).
+- Sweep of `datetime.utcnow()` outside the documentation pipeline (file a
+  separate epic if other surfaces are affected).
+
+**Why MEDIUM not HIGH**: same severity profile as CB-2377 — wrong relative
+time string is misleading but the underlying ISO attribute is correct, so
+machine-readable consumers (screen readers, copy-paste, analytics) get the
+right value. UX-only impact.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 13:14:56
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2078: E3: Documentation Settings Panel [IN_PROGRESS]
+    _Add user control over the auto-documentation feature. Today it's auto-on with no toggle, retention, or visibility. This epic adds a settings page + retention task._
+    - STORY CB-2089: S3.3: E3 audit + regression + Chrome QA [IN_PROGRESS]
+      - **BUG CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (12):
+  - CB-2090: T3.3.1: code-reviewer on E3 diff (model + endpoints + retention task + UI) [WAITING QA]
+  - CB-2091: T3.3.2: security-auditor on E3 — PATCH validation + retention SQL safety [WAITING QA]
+  - CB-2092: T3.3.3: Chrome visual QA — settings page + toggle + recent list [WAITING QA]
+  - CB-2093: T3.3.4: E3 full regression — toggle off → exec → no summary; toggle on → exec → summary; retention purges [WAITING QA]
+  - CB-2094: [QA] E3-1: autoGenerate toggle persists across reload [WAITING QA]
+  - CB-2095: [QA] E3-2: autoGenerate=false skips doc-gen hook on next exec [WAITING QA]
+  - CB-2096: [QA] E3-3: Retention purges ExecutionSummary older than retentionDays [WAITING QA]
+  - CB-2097: [QA] E3-4: maxPerIssue caps row count per issue [WAITING QA]
+  - CB-2098: [QA] E3-5: Recent summaries list shows latest 20 ordered DESC [WAITING QA]
+  - CB-2099: [QA] E3-6: Manual re-trigger button starts exec [WAITING QA]
+  - CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow [WAITING QA]
+  - CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE [WAITING QA]
+
+## Task Description
+Surfaced by code-reviewer during the CB-2378 portal-fix audit on 2026-05-09.
+
+Pre-existing — not introduced by CB-2378 — but newly visible now that the dialog is a true top-level overlay.
+
+**Gaps:**
+- No focus trap (Tab can escape the dialog into the background page).
+- No initial focus on Confirm/Cancel button when dialog opens.
+- No Escape-key handler to close the dialog.
+- No body scroll lock — background page scrolls behind backdrop.
+- No `aria-labelledby` linking the heading to the dialog.
+- Backdrop has no `onClick={onCancel}` (debatable — depends on UX policy).
+
+**File**: `frontend/app/settings/documentation/page.tsx` — `ConfirmDialog` (~line 254).
+
+**Suggested fix**: extract a reusable `<Modal>` primitive in `frontend/components/ui/` (focus trap via `react-focus-lock` or homegrown, scroll lock via `overflow:hidden` on body, Escape handler via `useEffect` keydown listener, aria attributes wired up).
+
+**Acceptance**:
+- Tab-cycle stays inside the dialog while open.
+- Escape closes the dialog.
+- Body does not scroll while dialog is open.
+- Screen reader announces the dialog title.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 13:24:46
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (23):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+Not Started (1):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+
+## Task Description
+**Severity:** HIGH — a partial fix on `/stats`
+(CB-2667) leaves five sibling endpoints under `backend/api/search.py`
+exposed to the SAME threat model that CB-2667 closed. Until these are
+gated, the CB-2666 + CB-2667 perimeter is incomplete on any non-loopback
+deploy.
+
+**Discovery:** security-auditor pass on the CB-2667 fix
+(2026-05-09). H-1 is filed here rather than rolled into CB-2667 to
+keep the original ticket scope-pure (single endpoint per fix).
+
+## Affected endpoints
+
+| Method | Path | Disclosure / Amplification |
+|---|---|---|
+| GET    | `/api/search/{project_id}` | per-project semantic search results (issue content disclosure) |
+| GET    | `/api/search/{project_id}/similar` | per-project similar-issue results (issue content disclosure) |
+| POST   | `/api/search/{project_id}/embed/{issue_id}` | mutates arbitrary collection — DoS amplification + IDOR write |
+| DELETE | `/api/search/{project_id}/embed/{issue_id}` | deletes arbitrary embeddings — destructive IDOR |
+| POST   | `/api/search/{project_id}/embed-all` | iterates EVERY Issue with `projectId == X` and embeds them — server-side fan-out, validates guessed CUIDs by 200-with-`embedded>0` |
+
+## Fix recommendation
+
+Apply the SAME pattern CB-2666 / CB-2667 established:
+
+```python
+@router.get(
+    "/{project_id}",
+    dependencies=[InternalAuthDep],
+)
+@limiter.limit("30/minute")
+async def search_issues(request: Request, ...):
+    ...
+```
+
+The two write endpoints (`POST /embed*`, `DELETE /embed*`,
+`POST /embed-all`) deserve a STRICTER cap (suggest 10/minute) — they
+are DoS-amplifying, not just disclosure. `embed-all` in particular
+walks every Issue row matching `projectId` and embeds each one
+synchronously, so a single request can pin the worker for seconds
+on a large project.
+
+## Runbook update needed
+
+`backend/docs/DOC_PIPELINE_RUNBOOK.md` §3 currently lists `/stats`
+as the only gated search endpoint. After this fix lands, extend
+the table to cover all six routes under `/api/search/*` and note
+the stricter cap on the write endpoints.
+
+## Test parity
+
+Mirror the `TestSearchStatsEndpointPerimeter` class — one parametrized
+class per endpoint (or one shared parametrized fixture covering the
+endpoint + method matrix) covering: token unset, missing header,
+valid header, wrong header, Origin spoof, AST-walk source-text pin.
+
+## Reproduction (post CB-2667, pre this fix)
+
+With `INTERNAL_API_TOKEN=""` (default loopback dev):
+
+```bash
+# All 5 still 200 — same as before CB-2667
+curl -s 'http://localhost:8401/api/search/<any-cuid>?q=foo' | head -c 200
+curl -s 'http://localhost:8401/api/search/<any-cuid>/similar?title=foo' | head -c 200
+```
+
+With token set:
+
+```bash
+# /stats now 401 (CB-2667 fix), but the 5 siblings still 200 — gap.
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>/stats'
+# → 401
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>?q=foo'
+# → 200 (this is the gap)
+```
+
+## Threat-model linkage
+
+CB-2217 (anonymous `count[]`) → CB-2666 H-1 (project_id list, gated)
+→ CB-2667 H-2 (`/stats` per-project count, gated) → THIS (`/search/*`
+sibling endpoints, ungated). Closing this finishes the perimeter
+the CB-2217 redaction was supposed to provide.
+
+_Filed by security-auditor agent during CB-2667 audit pass._
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:21:42
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2768: QA Test Task 1**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2768: QA Test Task 1 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Not Started (2):
+  - CB-2769: QA Test Task 2
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:30:38
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:30:58
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:35:31
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:35:40
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:35:47
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:38:34
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 18:38:46
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following TASK:
+
+**CB-2769: QA Test Task 2**
+
+## Hierarchy Context
+- FEATURE CB-2767: CB-2754 QA Test Feature [IN_PROGRESS]
+  _QA test feature for AutoPilot banner regression_
+  - **TASK CB-2769: QA Test Task 2 ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (1):
+  - CB-2768: QA Test Task 1 [WAITING QA]
+Not Started (1):
+  - CB-2770: QA Test Task 3
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 21:10:44
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby)**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2078: E3: Documentation Settings Panel [IN_PROGRESS]
+    _Add user control over the auto-documentation feature. Today it's auto-on with no toggle, retention, or visibility. This epic adds a settings page + retention task._
+    - STORY CB-2089: S3.3: E3 audit + regression + Chrome QA [IN_PROGRESS]
+      - **BUG CB-2731: ConfirmDialog (settings/documentation): a11y gaps (focus trap, Esc, scroll lock, aria-labelledby) ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (12):
+  - CB-2090: T3.3.1: code-reviewer on E3 diff (model + endpoints + retention task + UI) [WAITING QA]
+  - CB-2091: T3.3.2: security-auditor on E3 — PATCH validation + retention SQL safety [WAITING QA]
+  - CB-2092: T3.3.3: Chrome visual QA — settings page + toggle + recent list [WAITING QA]
+  - CB-2093: T3.3.4: E3 full regression — toggle off → exec → no summary; toggle on → exec → summary; retention purges [WAITING QA]
+  - CB-2094: [QA] E3-1: autoGenerate toggle persists across reload [WAITING QA]
+  - CB-2095: [QA] E3-2: autoGenerate=false skips doc-gen hook on next exec [WAITING QA]
+  - CB-2096: [QA] E3-3: Retention purges ExecutionSummary older than retentionDays [WAITING QA]
+  - CB-2097: [QA] E3-4: maxPerIssue caps row count per issue [WAITING QA]
+  - CB-2098: [QA] E3-5: Recent summaries list shows latest 20 ordered DESC [WAITING QA]
+  - CB-2099: [QA] E3-6: Manual re-trigger button starts exec [WAITING QA]
+  - CB-2378: Hydration warning: ConfirmDialog rendered as <div> child of <tbody> in SummaryRow [WAITING QA]
+  - CB-2379: Re-run button on settings/documentation fast-fails when issue is CWQ/DONE [WAITING QA]
+
+## Task Description
+Surfaced by code-reviewer during the CB-2378 portal-fix audit on 2026-05-09.
+
+Pre-existing — not introduced by CB-2378 — but newly visible now that the dialog is a true top-level overlay.
+
+**Gaps:**
+- No focus trap (Tab can escape the dialog into the background page).
+- No initial focus on Confirm/Cancel button when dialog opens.
+- No Escape-key handler to close the dialog.
+- No body scroll lock — background page scrolls behind backdrop.
+- No `aria-labelledby` linking the heading to the dialog.
+- Backdrop has no `onClick={onCancel}` (debatable — depends on UX policy).
+
+**File**: `frontend/app/settings/documentation/page.tsx` — `ConfirmDialog` (~line 254).
+
+**Suggested fix**: extract a reusable `<Modal>` primitive in `frontend/components/ui/` (focus trap via `react-focus-lock` or homegrown, scroll lock via `overflow:hidden` on body, Escape handler via `useEffect` keydown listener, aria attributes wired up).
+
+**Acceptance**:
+- Tab-cycle stays inside the dialog while open.
+- Escape closes the dialog.
+- Body does not scroll while dialog is open.
+- Screen reader announces the dialog title.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 21:18:02
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (23):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+Not Started (1):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+
+## Task Description
+**Severity:** HIGH — a partial fix on `/stats`
+(CB-2667) leaves five sibling endpoints under `backend/api/search.py`
+exposed to the SAME threat model that CB-2667 closed. Until these are
+gated, the CB-2666 + CB-2667 perimeter is incomplete on any non-loopback
+deploy.
+
+**Discovery:** security-auditor pass on the CB-2667 fix
+(2026-05-09). H-1 is filed here rather than rolled into CB-2667 to
+keep the original ticket scope-pure (single endpoint per fix).
+
+## Affected endpoints
+
+| Method | Path | Disclosure / Amplification |
+|---|---|---|
+| GET    | `/api/search/{project_id}` | per-project semantic search results (issue content disclosure) |
+| GET    | `/api/search/{project_id}/similar` | per-project similar-issue results (issue content disclosure) |
+| POST   | `/api/search/{project_id}/embed/{issue_id}` | mutates arbitrary collection — DoS amplification + IDOR write |
+| DELETE | `/api/search/{project_id}/embed/{issue_id}` | deletes arbitrary embeddings — destructive IDOR |
+| POST   | `/api/search/{project_id}/embed-all` | iterates EVERY Issue with `projectId == X` and embeds them — server-side fan-out, validates guessed CUIDs by 200-with-`embedded>0` |
+
+## Fix recommendation
+
+Apply the SAME pattern CB-2666 / CB-2667 established:
+
+```python
+@router.get(
+    "/{project_id}",
+    dependencies=[InternalAuthDep],
+)
+@limiter.limit("30/minute")
+async def search_issues(request: Request, ...):
+    ...
+```
+
+The two write endpoints (`POST /embed*`, `DELETE /embed*`,
+`POST /embed-all`) deserve a STRICTER cap (suggest 10/minute) — they
+are DoS-amplifying, not just disclosure. `embed-all` in particular
+walks every Issue row matching `projectId` and embeds each one
+synchronously, so a single request can pin the worker for seconds
+on a large project.
+
+## Runbook update needed
+
+`backend/docs/DOC_PIPELINE_RUNBOOK.md` §3 currently lists `/stats`
+as the only gated search endpoint. After this fix lands, extend
+the table to cover all six routes under `/api/search/*` and note
+the stricter cap on the write endpoints.
+
+## Test parity
+
+Mirror the `TestSearchStatsEndpointPerimeter` class — one parametrized
+class per endpoint (or one shared parametrized fixture covering the
+endpoint + method matrix) covering: token unset, missing header,
+valid header, wrong header, Origin spoof, AST-walk source-text pin.
+
+## Reproduction (post CB-2667, pre this fix)
+
+With `INTERNAL_API_TOKEN=""` (default loopback dev):
+
+```bash
+# All 5 still 200 — same as before CB-2667
+curl -s 'http://localhost:8401/api/search/<any-cuid>?q=foo' | head -c 200
+curl -s 'http://localhost:8401/api/search/<any-cuid>/similar?title=foo' | head -c 200
+```
+
+With token set:
+
+```bash
+# /stats now 401 (CB-2667 fix), but the 5 siblings still 200 — gap.
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>/stats'
+# → 401
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>?q=foo'
+# → 200 (this is the gap)
+```
+
+## Threat-model linkage
+
+CB-2217 (anonymous `count[]`) → CB-2666 H-1 (project_id list, gated)
+→ CB-2667 H-2 (`/stats` per-project count, gated) → THIS (`/search/*`
+sibling endpoints, ungated). Closing this finishes the perimeter
+the CB-2217 redaction was supposed to provide.
+
+_Filed by security-auditor agent during CB-2667 audit pass._
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-09 23:09:23
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [IN_PROGRESS]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (23):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+Not Started (1):
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names
+
+## Task Description
+**Severity:** HIGH — a partial fix on `/stats`
+(CB-2667) leaves five sibling endpoints under `backend/api/search.py`
+exposed to the SAME threat model that CB-2667 closed. Until these are
+gated, the CB-2666 + CB-2667 perimeter is incomplete on any non-loopback
+deploy.
+
+**Discovery:** security-auditor pass on the CB-2667 fix
+(2026-05-09). H-1 is filed here rather than rolled into CB-2667 to
+keep the original ticket scope-pure (single endpoint per fix).
+
+## Affected endpoints
+
+| Method | Path | Disclosure / Amplification |
+|---|---|---|
+| GET    | `/api/search/{project_id}` | per-project semantic search results (issue content disclosure) |
+| GET    | `/api/search/{project_id}/similar` | per-project similar-issue results (issue content disclosure) |
+| POST   | `/api/search/{project_id}/embed/{issue_id}` | mutates arbitrary collection — DoS amplification + IDOR write |
+| DELETE | `/api/search/{project_id}/embed/{issue_id}` | deletes arbitrary embeddings — destructive IDOR |
+| POST   | `/api/search/{project_id}/embed-all` | iterates EVERY Issue with `projectId == X` and embeds them — server-side fan-out, validates guessed CUIDs by 200-with-`embedded>0` |
+
+## Fix recommendation
+
+Apply the SAME pattern CB-2666 / CB-2667 established:
+
+```python
+@router.get(
+    "/{project_id}",
+    dependencies=[InternalAuthDep],
+)
+@limiter.limit("30/minute")
+async def search_issues(request: Request, ...):
+    ...
+```
+
+The two write endpoints (`POST /embed*`, `DELETE /embed*`,
+`POST /embed-all`) deserve a STRICTER cap (suggest 10/minute) — they
+are DoS-amplifying, not just disclosure. `embed-all` in particular
+walks every Issue row matching `projectId` and embeds each one
+synchronously, so a single request can pin the worker for seconds
+on a large project.
+
+## Runbook update needed
+
+`backend/docs/DOC_PIPELINE_RUNBOOK.md` §3 currently lists `/stats`
+as the only gated search endpoint. After this fix lands, extend
+the table to cover all six routes under `/api/search/*` and note
+the stricter cap on the write endpoints.
+
+## Test parity
+
+Mirror the `TestSearchStatsEndpointPerimeter` class — one parametrized
+class per endpoint (or one shared parametrized fixture covering the
+endpoint + method matrix) covering: token unset, missing header,
+valid header, wrong header, Origin spoof, AST-walk source-text pin.
+
+## Reproduction (post CB-2667, pre this fix)
+
+With `INTERNAL_API_TOKEN=""` (default loopback dev):
+
+```bash
+# All 5 still 200 — same as before CB-2667
+curl -s 'http://localhost:8401/api/search/<any-cuid>?q=foo' | head -c 200
+curl -s 'http://localhost:8401/api/search/<any-cuid>/similar?title=foo' | head -c 200
+```
+
+With token set:
+
+```bash
+# /stats now 401 (CB-2667 fix), but the 5 siblings still 200 — gap.
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>/stats'
+# → 401
+curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8401/api/search/<any-cuid>?q=foo'
+# → 200 (this is the gap)
+```
+
+## Threat-model linkage
+
+CB-2217 (anonymous `count[]`) → CB-2666 H-1 (project_id list, gated)
+→ CB-2667 H-2 (`/stats` per-project count, gated) → THIS (`/search/*`
+sibling endpoints, ungated). Closing this finishes the perimeter
+the CB-2217 redaction was supposed to provide.
+
+_Filed by security-auditor agent during CB-2667 audit pass._
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-10 00:05:51
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [COMPLETED_WAITING_QA]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (24):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape [WAITING QA]
+Not Started (4):
+  - CB-2783: [CB-2732 audit follow-up L-1] LOW: search.py file-level invariant test — every router-decorated handler must carry InternalAuthDep + @limiter.limit
+  - CB-2784: [CB-2732 audit follow-up L-2] LOW: embed_all_issues errors[] leaks raw exception strings — redact str(e) to a generic token
+  - CB-2785: [CB-2732 audit follow-up L-3] LOW: rag_service.embed_issue / delete_issue_embedding use print() for errors — convert to logger.exception
+  - CB-2786: [CB-2732 audit follow-up I-5] MEDIUM: /api/search/* gates are auth-only, not project-scoped — token-holder can still walk any project_id (CB-2117-style follow-up)
+
+## Task Description
+**Severity:** MEDIUM (metadata disclosure; combines with M-1)
+
+**Location:** `backend/services/rag_service.py:249` (`get_collection`), `backend/api/system.py:42-50`
+
+**Problem**
+
+Collections are named `project_{project_id[:8]}` (first 8 chars of the project CUID). The status endpoint returns the full collection list with per-collection document counts. CUID prefixes are not secrets, but the endpoint discloses:
+- How many projects exist
+- Which CUID prefixes are active
+- Approximately how much content each project holds (doc counts)
+
+Combined with M-1's no-real-auth posture, this is metadata leakage useful for an attacker mapping the system after gaining any local foothold.
+
+**Fix**
+
+Either:
+- Gate `/api/system/rag/status` behind the same auth surface used for `/api/projects/*` (when an auth surface lands).
+- Reduce the response when called from a non-admin context (omit `collections[].name`, keep only counts + `total_docs`).
+
+**Found in:** security-auditor pass on CB-2049.
+
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-10 00:13:25
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2783: [CB-2732 audit follow-up L-1] LOW: search.py file-level invariant test — every router-decorated handler must carry InternalAuthDep + @limiter.limit**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [COMPLETED_WAITING_QA]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2783: [CB-2732 audit follow-up L-1] LOW: search.py file-level invariant test — every router-decorated handler must carry InternalAuthDep + @limiter.limit ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (25):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape [WAITING QA]
+Not Started (3):
+  - CB-2784: [CB-2732 audit follow-up L-2] LOW: embed_all_issues errors[] leaks raw exception strings — redact str(e) to a generic token
+  - CB-2785: [CB-2732 audit follow-up L-3] LOW: rag_service.embed_issue / delete_issue_embedding use print() for errors — convert to logger.exception
+  - CB-2786: [CB-2732 audit follow-up I-5] MEDIUM: /api/search/* gates are auth-only, not project-scoped — token-holder can still walk any project_id (CB-2117-style follow-up)
+
+## Task Description
+**Severity:** LOW — discovered by security-auditor on the CB-2732 fix (2026-05-09).
+
+## Gap
+
+`backend/tests/test_security.py::TestSearchSiblingEndpointsPerimeter::test_handler_carries_internal_auth_dep` AST-pins the FIVE named CB-2732 handlers + the `/stats` handler from CB-2667. The parametrize list `_SEARCH_SIBLING_ENDPOINTS` is hard-coded, so if a future ticket adds a SIXTH endpoint to `backend/api/search.py` (e.g. `POST /{project_id}/reindex-since`) and forgets the gate, no test fails.
+
+## Fix
+
+Add a separate file-level invariant test that walks every `FunctionDef` / `AsyncFunctionDef` in `search.py` decorated by `@router.<verb>(...)` and asserts each one:
+
+1. carries `dependencies=[...]` with `InternalAuthDep` in the kwarg
+2. carries a `@limiter.limit(...)` decorator with a known cap
+3. has `@router.<verb>` ABOVE `@limiter.limit` in source (decorator-order invariant from CB-2732 sec audit M-1)
+
+This generalises the per-handler AST check to a per-file invariant. Same pattern should arguably apply to `backend/api/projects.py` (CB-2666 perimeter) — extend the test or extract a helper if so.
+
+## Threat-model linkage
+
+CB-2732 closed the perimeter on the FIVE current sibling endpoints. This follow-up makes the closure structural — a file-level invariant a new endpoint cannot bypass without deliberately defeating the test.
+
+_Filed by Jonny during CB-2732 implementation pass._
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-10 00:26:29
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2784: [CB-2732 audit follow-up L-2] LOW: embed_all_issues errors[] leaks raw exception strings — redact str(e) to a generic token**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [COMPLETED_WAITING_QA]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [IN_PROGRESS]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [IN_PROGRESS]
+      - **BUG CB-2784: [CB-2732 audit follow-up L-2] LOW: embed_all_issues errors[] leaks raw exception strings — redact str(e) to a generic token ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (26):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape [WAITING QA]
+  - CB-2783: [CB-2732 audit follow-up L-1] LOW: search.py file-level invariant test — every router-decorated handler must carry InternalAuthDep + @limiter.limit [WAITING QA]
+Not Started (2):
+  - CB-2785: [CB-2732 audit follow-up L-3] LOW: rag_service.embed_issue / delete_issue_embedding use print() for errors — convert to logger.exception
+  - CB-2786: [CB-2732 audit follow-up I-5] MEDIUM: /api/search/* gates are auth-only, not project-scoped — token-holder can still walk any project_id (CB-2117-style follow-up)
+
+## Task Description
+**Severity:** LOW — discovered by security-auditor on the CB-2732 fix (2026-05-09). Residual disclosure on bypass paths.
+
+## Disclosure
+
+`backend/api/search.py:276-279` and `:286` (`embed_all_issues`) return up to 10 entries in `errors[]` of the form:
+
+```python
+errors.append(f"Error embedding {issue.key}: {str(e)}")
+```
+
+If `e` carries a SQL error string, ChromaDB internal path, or HTTP-level chromadb error, the response body leaks more than the issue key. Token-holding callers are in-scope by design, but on a future bypass path (proxy-collapse / multi-worker scenario from CB-2732 audit M-3), an attacker who lands one successful `embed-all` call learns the project's issue keys via `errors[]` even when the bucket is otherwise capped.
+
+## Fix
+
+Redact `str(e)` to a generic `"embed_failed"` token; keep `issue.key` (caller already supplied it via `(project_id, issue_id)` in legitimate use). Mirror the redaction pattern the AutoPilot audit log uses (`Bearer/sk-/api_key=` strip).
+
+Suggested form:
+
+```python
+except Exception as e:
+    failed += 1
+    errors.append(f"{issue.key}: embed_failed")
+    logger.exception("embed_failed", extra={"issue_key": issue.key})
+```
+
+## Test parity
+
+Add a regression test asserting `errors[]` entries do not contain `str(e)`-derived substrings (e.g. SQL error patterns, filesystem paths) on a synthetic embed failure.
+
+_Filed by Jonny during CB-2732 implementation pass._
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-10 00:35:11
+
+/jonny — engage VP-R&D bible. Plan and implement this feature using your CodeBoard-first discipline and the pre/post checklist. Apply the audit gates (code review + security audit + regression test) before marking the work COMPLETED_WAITING_QA.
+
+I need you to implement the following BUG:
+
+**CB-2787: [CB-2784 audit follow-up M-1] MEDIUM: /api/search/{project_id}/stats (get_index_stats) still echoes str(e) on exception — same disclosure shape CB-2784 closed for embed_all_issues**
+
+## Hierarchy Context
+- FEATURE CB-2038: Documentation Surface — make documentation feature visible, controllable, and properly stored [COMPLETED_WAITING_QA]
+  _Bring the auto-documentation feature (CB-1578) to user surface.
+
+**Current state**: ExecutionSummary + FeatureDocumentation + ImplementationNote pipelines all run automatically on AI execution completion. Backend complete. ChromaDB silently fell back to embedded SQLite (`backend/data/chroma/chroma.s..._
+  - EPIC CB-2039: E1: ChromaDB container restoration + observability [COMPLETED_WAITING_QA]
+    _Bring the chromadb Docker container back online so embeddings land in the dedicated container volume (`chroma_data`) instead of the embedded SQLite fallback. Add a status surface so silent fallback is impossible going forward._
+    - STORY CB-2047: S1.3: E1 audit + regression [COMPLETED_WAITING_QA]
+      - **BUG CB-2787: [CB-2784 audit follow-up M-1] MEDIUM: /api/search/{project_id}/stats (get_index_stats) still echoes str(e) on exception — same disclosure shape CB-2784 closed for embed_all_issues ← YOU ARE HERE**
+
+## Sibling Tasks (same parent)
+Waiting QA (29):
+  - CB-2048: T1.3.1: code-reviewer on E1 diff (chroma migration + status endpoint + monitor card) [WAITING QA]
+  - CB-2049: T1.3.2: security-auditor on E1 (path-traversal in migration + endpoint authz) [WAITING QA]
+  - CB-2050: T1.3.3: E1 regression — restart backend, verify HTTP mode, embed lands in container volume [WAITING QA]
+  - CB-2051: [QA] E1-1: Chroma container UP, heartbeat passes, port 8402 reachable [WAITING QA]
+  - CB-2052: [QA] E1-2: /api/system/rag/status returns mode=HTTP after compose up [WAITING QA]
+  - CB-2053: [QA] E1-3: Service Monitor card renders RAG mode + collection count [WAITING QA]
+  - CB-2211: [CB-2048 F-1] CRITICAL: /api/system/rag/status has no Next.js proxy → card stuck at 'RAG offline' [WAITING QA]
+  - CB-2212: [CB-2048 F-2] MEDIUM: _init_client_blocking reset omits _collections (asymmetry vs _fallback_to_persistent) [WAITING QA]
+  - CB-2213: [CB-2048 F-3] MEDIUM: missing tests for half-init invariant (HTTP/PERSISTENT raise mid-init) [WAITING QA]
+  - CB-2214: [CB-2048 F-4] MEDIUM: get_status_payload docstring lies about total_docs on partial failure [WAITING QA]
+  - CB-2215: [CB-2048 F-5..F-9] LOW: E1 polish bundle — naming, visibility-API, hint wording, fragment fragility, log spam [WAITING QA]
+  - CB-2216: [CB-2049 M-1] MEDIUM: /api/system/rag/status leaks absolute filesystem path in PERSISTENT mode [WAITING QA]
+  - CB-2217: [CB-2049 M-2] MEDIUM: /api/system/rag/status enables project enumeration via collection names [WAITING QA]
+  - CB-2218: [CB-2049 M-3] MEDIUM: status endpoint amplifies DoS via heartbeat + list_collections + per-col count fan-out [WAITING QA]
+  - CB-2219: [CB-2049 L-1] LOW: chroma migration runbook tar extraction not hardened [WAITING QA]
+  - CB-2220: [CB-2049 L-2] LOW: PERSISTENT_FALLBACK_PATH is CWD-relative — fallback location depends on launch directory [WAITING QA]
+  - CB-2663: [CB-2212 follow-up] MEDIUM: lock-guard RAGService _reset_state + client construct (singleton race on future runtime reconnect) [WAITING QA]
+  - CB-2664: [CB-2215 F-6 follow-up] LOW: visibility-return refresh doesn't reset setInterval phase [WAITING QA]
+  - CB-2665: [CB-2215 F-5 follow-up] LOW: OpenAPI breaking change `host` -> `endpoint` without back-compat alias / changelog [WAITING QA]
+  - CB-2666: [CB-2217 sec follow-up H-1] HIGH: /api/projects enumerates full project CUID + path + name (defeats CB-2217 redaction) [WAITING QA]
+  - CB-2667: [CB-2217 sec follow-up H-2] HIGH: /api/search/{project_id}/stats discloses per-project doc count (defeats anonymous collections[] via one hop) [WAITING QA]
+  - CB-2668: [CB-2217 sec follow-up M-1] MEDIUM: FastAPI /docs + /openapi.json publish full route map to any local caller [WAITING QA]
+  - CB-2669: [CB-2217 sec follow-up L-2] LOW: describe_mode() startup INFO log emits PERSISTENT abspath (re-disclosure of the CB-2216 redaction via log file) [WAITING QA]
+  - CB-2729: [CB-2218 audit follow-up] MEDIUM: status-cache lock held during slow ChromaDB probe pins FastAPI event loop [WAITING QA]
+  - CB-2732: [CB-2667 sec audit follow-up H-1] HIGH: sibling /api/search/* endpoints share per-project_id disclosure / write-amplification shape [WAITING QA]
+  - CB-2783: [CB-2732 audit follow-up L-1] LOW: search.py file-level invariant test — every router-decorated handler must carry InternalAuthDep + @limiter.limit [WAITING QA]
+  - CB-2784: [CB-2732 audit follow-up L-2] LOW: embed_all_issues errors[] leaks raw exception strings — redact str(e) to a generic token [WAITING QA]
+  - CB-2785: [CB-2732 audit follow-up L-3] LOW: rag_service.embed_issue / delete_issue_embedding use print() for errors — convert to logger.exception [WAITING QA]
+  - CB-2786: [CB-2732 audit follow-up I-5] MEDIUM: /api/search/* gates are auth-only, not project-scoped — token-holder can still walk any project_id (CB-2117-style follow-up) [WAITING QA]
+
+## Task Description
+**Severity:** MEDIUM — found by security-auditor on the CB-2784 fix (2026-05-10). Same threat model as CB-2784 but on the sibling endpoint `/api/search/{project_id}/stats`.
+
+## Disclosure
+
+`backend/api/search.py:329-335` (`get_index_stats`) still returns:
+
+```python
+except Exception as e:
+    return {
+        "project_id": project_id,
+        "indexed_count": 0,
+        "status": "error",
+        "error": str(e),
+    }
+```
+
+Token-holding callers are in scope by design (`InternalAuthDep` + 30/min cap), but on a CB-2732 bypass path an attacker who lands one successful `/stats` call learns the upstream error class — same CB-2784 leak shape.
+
+## Fix
+
+Mirror CB-2784: redact the response `error` field to a generic `stats_failed` token; keep `project_id` (path param). Route detail to `logger.exception` only.
+
+Suggested form:
+
+```python
+except Exception:
+    logger.exception("stats_failed", extra={"project_id": project_id})
+    return {
+        "project_id": project_id,
+        "indexed_count": 0,
+        "status": "error",
+        "error": "stats_failed",
+    }
+```
+
+## Test parity
+
+Add a behavioural test (mirror `test_cb2784_embed_all_redaction.py`) asserting `body['error']` does not contain `str(e)`-derived substrings on a synthetic `rag.get_collection(...)` failure.
+
+_Filed by Jonny during CB-2784 implementation pass._
+
+Please implement this task. When you're done, summarize what you did.
+
+---
+
+## 2026-05-17 22:55:46
+
+the autopilot now again is not working correctly you can see link one twenty four trying to resume and has an issue i can't resume the task this has been failed. Uh, it happened when the credits were consumed, and it was waiting for a reset. Once the credits were reset, it didn't really help. Everything went to fail, and there's no way to resume those, uh, tasks or resume the... all the autopilot
+
+---
+
+## 2026-05-17 22:57:39
+
+Johnny, what I need you to do, a very, very professional, um, deep dive work. I mean, use all your agents. You have specific and professional agents to investigate what is the issue. Use Atlas if needed. Use books. Try to get to the bottom of it. Look on the planning. Look on the data flow on the connections with other features, and try to understand why it doesn't work. I mean, I don't want another patch. I wanna find a full professional solution for that. It needs to work next time.
+
+---
+
+## 2026-05-17 23:14:10
+
+do what make more senes and will fix it in a better way
+
+---
+

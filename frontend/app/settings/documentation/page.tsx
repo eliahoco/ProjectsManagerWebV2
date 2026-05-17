@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   FileText,
@@ -28,8 +29,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { cn } from '@/lib/utils';
+import { cn, _toUtcIso } from '@/lib/utils';
 import {
   useDocSettings,
   useUpdateDocSettings,
@@ -43,8 +45,12 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+// CB-2730 — apply `_toUtcIso` so a naive backend ISO is parsed as UTC, not
+// the browser's local time. Backend now emits `Z` on `executedAt`, but the
+// guard preserves correctness if an older row or a future surface re-introduces
+// the naive shape. Exported for direct Vitest coverage (mirrors CB-2377).
+export function formatDate(iso: string) {
+  return new Date(_toUtcIso(iso)).toLocaleString(undefined, {
     dateStyle: 'short',
     timeStyle: 'short',
   });
@@ -252,40 +258,52 @@ interface ConfirmDialogProps {
 }
 
 function ConfirmDialog({ issueKey, onConfirm, onCancel, isPending }: ConfirmDialogProps) {
+  // CB-2731 — delegate a11y wiring (focus trap, Esc, scroll lock,
+  // aria-labelledby, restore-focus) to the shared <Modal> primitive.
+  // CB-2378 portal-to-body fix is preserved (Modal portals into
+  // document.body), and the destructive-flow stays open mid-mutation
+  // (closeOnBackdropClick={false} + Modal already suppresses Esc when
+  // isPending). data-autofocus lands initial focus on Cancel so the
+  // safe action wins by default — a stray Enter never starts a session.
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+    <Modal
+      isOpen
+      onClose={onCancel}
+      isPending={isPending}
+      closeOnBackdropClick={false}
+      icon={<AlertCircle className="h-5 w-5 text-amber-400" />}
+      title="Re-trigger execution?"
+      description={
+        <>
+          This will reset{' '}
+          <span className="text-cyan-400 font-mono">{issueKey}</span> to{' '}
+          <span className="font-medium text-zinc-300">TODO</span> and start a fresh
+          Claude Code session.
+        </>
+      }
     >
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-sm shadow-xl mx-4">
-        <div className="flex items-start gap-3 mb-4">
-          <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-white font-semibold">Re-trigger execution?</h3>
-            <p className="text-sm text-zinc-400 mt-1">
-              This will start a new Claude Code session for{' '}
-              <span className="text-cyan-400 font-mono">{issueKey}</span>.
-            </p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onConfirm}
-            loading={isPending}
-            className="bg-cyan-600 hover:bg-cyan-700"
-          >
-            <PlayCircle className="h-4 w-4" />
-            Start
-          </Button>
-        </div>
+      <div className="flex justify-end gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          disabled={isPending}
+          data-autofocus
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={onConfirm}
+          loading={isPending}
+          className="bg-cyan-600 hover:bg-cyan-700"
+        >
+          <PlayCircle className="h-4 w-4" />
+          Start
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -300,6 +318,7 @@ interface SummaryRowProps {
 function SummaryRow({ summary }: SummaryRowProps) {
   const toast = useToast();
   const startExecution = useStartExecution();
+  const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
 
   const files = parseFilesTouched(summary.filesTouched);
@@ -307,10 +326,16 @@ function SummaryRow({ summary }: SummaryRowProps) {
 
   async function handleConfirm() {
     try {
+      // rewrite mode resets the issue to TODO so re-running CWQ/DONE rows bypasses the status-dep guard.
       await startExecution.mutateAsync({
         issueId: summary.issueId,
         provider: 'claude_code',
+        executionMode: 'rewrite',
       });
+      // Status flipped server-side; refresh recent summaries + any open issue caches so the row + boards reflect TODO.
+      queryClient.invalidateQueries({ queryKey: ['recent-execution-summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['issue', summary.issueId] });
+      queryClient.invalidateQueries({ queryKey: ['issues'] });
       toast.success('Execution started', `Session queued for ${displayKey}`);
     } catch (err) {
       toast.error('Failed', err instanceof Error ? err.message : 'Could not start execution');

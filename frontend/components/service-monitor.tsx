@@ -255,24 +255,36 @@ function RagStatusCard() {
   // is itself the subject of CB-2218). Skip the fetch when the tab is
   // hidden, and fire one immediate refresh on visibility return so the card
   // is current the moment the user looks at it again.
+  //
+  // CB-2664: when becoming visible we also reset the setInterval phase.
+  // Without the reset, returning to the tab N seconds before the next
+  // scheduled tick produced an immediate refresh AND another fetch N
+  // seconds later (extra fetch per visibility return per tab). Clearing
+  // and re-arming the interval re-anchors the 30 s cadence on the
+  // visibility-return fetch so the card always waits a full poll window
+  // before the next request.
   useEffect(() => {
+    const intervalRef: { current: ReturnType<typeof setInterval> | null } = { current: null };
     const tick = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
       fetchStatusRef.current();
     };
     const initial = setTimeout(tick, 1000);
-    const interval = setInterval(tick, RAG_STATUS_POLL_MS);
+    intervalRef.current = setInterval(tick, RAG_STATUS_POLL_MS);
     const onVisibility = () => {
-      if (typeof document !== 'undefined' && !document.hidden) {
-        fetchStatusRef.current();
-      }
+      if (typeof document === 'undefined' || document.hidden) return;
+      // Re-anchor the 30 s cadence on this fetch — otherwise the next
+      // setInterval tick can fire seconds later, causing a double-fetch.
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+      fetchStatusRef.current();
+      intervalRef.current = setInterval(tick, RAG_STATUS_POLL_MS);
     };
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibility);
     }
     return () => {
       clearTimeout(initial);
-      clearInterval(interval);
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', onVisibility);
       }
@@ -1231,6 +1243,10 @@ export function ServiceMonitor() {
   // (index 0 of the fragment) regardless of which alertOverlay branch ran,
   // so its state survives every transition (no alerts → alerts → docker-paused
   // → no alerts) without remounting.
+  //
+  // CB-2781: AutoPilotRecoveryBanner removed from here — AutoPilotFloatingBar
+  // already surfaces paused/crashed queue state in the bottom-right bar.
+  // Rendering it here caused a duplicate fixed-position element.
   return (
     <>
       <RagStatusCard />

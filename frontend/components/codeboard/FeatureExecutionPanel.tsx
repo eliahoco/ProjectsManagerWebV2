@@ -37,6 +37,8 @@ interface FeatureExecutionPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onIssueClick?: (issue: Issue) => void;
+  /** If provided + non-empty, pre-seeds modal selection instead of selecting all. */
+  initialSelectedIds?: Set<string>;
 }
 
 // Get all descendant issues of a parent
@@ -81,6 +83,7 @@ export function FeatureExecutionPanel({
   isOpen,
   onClose,
   onIssueClick,
+  initialSelectedIds,
 }: FeatureExecutionPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set([feature.id]));
@@ -96,8 +99,50 @@ export function FeatureExecutionPanel({
     isOpen ? feature.id : null
   );
 
-  // All issues under this feature
-  const featureIssues = useMemo(() => [feature, ...descendants], [feature, descendants]);
+  // All issues under this feature.
+  // CB-2789 v2: when initialSelectedIds provided + non-empty, scope the working
+  // set to ONLY those issues + their ancestor chain back to feature root. This
+  // prevents the modal from showing unrelated stories/epics (e.g. selecting one
+  // EPIC should not show siblings).
+  const featureIssues = useMemo(() => {
+    const all = [feature, ...descendants];
+    if (!initialSelectedIds || initialSelectedIds.size === 0) return all;
+    const byId = new Map(all.map(i => [i.id, i] as const));
+    const keep = new Set<string>();
+    keep.add(feature.id);
+    // Walk up from each selected id, collect ancestors
+    for (const id of initialSelectedIds) {
+      let cur: typeof all[number] | undefined = byId.get(id);
+      while (cur) {
+        keep.add(cur.id);
+        cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+      }
+    }
+    // Also include all descendants of any kept container so the tree renders correctly
+    let added = true;
+    while (added) {
+      added = false;
+      for (const i of all) {
+        if (i.parentId && keep.has(i.parentId) && !keep.has(i.id)) {
+          // Only auto-include descendants whose container is in keep AND
+          // whose ancestors include a node from initialSelectedIds set
+          const isUnderSelected = (() => {
+            let c: typeof all[number] | undefined = i;
+            while (c) {
+              if (initialSelectedIds.has(c.id)) return true;
+              c = c.parentId ? byId.get(c.parentId) : undefined;
+            }
+            return false;
+          })();
+          if (isUnderSelected) {
+            keep.add(i.id);
+            added = true;
+          }
+        }
+      }
+    }
+    return all.filter(i => keep.has(i.id));
+  }, [feature, descendants, initialSelectedIds]);
 
   // Build hierarchy map
   const hierarchy = useMemo(() => buildHierarchy(featureIssues), [featureIssues]);
@@ -133,7 +178,9 @@ export function FeatureExecutionPanel({
     });
   }, [featureIssues, showTaskActionSelector, taskActions]);
 
-  // Check for completed items on open
+  // Check for completed items on open.
+  // CB-2789 v2: depend on executableItems.length so the effect re-runs once
+  // descendants finish loading (otherwise initial fire sees empty set → 0 selected).
   useEffect(() => {
     if (isOpen && !isExecuting) {
       setTaskActions(new Map());
@@ -146,28 +193,64 @@ export function FeatureExecutionPanel({
         setShowTaskActionSelector(true);
       } else {
         setShowTaskActionSelector(false);
-        setSelectedIds(new Set(executableItems.map(i => i.id)));
+        if (initialSelectedIds && initialSelectedIds.size > 0) {
+          const filtered = new Set(
+            executableItems.filter(i => initialSelectedIds.has(i.id)).map(i => i.id)
+          );
+          setSelectedIds(filtered.size > 0 ? filtered : new Set(executableItems.map(i => i.id)));
+        } else {
+          setSelectedIds(new Set(executableItems.map(i => i.id)));
+        }
       }
     }
-  }, [isOpen, completedItems.length, feature.id, isExecuting]);
+  }, [isOpen, completedItems.length, executableItems.length, feature.id, isExecuting, initialSelectedIds]);
 
   // Apply task actions → set selection
+  // CB-2789 v2: respect initialSelectedIds when present (don't re-include skipped-pre-selection)
   const applyTaskActions = useCallback(() => {
     const allExecutableLeaves = featureIssues.filter(i =>
       isExecutableType(i.type) && i.status !== 'CANCELLED'
     );
     const ids = allExecutableLeaves
       .filter(i => taskActions.get(i.id) !== 'skip')
+      .filter(i => !initialSelectedIds || initialSelectedIds.size === 0 || initialSelectedIds.has(i.id))
       .map(i => i.id);
     setSelectedIds(new Set(ids));
     setShowTaskActionSelector(false);
-  }, [featureIssues, taskActions]);
+  }, [featureIssues, taskActions, initialSelectedIds]);
 
   const toggleSelection = (issueId: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(issueId)) next.delete(issueId);
       else next.add(issueId);
+      return next;
+    });
+  };
+
+  // CB-2789 v3: container (FEATURE/EPIC/STORY) checkbox toggles all executable
+  // descendants together so user can mark a whole epic/story on or off.
+  const getExecutableDescendantIds = useCallback((rootId: string): string[] => {
+    const out: string[] = [];
+    const visit = (id: string) => {
+      const kids = hierarchy.get(id) || [];
+      for (const k of kids) {
+        if (isExecutableType(k.type) && k.status !== 'CANCELLED') out.push(k.id);
+        visit(k.id);
+      }
+    };
+    visit(rootId);
+    return out;
+  }, [hierarchy]);
+
+  const toggleContainer = (containerId: string) => {
+    const ids = getExecutableDescendantIds(containerId);
+    if (ids.length === 0) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      const allSelected = ids.every(id => next.has(id));
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
       return next;
     });
   };
@@ -184,29 +267,7 @@ export function FeatureExecutionPanel({
   const selectAll = () => setSelectedIds(new Set(executableItems.map(i => i.id)));
   const deselectAll = () => setSelectedIds(new Set());
 
-  // Build queue and start AutoPilot (backend-driven)
-  const handleStartExecution = async () => {
-    const selected = executableItems.filter(i => selectedIds.has(i.id));
-    if (selected.length === 0) return;
-
-    const sorted = sortByHierarchy(selected);
-    const queue: AutoPilotQueueItem[] = sorted.map((issue, index) => ({
-      issue,
-      status: 'pending',
-      order: index,
-    }));
-
-    // Close panel first — execution continues in backend
-    onClose();
-
-    await autoPilot.startAutoPilot({
-      feature,
-      projectId,
-      queue,
-      config: DEFAULT_AUTO_PILOT_CONFIG,
-      taskActions: new Map(taskActions),
-    });
-  };
+  // CB-2789 v2: Manual Start removed (was duplicate of Auto Pilot path; broken UX per Eli 2026-05-10).
 
   const handleStartAutoPilot = async (config: AutoPilotConfig) => {
     const selected = executableItems.filter(i => selectedIds.has(i.id));
@@ -273,18 +334,47 @@ export function FeatureExecutionPanel({
             <div className="w-5" />
           )}
 
-          {/* Selection checkbox (only when not executing) */}
-          {isExecutable && !isExecuting ? (
-            <button
-              onClick={() => toggleSelection(issue.id)}
-              className={cn(
-                'w-5 h-5 rounded border flex items-center justify-center transition-colors',
-                isSelected ? 'bg-cyan-600 border-cyan-600' : 'border-zinc-600 hover:border-zinc-400'
-              )}
-              disabled={isDone}
-            >
-              {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
-            </button>
+          {/* Selection checkbox.
+              CB-2789 v3: container rows (FEATURE/EPIC/STORY/BUG-with-children) get a
+              checkbox too — toggles all executable descendants together.
+              Indeterminate state shown when some-but-not-all descendants selected. */}
+          {!isExecuting ? (
+            isExecutable ? (
+              <button
+                onClick={() => toggleSelection(issue.id)}
+                className={cn(
+                  'w-5 h-5 rounded border flex items-center justify-center transition-colors',
+                  isSelected ? 'bg-cyan-600 border-cyan-600' : 'border-zinc-600 hover:border-zinc-400'
+                )}
+                disabled={isDone}
+              >
+                {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
+              </button>
+            ) : hasChildren ? (
+              (() => {
+                const descIds = getExecutableDescendantIds(issue.id);
+                const selCount = descIds.filter(id => selectedIds.has(id)).length;
+                const allSel = descIds.length > 0 && selCount === descIds.length;
+                const noneSel = selCount === 0;
+                return (
+                  <button
+                    onClick={() => toggleContainer(issue.id)}
+                    className={cn(
+                      'w-5 h-5 rounded border flex items-center justify-center transition-colors',
+                      allSel ? 'bg-cyan-600 border-cyan-600'
+                        : noneSel ? 'border-zinc-600 hover:border-zinc-400'
+                        : 'bg-cyan-900/40 border-cyan-600 hover:bg-cyan-900/60'
+                    )}
+                    title={allSel ? `Deselect all ${descIds.length} under ${issue.key}` : `Select all ${descIds.length} under ${issue.key}`}
+                  >
+                    {allSel && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    {!allSel && !noneSel && <span className="w-2 h-0.5 bg-cyan-400 rounded-full" />}
+                  </button>
+                );
+              })()
+            ) : (
+              <div className="w-5 h-5" />
+            )
           ) : (
             <div className="w-5 h-5 flex items-center justify-center">
               {queueItem?.status === 'running' && <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />}
@@ -565,19 +655,6 @@ export function FeatureExecutionPanel({
           </div>
           {!isExecuting ? (
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleStartExecution}
-                disabled={selectedIds.size === 0}
-                className={cn(
-                  'flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-colors',
-                  selectedIds.size > 0
-                    ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                )}
-              >
-                <Play className="w-4 h-4" />
-                Manual Start
-              </button>
               <button
                 onClick={() => setShowAutoPilotModal(true)}
                 disabled={selectedIds.size === 0}

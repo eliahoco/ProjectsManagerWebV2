@@ -12,18 +12,15 @@ import time
 import asyncio
 from datetime import datetime
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
 
 from app.config import settings
 from app.errors import setup_exception_handlers, ErrorResponse, ErrorCode
 from app.background import cancel_all_background_tasks
+from app.rate_limit import limiter
 from api import router as api_router
-
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 # Configure logging
 logging.basicConfig(
@@ -287,10 +284,11 @@ async def lifespan(app: FastAPI):
     from services.qa_service import qa_service
     qa_service._rag = app.state.rag
 
-    # CB-1951 E2: rehydrate any AutoPilot queues that were running when the
-    # backend last crashed. Their status flips to paused/crash_recovery so
-    # the frontend can prompt the user to resume / skip / abort. This is a
-    # best-effort startup step — failures are logged but never block boot.
+    # CB-1951 E2 / CB-2750: universal rehydrate — covers all non-terminal
+    # queue states (WAITING_RESET, PAUSED, RUNNING, PENDING).  RUNNING queues
+    # are reclassified to paused/crash_recovery (or zombie_detected if an
+    # orphan subprocess PID is still alive). Best-effort — failures are logged
+    # but never block boot.
     from services.autopilot_queue_service import autopilot_queue_service
     recovered = await autopilot_queue_service.rehydrate_from_db()
     if recovered:
@@ -299,6 +297,12 @@ async def lifespan(app: FastAPI):
             "User must resume manually via the recovery banner.",
             len(recovered), recovered,
         )
+
+    # CB-2750: start the 60-second background recovery tick loop.
+    # Ticks auto-resume WAITING_RESET queues whose reset window has elapsed,
+    # and detect new zombie RUNNING queues that lost their coroutine mid-flight.
+    autopilot_queue_service.start_recovery_tick()
+    logger.info("[AutoPilot] Recovery tick loop started")
 
     # Start background task for processing pending completions
     completion_task = asyncio.create_task(process_pending_completions())
@@ -316,6 +320,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    # CB-2750: stop the recovery tick loop before cancelling other tasks
+    autopilot_queue_service.stop_recovery_tick()
     completion_task.cancel()
     evict_task.cancel()
     retention_task.cancel()
@@ -336,11 +342,34 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down ProjectsManagerWebV2 Backend")
 
 
+# CB-2668: FastAPI's default /docs + /redoc + /openapi.json publish the full
+# route map (every path, every project_id-shaped param, every request/response
+# schema) to any Origin-less local caller. Combined with CB-2666 H-1 and
+# CB-2667 H-2, that route map turns isolated identifier disclosures into a
+# guided enumeration. We disable the surface unless `settings.is_development`
+# explicitly opts in. Production / staging / unset ENVIRONMENT all stay locked.
+#
+# `swagger_ui_oauth2_redirect_url` is also pinned to None in non-dev as
+# defense-in-depth — FastAPI today suppresses /docs/oauth2-redirect when
+# `docs_url` is None, but that is an implementation detail rather than a
+# documented contract. Pinning the URL collapses any upstream regression
+# that re-mounts the asset path independently of the Swagger UI route.
+_docs_url = "/docs" if settings.is_development else None
+_redoc_url = "/redoc" if settings.is_development else None
+_openapi_url = "/openapi.json" if settings.is_development else None
+_swagger_oauth2_redirect_url = (
+    "/docs/oauth2-redirect" if settings.is_development else None
+)
+
 app = FastAPI(
     title="ProjectsManagerWebV2 API",
     description="Backend API for ProjectsManagerWebV2 with CodeBoard",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
+    swagger_ui_oauth2_redirect_url=_swagger_oauth2_redirect_url,
 )
 
 # Setup rate limiter
@@ -357,6 +386,21 @@ assert "*" not in settings.CORS_ORIGINS, (
     "Wildcard '*' in CORS_ORIGINS is forbidden when allow_credentials=True. "
     "Set CORS_ORIGINS to explicit origins."
 )
+
+# CB-2666 (sec audit F2): when the bind interface widens beyond loopback,
+# the validate_origin middleware no longer constitutes a perimeter for
+# Origin-less callers. INTERNAL_API_TOKEN is the deploy-gate that
+# `app.security.require_local_or_token` enforces on the project-identifier
+# endpoints. Forgetting to set the token while flipping ALLOW_LAN=true (or
+# pointing HOST at a non-loopback interface) silently re-opens CB-2666 and
+# every sibling endpoint covered by InternalAuthDep — fail loudly here.
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+if (settings.ALLOW_LAN or settings.HOST not in _LOOPBACK_HOSTS) and not settings.INTERNAL_API_TOKEN:
+    raise RuntimeError(
+        "INTERNAL_API_TOKEN must be set when ALLOW_LAN=true or HOST is "
+        f"non-loopback (HOST={settings.HOST!r}, ALLOW_LAN={settings.ALLOW_LAN}). "
+        "See backend/docs/DOC_PIPELINE_RUNBOOK.md §3 for the deploy gate."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

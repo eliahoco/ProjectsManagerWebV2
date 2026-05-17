@@ -7,6 +7,7 @@ This module provides shared fixtures for:
 - Mock services
 """
 
+import os
 import pytest
 import asyncio
 from typing import AsyncGenerator, Generator
@@ -20,6 +21,15 @@ from pathlib import Path
 # Add backend to path for imports
 backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
+
+# CB-2666: the live `.env` is permitted to set HOST=0.0.0.0 / ALLOW_LAN=true
+# in dev/staging, in which case `app.main` enforces a non-empty
+# INTERNAL_API_TOKEN at module load (sec audit F2 deploy gate). Tests must
+# satisfy that invariant before importing the app — set a per-process
+# token here so the assertion passes regardless of the operator's `.env`.
+# Individual tests that exercise the assertion override
+# `settings.INTERNAL_API_TOKEN` via monkeypatch + `importlib.reload`.
+os.environ.setdefault("INTERNAL_API_TOKEN", "pytest-internal-token-not-secret")
 
 from app.main import app
 

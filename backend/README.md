@@ -22,9 +22,16 @@ uvicorn app.main:app --reload --port 8401
 
 ## API Documentation
 
-Once running, visit:
+Available **only when `ENVIRONMENT=development` (or `dev`)** is set in
+`.env`. Production / staging / unset locks the route map down (CB-2668).
+
 - Swagger UI: http://localhost:8401/docs
 - ReDoc: http://localhost:8401/redoc
+- OpenAPI schema: http://localhost:8401/openapi.json
+
+If any of these returns 404, your `.env` is in production mode — set
+`ENVIRONMENT=development` and restart the backend. See
+`backend/docs/DOC_PIPELINE_RUNBOOK.md` §3a for the rationale.
 
 ## Structure
 

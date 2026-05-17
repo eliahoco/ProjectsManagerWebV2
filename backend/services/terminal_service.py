@@ -29,6 +29,48 @@ from services.session_pool import session_pool
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# CB-2799: Exhaustion-signal buffer — compiled regex that matches any line
+# containing a token-exhaustion or error-type signal.  Lines that match are
+# captured in TerminalSession.exhaustion_signal_lines regardless of how much
+# subsequent output is produced (fixing the tail-window problem).
+# ---------------------------------------------------------------------------
+
+# Matches the JSON error envelope emitted by the Claude CLI stream-json mode.
+_JSON_ERROR_SIGNAL_RE = re.compile(r'\{"type"\s*:\s*"error"', re.IGNORECASE)
+
+# All signal substrings from exhaustion_detector — collapsed into one
+# alternation for a single-pass match per output line.
+_EXHAUSTION_SIGNAL_SUBSTRINGS: tuple[str, ...] = (
+    # _AUTH_SIGNALS
+    "invalid_api_key", "authentication_error", "invalid x-api-key",
+    "invalid api key", "unauthorized", "not authenticated", "permission_error",
+    # _CREDIT_SIGNALS
+    "out of credits", "out of extra usage", "billing issue",
+    "credit balance is too low", "insufficient_quota",
+    "your account has insufficient", "exceeded your current quota",
+    "payment required",
+    # _5H_SIGNALS
+    "5 hour", "5-hour", "five hour", "5h limit", "5h reset",
+    "usage limit", "usage_limit",
+    # _WEEKLY_SIGNALS
+    "weekly limit", "weekly usage", "per week", "week limit",
+    # _OVERLOADED_SIGNALS
+    "overloaded_error", "overloaded", "529",
+    # _GENERIC_429_SIGNALS
+    "rate_limit_error", "rate limit exceeded", "rate limit",
+    "too many requests", "429", "quota exceeded",
+    "resets at", "resets in", "retry after", "retry-after",
+)
+
+# Build a single compiled alternation — join longest-first to avoid shadowing.
+_EXHAUSTION_SIGNAL_RE = re.compile(
+    "|".join(re.escape(s) for s in _EXHAUSTION_SIGNAL_SUBSTRINGS),
+    re.IGNORECASE,
+)
+
+_EXHAUSTION_SIGNAL_BUFFER_CAP = 100
+
 
 class PathValidationError(Exception):
     """Raised when path validation fails"""
@@ -141,17 +183,33 @@ class TerminalSession:
     on_complete: Optional[CompletionCallback] = None
     # Project filesystem path (used for cache/worktree cleanup)
     project_path: Optional[str] = None
+    # CB-2799: rolling buffer of lines that matched exhaustion/error signals.
+    # Captured independently of session.output so early-arriving markers survive
+    # even when the Claude CLI dumps hundreds of KB of tool output afterwards.
+    exhaustion_signal_lines: List[str] = field(default_factory=list)
     # Thread safety for output list
     _output_lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def _append_output(self, line: str) -> None:
-        """Thread-safe append to output with 5000-line cap."""
+        """Thread-safe append to output with 5000-line cap.
+
+        CB-2799: Also checks each line against the exhaustion-signal regex and,
+        when matched, appends to ``exhaustion_signal_lines`` (capped at
+        ``_EXHAUSTION_SIGNAL_BUFFER_CAP``).  This preserves early-arriving
+        exhaustion markers even when the CLI later dumps hundreds of KB of tool
+        output that would otherwise scroll the tail-window past the signal.
+        """
         with self._output_lock:
             self.output.append(line)
             # Cap at 5000 lines to prevent unbounded memory growth
             if len(self.output) > 5000:
                 dropped = len(self.output) - 5000 + 1
                 self.output = [f"[... {dropped} lines truncated ...]"] + self.output[-4999:]
+            # CB-2799: capture lines that contain an exhaustion/error signal.
+            if _JSON_ERROR_SIGNAL_RE.search(line) or _EXHAUSTION_SIGNAL_RE.search(line):
+                self.exhaustion_signal_lines.append(line)
+                if len(self.exhaustion_signal_lines) > _EXHAUSTION_SIGNAL_BUFFER_CAP:
+                    self.exhaustion_signal_lines = self.exhaustion_signal_lines[-_EXHAUSTION_SIGNAL_BUFFER_CAP:]
 
     def get_output_snapshot(self, since_line: int = 0) -> List[str]:
         """Thread-safe snapshot of output lines from a given offset."""

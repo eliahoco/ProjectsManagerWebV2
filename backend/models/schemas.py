@@ -5,10 +5,28 @@ Pydantic schemas for API request/response validation
 import json
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from typing import Optional, List, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _isoformat_utc_z(dt: Optional[datetime]) -> Optional[str]:
+    """CB-2377 — Serialize a datetime as ISO 8601 with `Z` suffix.
+
+    Backend convention: every persisted timestamp represents UTC, but the
+    naive `DateTime` columns (Prisma-owned schema, SQLite-backed) round-trip
+    without tzinfo. Without an explicit `Z` the frontend `new Date(iso)`
+    parses the string as *local* time (per ECMA-262 §21.4.3.2) and the
+    relative-time renders off by the browser's UTC offset.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
 
 
 def ms_to_datetime(ms_timestamp: Any) -> Optional[datetime]:
@@ -760,9 +778,30 @@ class IssueGroupMembersReorderResponse(BaseModel):
 
 # Project schemas (for reading from frontend DB)
 class ProjectResponse(BaseModel):
+    """Project projection served via /api/projects endpoints.
+
+    CB-2666: `path` (the project's absolute filesystem directory) is no
+    longer serialized. The threat model is identical to CB-2216 — any
+    Origin-less local caller (curl, server-to-server, malicious process)
+    bypasses the `validate_origin` middleware by design, and the LIST
+    endpoint here was disclosing the user's full directory layout in
+    one HTTP call. The path field is never required across the HTTP
+    boundary; internal backend services that need it query the ORM
+    directly. Removing it from the schema is a `extra="forbid"`-style
+    structural pin so a future regression that re-adds `path` to the
+    response shape fails at serialization time, not just at the
+    redaction-test level.
+
+    The endpoints are additionally gated by
+    `app.security.require_local_or_token` so a configured
+    `INTERNAL_API_TOKEN` (deploy precondition for `ALLOW_LAN=true`)
+    blocks Origin-less callers entirely.
+    """
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
     id: str
     name: str
-    path: str
     status: str
     description: Optional[str] = None
     type: Optional[str] = None
@@ -774,9 +813,6 @@ class ProjectResponse(BaseModel):
     @classmethod
     def convert_timestamp(cls, v):
         return ms_to_datetime(v)
-
-    class Config:
-        from_attributes = True
 
 
 # List response with pagination
@@ -1058,6 +1094,14 @@ class ExecutionSummaryResponse(ExecutionSummaryCreate):
     class Config:
         from_attributes = True
 
+    # CB-2730 (CB-2377 follow-up) — emit `Z` suffix so the frontend parses
+    # these as UTC. `executedAt` is inherited from `ExecutionSummaryCreate`;
+    # Pydantic v2 field_serializer resolves against the final field set, so
+    # declaring it once on the response covers all three fields.
+    @field_serializer("executedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
 
 class ExecutionSummaryWithKeyResponse(ExecutionSummaryResponse):
     """ExecutionSummaryResponse enriched with the parent issue key.
@@ -1121,6 +1165,11 @@ class FeatureDocumentationResponse(FeatureDocumentationCreate):
 
     class Config:
         from_attributes = True
+
+    # CB-2377 — emit `Z` suffix so the frontend parses these as UTC.
+    @field_serializer("lastIndexedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
 
 
 # ============================================
@@ -1245,6 +1294,13 @@ class ImplementationNoteResponse(BaseModel):
     class Config:
         from_attributes = True
 
+    # CB-2730 (CB-2377 follow-up) — emit `Z` suffix so the frontend parses
+    # these as UTC. Same defense-in-depth pattern as
+    # `FeatureDocumentationResponse._serialize_utc`.
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
 
 # ============================================
 # DocSettings (CB-2080 / T3.1.1) — singleton config for documentation pipeline
@@ -1268,6 +1324,13 @@ class DocSettingsResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    # CB-2730 (CB-2377 follow-up) — emit `Z` suffix so the frontend parses
+    # these as UTC. DocSettings is exposed via /api/documentation/settings
+    # and rendered with relative-time strings on the settings UI.
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
 
 
 class DocSettingsUpdate(BaseModel):

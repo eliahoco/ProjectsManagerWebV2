@@ -21,12 +21,13 @@ Integration:
 import asyncio
 import json
 import logging
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,8 +40,24 @@ from services.terminal_service import (
     ExecutionStatus,
     terminal_service,
 )
+from sqlalchemy.exc import OperationalError
 from utils.db_queries import cascade_in_progress_to_parents, cascade_revert_to_parents, cascade_status_to_parents
-from utils.autopilot_repository import record_event, save_queue
+from utils.autopilot_repository import (
+    classify_operational_error,
+    emit_persist_failed_event,
+    get_task_record_id,  # CB-2756
+    record_event,
+    save_queue,
+    transition_state,  # CB-2757
+    checkpoint,        # CB-2758
+    set_subprocess_pid,  # CB-2756
+    IllegalStateTransitionError,  # CB-2757
+)
+from utils.exhaustion_detector import (
+    NO_AUTO_RESUME_CATEGORIES,
+    detect_exhaustion_from_session,
+    redact_secrets,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -89,10 +106,19 @@ TOKEN_EXHAUSTION_PATTERNS = [
     "resets in",               # alternate ("resets in 4h 30m")
     "5 hour reset",            # Claude.ai-specific phrasing
 ]
+# CB-2749: The flat list above is kept for backward-compat with
+# test_token_exhaustion_detection.py and is_token_exhaustion().
+# New run_queue code calls detect_exhaustion_from_session() from
+# utils.exhaustion_detector which categorises failures properly.
 
 
 def is_token_exhaustion(session) -> bool:
-    """Check if a completed session failed due to token/quota exhaustion."""
+    """Check if a completed session failed due to token/quota exhaustion.
+
+    .. deprecated::
+        CB-2749: Use :func:`utils.exhaustion_detector.detect_exhaustion_from_session`
+        in new code.  Retained for backward compat with existing tests.
+    """
     if session.exit_code == 0:
         return False
     error_text = (session.error or "").lower()
@@ -275,6 +301,19 @@ class AutoPilotQueue:
     # token burn on a persistently-failing API key).
     auto_resume_attempts: int = 0
 
+    # CB-2792: rolling window of recent failures for systemic-failure detection.
+    # When N identical failures land within a short window without any success
+    # in between, we suspect credit/quota exhaustion (claude CLI exits silently
+    # with code 1 when its API client hits a quota/network issue).
+    recent_failures: List[Tuple[datetime, str]] = field(default_factory=list, repr=False)
+
+    # CB-2799: consecutive-failure streak tracker (duration-independent fallback
+    # for the systemic-failure heuristic).  Tracks the normalised error signature
+    # of the most recent failure and how many consecutive identical failures have
+    # occurred without a success in between.
+    consecutive_failure_count: int = field(default=0, repr=False)
+    consecutive_failure_signature: Optional[str] = field(default=None, repr=False)
+
     # CB-2382: tracks issue IDs already appended by the audit-rescan pass so
     # the idempotency check is O(1) and survives multiple loop iterations.
     _appended_ids: set = field(default_factory=set, repr=False)
@@ -292,6 +331,13 @@ class AutoPilotQueue:
     )
     _skip_flag: bool = field(default=False, repr=False)
     _stop_flag: bool = field(default=False, repr=False)
+    # CB-2681/CB-2682: guard flag preventing two concurrent resume callers from
+    # both spawning a run_queue coroutine before the first Task is visible on
+    # ``_task``.  Set synchronously inside ``_ensure_run_queue_task`` before
+    # ``create_tracked_task`` is called; cleared by the done-callback on the
+    # spawned task.  Because asyncio is single-threaded, the check-and-set is
+    # atomic with respect to other coroutines — no asyncio.Lock needed.
+    _launching: bool = field(default=False, repr=False)
 
     def __post_init__(self):
         # Start unpaused (event is set = running)
@@ -303,6 +349,119 @@ class AutoPilotQueue:
 # ---------------------------------------------------------------------------
 
 _POLL_INTERVAL_SECONDS = 2.0
+
+# CB-2792: systemic-failure heuristic thresholds.
+# When N identical failures land within W seconds with zero successes
+# between them, treat as systemic (likely credit / network exhaustion)
+# even if the per-session detector found no Anthropic-format error text.
+_SYSTEMIC_FAILURE_THRESHOLD = 3
+# CB-2799: widened from 60 s to 1800 s (30 min) — tasks run 2-15 min each so
+# 3 failures in 60 s was mathematically impossible at this cadence.
+_SYSTEMIC_FAILURE_WINDOW_SECONDS = 1800.0
+_SYSTEMIC_AUTO_RESUME_DELAY_SECONDS = 30 * 60  # 30 min — assume credits back
+
+# CB-2799: consecutive-failure streak threshold.  Duration-independent — fires
+# when N identical error signatures arrive consecutively with no success between.
+_CONSECUTIVE_FAILURE_THRESHOLD = 3
+
+
+def _normalize_error_for_systemic(text: str) -> str:
+    """Strip task-specific bits so we can compare error strings across tasks.
+
+    The most common silent-failure signature is `Process exited with code N`.
+    We keep that whole pattern; everything else is normalised to lowercase
+    + collapsed whitespace.
+    """
+    if not text:
+        return ""
+    s = " ".join(text.lower().split())
+    # Drop session-id-like substrings + paths so the comparison stays stable.
+    s = re.sub(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "<uuid>", s)
+    s = re.sub(r"/[a-z0-9_./-]+", "<path>", s)
+    return s[:200]
+
+
+def _is_systemic_failure(queue: "AutoPilotQueue", error_text: str) -> bool:
+    """Return True if the recent-failure window indicates systemic failure.
+
+    Caller is responsible for appending the new failure to ``queue.recent_failures``
+    BEFORE calling this. The function trims old entries in place.
+    """
+    now = datetime.utcnow()
+    cutoff = now.timestamp() - _SYSTEMIC_FAILURE_WINDOW_SECONDS
+    queue.recent_failures = [
+        (ts, msg) for (ts, msg) in queue.recent_failures
+        if ts.timestamp() >= cutoff
+    ]
+    if len(queue.recent_failures) < _SYSTEMIC_FAILURE_THRESHOLD:
+        return False
+    norm_recent = _normalize_error_for_systemic(error_text)
+    if not norm_recent:
+        return False
+    matching = sum(
+        1 for (_, msg) in queue.recent_failures
+        if _normalize_error_for_systemic(msg) == norm_recent
+    )
+    return matching >= _SYSTEMIC_FAILURE_THRESHOLD
+
+
+def _is_consecutive_systemic_failure(queue: "AutoPilotQueue", error_text: str) -> bool:
+    """Return True when N identical error signatures have arrived consecutively.
+
+    CB-2799: Duration-independent fallback for ``_is_systemic_failure``.  The
+    window-based heuristic requires N failures to land within
+    ``_SYSTEMIC_FAILURE_WINDOW_SECONDS`` — at 2-15 minutes per task the 60 s
+    window was impossible to trip.  This function tracks a *streak* instead:
+
+    - On every task failure: normalise the error string.  If the signature
+      matches the previous failure, increment ``queue.consecutive_failure_count``;
+      otherwise reset to 1 and update ``queue.consecutive_failure_signature``.
+    - Returns ``True`` when ``consecutive_failure_count >= _CONSECUTIVE_FAILURE_THRESHOLD``
+      AND the signature is non-empty.
+    - On every task **success** the caller must reset both counters (see
+      ``_reset_consecutive_failure_streak``).
+
+    Mutates ``queue.consecutive_failure_count`` and
+    ``queue.consecutive_failure_signature`` in place.
+
+    Args:
+        queue: The autopilot queue whose streak fields are updated.
+        error_text: The raw error string from the failed task.
+
+    Returns:
+        ``True`` if the streak threshold has been reached.
+    """
+    norm = _normalize_error_for_systemic(error_text)
+    if not norm:
+        # Unclassifiable error — reset streak to prevent false positives.
+        queue.consecutive_failure_count = 0
+        queue.consecutive_failure_signature = None
+        return False
+
+    if norm == queue.consecutive_failure_signature:
+        queue.consecutive_failure_count += 1
+    else:
+        queue.consecutive_failure_signature = norm
+        queue.consecutive_failure_count = 1
+
+    return (
+        queue.consecutive_failure_signature is not None
+        and queue.consecutive_failure_count >= _CONSECUTIVE_FAILURE_THRESHOLD
+    )
+
+
+def _reset_consecutive_failure_streak(queue: "AutoPilotQueue") -> None:
+    """Reset the consecutive-failure streak after a successful task completion.
+
+    CB-2799: Must be called from the success path in ``run_queue`` so that a
+    single success between failures prevents a false-positive streak trigger.
+
+    Args:
+        queue: The autopilot queue whose streak counters are reset.
+    """
+    queue.consecutive_failure_count = 0
+    queue.consecutive_failure_signature = None
+
 
 # ---------------------------------------------------------------------------
 # CB-2382 rescan safety limits
@@ -339,6 +498,9 @@ class AutoPilotQueueService:
     via ``asyncio.Event`` and boolean flags on the queue dataclass.
     """
 
+    # CB-2750: background tick interval for the recovery scheduler loop.
+    _RECOVERY_TICK_INTERVAL_SECONDS = 60
+
     def __init__(self):
         self._queues: Dict[str, AutoPilotQueue] = {}
         self._active_queue_id: Optional[str] = None
@@ -352,14 +514,23 @@ class AutoPilotQueueService:
         # Set when a queue enters WAITING_RESET; cancelled on manual resume,
         # abort, or queue finalization.
         self._resume_handles: Dict[str, asyncio.Task] = {}
+        # CB-2750 G8: per-queue asyncio.Lock to prevent concurrent resume calls
+        # from double-spawning the run_queue coroutine or double-incrementing
+        # the auto_resume_attempts counter.
+        self._resume_locks: Dict[str, asyncio.Lock] = {}
+        # CB-2750: background recovery tick task handle.  Started by
+        # start_recovery_tick() (called from lifespan); cancelled in shutdown.
+        self._recovery_tick_task: Optional[asyncio.Task] = None
+        # CB-2750: set of queue IDs classified as zombies during rehydration
+        # (RUNNING in DB, no live coroutine).  Exposed via recovery-status.
+        self._zombie_queue_ids: set[str] = set()
         # CB-1951 E10: feature flag for the persistence layer. When False,
         # _persist and _persist_async become no-ops and the service falls
         # back to the original in-memory behaviour. Initial value comes
         # from the AUTOPILOT_PERSISTENCE_ENABLED env var (default True).
         # Runtime toggle via the
         # POST /api/execute/queue/settings/persistence-enabled endpoint.
-        import os as _os
-        env_val = _os.environ.get("AUTOPILOT_PERSISTENCE_ENABLED", "true").strip().lower()
+        env_val = os.environ.get("AUTOPILOT_PERSISTENCE_ENABLED", "true").strip().lower()
         self._persistence_enabled: bool = env_val not in ("0", "false", "no", "off")
 
     # ------------------------------------------------------------------
@@ -384,28 +555,29 @@ class AutoPilotQueueService:
         )
 
     async def rehydrate_from_db(self) -> List[str]:
-        """Restore any non-terminal queues from the persistent store.
+        """Restore ALL non-terminal queues from the persistent store.
 
-        Called once at backend startup from the FastAPI lifespan hook
-        (CB-1951 E2). For every non-terminal queue record found:
+        CB-2750 universal rehydrate: covers EVERY non-terminal state
+        (WAITING_RESET, PAUSED, RUNNING, PENDING), in that order.
 
-        1. Mark its ``running`` tasks as ``failed(backend_crash_recovery)``
-           via :func:`mark_running_tasks_failed_on_recovery` — we can't
-           prove the subprocess actually exited cleanly, so they have to
-           be re-run.
-        2. Flip the queue itself to ``paused`` with
-           ``pauseReason=crash_recovery`` (gated behind manual user
-           resume).
-        3. Reconstruct the in-memory ``AutoPilotQueue`` dataclass from the
-           DB record so existing accessors keep working.
-        4. Add the queue id to ``_recovered_queue_ids`` so the recovery
-           endpoint can surface it to the frontend banner.
+        Called once at backend startup from the FastAPI lifespan hook.
+        For every non-terminal queue record found:
 
-        Returns the list of queue IDs that were rehydrated. Empty list
-        is the normal clean-startup case.
+        1. Classify the queue: crash_zombie | crash_recovery | waiting_reset |
+           recoverable_paused | pending_never_started.
+        2. For RUNNING queues: check subprocess PID liveness (CB-2750 G2,
+           graceful degrade if subprocessPid column not present yet).
+           PID alive → ZOMBIE_DETECTED event, classify as zombie.
+           PID dead / unknown → classify as crash_recovery.
+        3. For RUNNING queues: reset running tasks to pending (CB-2738).
+        4. Reconstruct the in-memory AutoPilotQueue dataclass.
+        5. Increment recoveryGeneration counter (graceful degrade if absent).
+        6. Emit RECOVERY_STARTED event with classification payload.
 
-        E10: when persistence is disabled, rehydration is a no-op (there's
-        nothing to recover from since nothing was saved).
+        Returns the list of queue IDs that were rehydrated. Empty list is
+        the normal clean-startup case.
+
+        E10: when persistence is disabled, rehydration is a no-op.
         """
         if not self._persistence_enabled:
             self._logger.info(
@@ -413,6 +585,7 @@ class AutoPilotQueueService:
             )
             return []
 
+        from models.autopilot import AutoPilotEventType
         from utils.autopilot_repository import (
             load_active_queues,
             mark_running_tasks_failed_on_recovery,
@@ -428,33 +601,86 @@ class AutoPilotQueueService:
                     return []
 
                 recovered_ids: List[str] = []
-                for record in records:
-                    n_failed = await mark_running_tasks_failed_on_recovery(
-                        db, record.id, reason="backend_crash_recovery"
-                    )
-                    # Re-load with the updated state
-                    await db.commit()
+
+                # CB-2750: process in priority order:
+                #   WAITING_RESET first (re-arm timers soonest)
+                #   PAUSED next (already safe, just reconstruct)
+                #   RUNNING last (needs zombie detection + reclassification)
+                #   PENDING (never ran, just reconstruct)
+                def _sort_key(r) -> int:
+                    s = getattr(r, "status", "")
+                    return {"waiting_reset": 0, "paused": 1, "running": 2, "pending": 3}.get(s, 4)
+
+                for record in sorted(records, key=_sort_key):
+                    classification, previous_state, previous_reason = \
+                        self._classify_rehydration_record(record)
+
+                    n_reset = 0
+                    if record.status == "running":
+                        # CB-2750 G2: subprocess PID liveness check.
+                        # subprocessPid may live on task rows (E2 schema adds it to queue too).
+                        pid: Optional[int] = getattr(record, "subprocess_pid", None)
+                        if pid is None:
+                            for task_rec in (record.tasks or []):
+                                pid = getattr(task_rec, "subprocessPid", None)
+                                if pid is not None:
+                                    break
+
+                        if pid is not None and self._check_pid_alive(pid):
+                            self._zombie_queue_ids.add(record.id)
+                            classification = "zombie_detected"
+                            self._logger.warning(
+                                "[AutoPilot][CB-2750] ZOMBIE_DETECTED: queue %s "
+                                "has orphan subprocess pid=%d still alive — "
+                                "reclassifying to crash_recovery WITHOUT kill",
+                                record.id, pid,
+                            )
+                        elif pid is not None:
+                            self._logger.info(
+                                "[AutoPilot][CB-2750] Queue %s: orphan pid=%d "
+                                "is dead — treating as crash_recovery",
+                                record.id, pid,
+                            )
+
+                        # CB-2738: reset running tasks to pending (not failed).
+                        n_reset = await mark_running_tasks_failed_on_recovery(
+                            db, record.id, reason="backend_crash_recovery"
+                        )
+                        await db.commit()
+
+                        if n_reset > 0:
+                            self._logger.info(
+                                "[AutoPilot][CB-2738] Queue %s: %d interrupted task(s) "
+                                "reset to pending (backend restart is not a failure).",
+                                record.id, n_reset,
+                            )
 
                     queue = self._record_to_queue(record)
                     self._queues[record.id] = queue
                     self._recovered_queue_ids.add(record.id)
 
-                    # Last one in (most-recent) wins as active queue. The
-                    # repository already sorts desc by updatedAt so the first
-                    # record is the freshest.
-                    if recovered_ids == []:
+                    # Increment recoveryGeneration counter (E2 column, graceful degrade).
+                    try:
+                        gen_before = getattr(record, "recoveryGeneration", None) or 0
+                        record.recoveryGeneration = gen_before + 1
+                        await db.flush()
+                    except Exception:
+                        pass  # column may not exist yet in older DBs
+
+                    if not recovered_ids:
                         self._active_queue_id = record.id
 
                     recovered_ids.append(record.id)
 
-                    # Emit a single recovery event so the audit log shows
-                    # the rehydration happened.
                     await record_event(
                         db,
                         record.id,
-                        "crash_recovery_detected",
+                        AutoPilotEventType.RECOVERY_STARTED,
                         {
-                            "tasks_marked_failed": n_failed,
+                            "previous_state": previous_state,
+                            "previous_reason": previous_reason,
+                            "classification": classification,
+                            "tasks_reset_to_pending": n_reset,
                             "current_index": record.currentIndex,
                             "feature_id": record.featureId,
                         },
@@ -462,24 +688,244 @@ class AutoPilotQueueService:
                     await db.commit()
 
                 self._logger.info(
-                    "[AutoPilot] Recovered %d queue(s) from crash: %s",
+                    "[AutoPilot][CB-2750] Rehydrated %d queue(s): %s",
                     len(recovered_ids),
                     recovered_ids,
                 )
+
                 # CB-1951 E4.2.3: re-arm auto-resume timers for any
-                # WAITING_RESET queues that survived the crash. Note: queues
-                # rehydrated with pauseReason=crash_recovery are NOT re-armed
-                # — they require manual user resume.
+                # WAITING_RESET queues that survived the crash.
                 await self.rearm_auto_resume_timers()
                 return recovered_ids
+
         except Exception:
-            # Rehydration must NEVER break startup. Log and let the app
-            # come up with an empty in-memory queue — worst case the user
-            # has to re-trigger AutoPilot manually.
+            # Rehydration must NEVER break startup.
             self._logger.exception(
                 "[AutoPilot] Rehydration failed; starting with empty queue state"
             )
             return []
+
+    # ------------------------------------------------------------------
+    # CB-2750: classification + PID liveness helpers
+    # ------------------------------------------------------------------
+
+    def _classify_rehydration_record(self, record) -> Tuple[str, str, Optional[str]]:
+        """Return (classification, previous_state, previous_reason).
+
+        classification values:
+          waiting_reset         — was WAITING_RESET with valid reset_time
+          crash_recovery        — was RUNNING in DB, no live coroutine
+          zombie_detected       — was RUNNING, orphan PID still alive (set by caller)
+          recoverable_paused    — was PAUSED for any reason
+          pending_never_started — was PENDING, never ran
+          unknown               — unrecognised status string
+        """
+        previous_state: str = getattr(record, "status", "unknown")
+        previous_reason: Optional[str] = getattr(record, "pauseReason", None)
+
+        if previous_state == "waiting_reset":
+            return "waiting_reset", previous_state, previous_reason
+        elif previous_state == "running":
+            return "crash_recovery", previous_state, previous_reason
+        elif previous_state == "paused":
+            return "recoverable_paused", previous_state, previous_reason
+        elif previous_state == "pending":
+            return "pending_never_started", previous_state, previous_reason
+        else:
+            return "unknown", previous_state, previous_reason
+
+    @staticmethod
+    def _check_pid_alive(pid: int) -> bool:
+        """Return True if the process with ``pid`` is still alive.
+
+        Uses ``os.kill(pid, 0)`` — zero signal only probes liveness, does
+        not deliver anything. PermissionError means the process exists but
+        is not our child — treated as alive. ProcessLookupError means dead.
+        """
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # process exists, not our child
+        except OSError:
+            return False
+
+    # ------------------------------------------------------------------
+    # CB-2750: background recovery tick loop
+    # ------------------------------------------------------------------
+
+    def start_recovery_tick(self) -> None:
+        """Start the 60-second background recovery tick loop.
+
+        Called from the FastAPI lifespan hook after rehydration completes.
+        Stored on ``_recovery_tick_task`` so shutdown can cancel it.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._logger.warning(
+                "[AutoPilot][CB-2750] No running event loop — cannot start recovery tick"
+            )
+            return
+
+        if self._recovery_tick_task is not None and not self._recovery_tick_task.done():
+            self._logger.debug("[AutoPilot][CB-2750] Recovery tick already running")
+            return
+
+        self._recovery_tick_task = loop.create_task(
+            self._recovery_tick_loop(),
+            name="autopilot-recovery-tick",
+        )
+        self._logger.info(
+            "[AutoPilot][CB-2750] Recovery tick started (interval=%ds)",
+            self._RECOVERY_TICK_INTERVAL_SECONDS,
+        )
+
+    def stop_recovery_tick(self) -> None:
+        """Cancel the recovery tick loop (called from lifespan shutdown)."""
+        if self._recovery_tick_task is not None and not self._recovery_tick_task.done():
+            self._recovery_tick_task.cancel()
+            self._logger.info("[AutoPilot][CB-2750] Recovery tick stopped")
+
+    async def _recovery_tick_loop(self) -> None:
+        """Infinite loop that calls ``_recovery_tick_once`` every 60s."""
+        while True:
+            try:
+                await asyncio.sleep(self._RECOVERY_TICK_INTERVAL_SECONDS)
+                await self._recovery_tick_once()
+            except asyncio.CancelledError:
+                self._logger.info("[AutoPilot][CB-2750] Recovery tick loop cancelled")
+                return
+            except Exception:
+                self._logger.exception(
+                    "[AutoPilot][CB-2750] Recovery tick iteration failed"
+                )
+
+    async def _recovery_tick_once(self) -> None:
+        """Single tick body — exposed separately for unit tests.
+
+        Pass 1: WAITING_RESET queues whose reset_time <= now + tick_interval.
+          - If circuit breaker not exhausted → resume_queue + ensure coroutine.
+          - If exhausted → downgrade to PAUSED/manual.
+        Pass 2: RUNNING queues with no live coroutine → flag as zombie.
+        """
+        from datetime import timedelta
+        from models.autopilot import AutoPilotEventType
+
+        now = datetime.utcnow()
+        lookahead = now + timedelta(seconds=self._RECOVERY_TICK_INTERVAL_SECONDS)
+
+        # Pass 1: WAITING_RESET auto-resume
+        for qid, queue in list(self._queues.items()):
+            if queue.status != QueueStatus.WAITING_RESET:
+                continue
+            if queue.reset_time is None or queue.reset_time > lookahead:
+                continue
+            if qid in self._resume_handles:
+                continue  # already has a timer scheduled
+
+            # CB-2761: do NOT increment here; resume_queue() is the single source of truth.
+            # CB-2794: >= so the tick pre-flight is consistent with resume_queue.
+            if queue.auto_resume_attempts >= self._AUTO_RESUME_MAX_ATTEMPTS:
+                # CB-2793 Fix3: hold the per-queue lock for the circuit-breaker branch
+                # (counter increment + _transition) so clear_recovery_state / resume_queue
+                # cannot race. The resume_queue branch below does NOT hold the lock —
+                # resume_queue acquires it internally, and asyncio.Lock is not reentrant.
+                _cb_lock = self._resume_locks.setdefault(qid, asyncio.Lock())
+                async with _cb_lock:
+                    # CB-2795: idempotency guard — if already tripped, the status
+                    # will be PAUSED so this branch is unreachable; but guard
+                    # explicitly so a logic regression doesn't re-emit the event.
+                    if queue.pause_reason == self._CIRCUIT_BREAKER_PAUSE_REASON:
+                        continue
+                    # CB-2798: increment BEFORE the transition so the counter is
+                    # visible even if the DB write fails (test_cb2750 regression).
+                    queue.auto_resume_attempts += 1
+                    self._logger.error(
+                        "[AutoPilot][CB-2750] Tick circuit-breaker for queue %s "
+                        "(attempts=%d) — transitioning WAITING_RESET → PAUSED/manual_circuit_breaker",
+                        qid, queue.auto_resume_attempts,
+                    )
+                    # CB-2795: cancel any live timer BEFORE the state transition
+                    # so a concurrent _fire_auto_resume cannot race us.
+                    self._cancel_auto_resume(qid)
+                    # CB-2795 / M1 fix (CB-2795-S2): transition status WAITING_RESET
+                    # → PAUSED via the authorised helper so the DB is updated
+                    # atomically and an audit STATE_TRANSITION event is recorded.
+                    # M1: use await (not ensure_future) — _recovery_tick_once is
+                    # async and must observe the result; fire-and-forget dropped
+                    # exceptions silently.
+                    try:
+                        await self._transition(
+                            queue, QueueStatus.PAUSED, self._CIRCUIT_BREAKER_PAUSE_REASON,
+                            extra_payload={
+                                "attempts": queue.auto_resume_attempts,
+                                "source": "recovery_tick",
+                            },
+                        )
+                    except Exception:
+                        self._logger.exception(
+                            "[AutoPilot][CB-2795] _transition failed for queue %s", qid
+                        )
+                        # CB-2797: safety fallback — circuit breaker must trip
+                        # even when DB write fails. Must use _CIRCUIT_BREAKER_PAUSE_REASON
+                        # so the idempotency guard at the top of the tick loop matches.
+                        # CB-2797: direct mutation intentional here — _transition is
+                        # the authorised path in production; this is a DB-failure escape.
+                        queue.status = QueueStatus.PAUSED
+                        queue.pause_reason = self._CIRCUIT_BREAKER_PAUSE_REASON
+                    self._persist_async(queue, "auto_resume_circuit_breaker_tripped", {
+                        "attempts": queue.auto_resume_attempts,
+                        "source": "recovery_tick",
+                    })
+                continue
+
+            self._logger.info(
+                "[AutoPilot][CB-2750] Tick auto-resuming queue %s (attempt %d/%d)",
+                qid, queue.auto_resume_attempts + 1, self._AUTO_RESUME_MAX_ATTEMPTS,
+            )
+            # CB-2793 Fix3: do NOT hold the per-queue lock here — resume_queue
+            # acquires it internally, and asyncio.Lock is not reentrant.
+            resumed = await self.resume_queue(qid, _is_auto_resume=True)  # CB-2761
+            if resumed:
+                self._ensure_run_queue_task(queue)
+                self._persist_async(queue, AutoPilotEventType.AUTO_RESUME_FIRED, {
+                    "queue_id": qid,
+                    "source": "auto_resume_tick",
+                    "attempt_n": queue.auto_resume_attempts,
+                })
+            else:
+                self._logger.warning(
+                    "[AutoPilot][CB-2750] Tick: resume_queue(%s) returned False", qid
+                )
+
+        # Pass 2: detect new zombie RUNNING queues
+        for qid, queue in list(self._queues.items()):
+            if queue.status != QueueStatus.RUNNING:
+                continue
+            if qid in self._zombie_queue_ids:
+                continue
+            task_missing = queue._task is None
+            task_done = (not task_missing) and queue._task.done()
+            if not (task_missing or task_done):
+                continue  # healthy coroutine present
+
+            self._logger.warning(
+                "[AutoPilot][CB-2750] Tick detected zombie queue %s "
+                "(task_missing=%s task_done=%s)",
+                qid, task_missing, task_done,
+            )
+            self._zombie_queue_ids.add(qid)
+            self._persist_async(queue, AutoPilotEventType.ZOMBIE_DETECTED, {
+                "queue_id": qid,
+                "source": "recovery_tick",
+            })
+
+    def get_zombie_queue_ids(self) -> set:
+        """Return the set of queue IDs classified as zombies. Read-only."""
+        return frozenset(self._zombie_queue_ids)
 
     @staticmethod
     def _record_to_queue(record) -> AutoPilotQueue:
@@ -505,8 +951,10 @@ class AutoPilotQueueService:
                 ts = TaskStatus.PENDING
             tasks.append(QueueTask(
                 issue_id=trecord.issueId,
-                issue_key="",  # not persisted; UI re-fetches from Issue
-                issue_title="",
+                # CB-2673: read persisted key/title; fall back to empty string
+                # (T5 defensive fallback will re-fetch from Issue before execution).
+                issue_key=trecord.issueKey or "",
+                issue_title=trecord.issueTitle or "",
                 order=trecord.sequence,
                 status=ts,
                 session_id=trecord.sessionId,
@@ -539,6 +987,9 @@ class AutoPilotQueueService:
         # Recovery state — typed dataclass fields, populated from the record
         queue.pause_reason = record.pauseReason
         queue.reset_time = record.resetTime
+        # CB-2794: restore persisted circuit-breaker counter; getattr guards
+        # against pre-migration rows that lack the column.
+        queue.auto_resume_attempts = getattr(record, "autoResumeAttempts", 0) or 0
         return queue
 
     def get_recovered_queues(self) -> List[AutoPilotQueue]:
@@ -554,9 +1005,88 @@ class AutoPilotQueueService:
             if qid in self._queues
         ]
 
-    def clear_recovery_state(self, queue_id: str) -> None:
-        """Drop ``queue_id`` from the post-crash recovery set."""
-        self._recovered_queue_ids.discard(queue_id)
+    async def clear_recovery_state(self, queue_id: str) -> dict:
+        """Cancel auto-resume timer, remove from recovery/zombie sets,
+        transition queue to PAUSED with pause_reason='manual_cleared'.
+
+        CB-2798 (S5 RC5 fix): the previous one-liner only discarded the
+        queue_id from _recovered_queue_ids; it left the timer running, the
+        zombie set dirty, and the queue status unchanged.  This expanded
+        version does real work so the call is not a no-op.
+
+        Returns:
+            dict with keys:
+              ok (bool) — True on success, False if queue not found.
+              error (str) — present only when ok=False.
+              cancelled_timer (bool) — whether an auto-resume timer was live.
+              transitions (list[str]) — state transitions performed.
+        """
+        from models.autopilot import AutoPilotEventType as _ET
+
+        queue = await self.get_or_load_queue(queue_id)
+        if queue is None:
+            return {"ok": False, "error": "not_found"}
+
+        # CB-2793 Fix3: hold the per-queue resume lock while mutating queue state
+        # so a concurrent resume_queue / _recovery_tick_once cannot race.
+        _lock = self._resume_locks.setdefault(queue_id, asyncio.Lock())
+        async with _lock:
+            cancelled_timer = self._cancel_auto_resume(queue_id)
+            self._recovered_queue_ids.discard(queue_id)
+            self._zombie_queue_ids.discard(queue_id)
+
+            transitions: list[str] = []
+            # Transition to PAUSED only if the queue is in a non-terminal, non-already-paused state.
+            # PAUSED→PAUSED is illegal per the state machine; WAITING_RESET and RUNNING are legal.
+            if queue.status in (QueueStatus.WAITING_RESET, QueueStatus.RUNNING):
+                old_status = queue.status.value
+                try:
+                    await self._transition(queue, QueueStatus.PAUSED, "manual_cleared")
+                    transitions.append(f"{old_status}→paused/manual_cleared")
+                    await self._persist(
+                        queue,
+                        _ET.STATE_TRANSITION,
+                        {
+                            "queue_id": queue_id,
+                            "source": "clear_recovery_state",
+                            "cancelled_timer": cancelled_timer,
+                        },
+                    )
+                except Exception:
+                    self._logger.exception(
+                        "[AutoPilot][CB-2798] clear_recovery_state: _transition failed for queue %s",
+                        queue_id,
+                    )
+            elif queue.status == QueueStatus.PAUSED and queue.pause_reason != "manual_cleared":
+                # Already paused — update the pause_reason in-memory and persist
+                # without going through _transition (which would reject PAUSED→PAUSED).
+                old_reason = queue.pause_reason
+                queue.pause_reason = "manual_cleared"
+                try:
+                    await self._persist(
+                        queue,
+                        _ET.STATE_TRANSITION,
+                        {
+                            "queue_id": queue_id,
+                            "source": "clear_recovery_state",
+                            "from_reason": old_reason,
+                            "cancelled_timer": cancelled_timer,
+                        },
+                    )
+                    transitions.append(f"paused/{old_reason}→paused/manual_cleared")
+                except Exception:
+                    self._logger.exception(
+                        "[AutoPilot][CB-2798] clear_recovery_state: persist failed for queue %s",
+                        queue_id,
+                    )
+                    # Revert in-memory change
+                    queue.pause_reason = old_reason
+
+        return {
+            "ok": True,
+            "cancelled_timer": cancelled_timer,
+            "transitions": transitions,
+        }
 
     # ------------------------------------------------------------------
     # Queue lifecycle
@@ -659,7 +1189,24 @@ class AutoPilotQueueService:
             self._logger.error("run_queue called with unknown queue_id=%s", queue_id)
             return
 
-        queue.status = QueueStatus.RUNNING
+        # CB-2757: transition through state machine (best-effort; log but don't stop if disallowed)
+        try:
+            await self._transition(queue, QueueStatus.RUNNING, None)
+        except IllegalStateTransitionError:
+            self._logger.warning(
+                "Queue %s: state-machine disallowed pending→running; proceeding anyway (may be already running)",
+                queue_id,
+            )
+            # CB-2797: direct mutation intentional — DB rejected the transition
+            # (likely already running), but the run_queue loop must still execute.
+            # This is the only site where we tolerate a DB-rejected transition and
+            # force in-memory forward (idempotent start path). See CB-2797.
+            queue.status = QueueStatus.RUNNING
+        except Exception:
+            self._logger.exception("Queue %s: _transition(running) failed — continuing", queue_id)
+            # CB-2797: direct mutation intentional — DB write failed but the loop
+            # coroutine must still run (caller already scheduled this task).
+            queue.status = QueueStatus.RUNNING
         queue.started_at = datetime.utcnow()
         self._logger.info("Queue %s started (%s)", queue_id, queue.feature_key)
 
@@ -673,13 +1220,21 @@ class AutoPilotQueueService:
                 # ---- Pause gate ----
                 if not queue._pause_event.is_set():
                     self._logger.info("Queue %s paused at index %d", queue_id, queue.current_index)
-                    queue.status = QueueStatus.PAUSED
+                    # CB-2797: use _transition so DB is written before in-memory update.
+                    try:
+                        await self._transition(queue, QueueStatus.PAUSED, "manual")
+                    except Exception:
+                        self._logger.exception("Queue %s: _transition(paused, manual) in pause-gate failed", queue_id)
                     await queue._pause_event.wait()
                     # After resume, re-check stop
                     if queue._stop_flag:
                         self._logger.info("Queue %s stop flag detected (post-resume)", queue_id)
                         break
-                    queue.status = QueueStatus.RUNNING
+                    # CB-2797: use _transition so DB is written before in-memory update.
+                    try:
+                        await self._transition(queue, QueueStatus.RUNNING, None)
+                    except Exception:
+                        self._logger.exception("Queue %s: _transition(running) post-pause failed", queue_id)
 
                 # ---- CB-2382: rescan subtree for audit-spawned BUG/TASK issues ----
                 try:
@@ -716,6 +1271,10 @@ class AutoPilotQueueService:
                     # auto-resume circuit breaker counter so a future
                     # token-exhaust pause starts fresh.
                     queue.auto_resume_attempts = 0
+                    # CB-2792: a success also clears the systemic-failure window.
+                    queue.recent_failures = []
+                    # CB-2799: reset duration-independent consecutive streak.
+                    _reset_consecutive_failure_streak(queue)
                     action = await self._apply_success(queue, task, queue.current_index)
                     if action == "terminate":
                         self._logger.info("Queue %s terminated by success action", queue_id)
@@ -724,60 +1283,154 @@ class AutoPilotQueueService:
                 elif outcome == "failed":
                     error_msg = task.error or "Unknown failure"
 
-                    # Check for token exhaustion first
+                    # CB-2749: Categorised exhaustion detection replaces the
+                    # flat is_token_exhaustion() + extract_reset_time() pair.
                     session = terminal_service.get_session(task.session_id) if task.session_id else None
-                    if session and is_token_exhaustion(session):
-                        reset_time = extract_reset_time(session)
-                        # CB-1951 E3.3 + E2 LOW-1: redact error_msg before
-                        # surfacing in last_error (which is exposed via the
-                        # recovery API response).
+                    exhaust_result = detect_exhaustion_from_session(session) if session else None
+                    if exhaust_result:
+                        category = exhaust_result.category
+                        reset_time = exhaust_result.reset_time
+                        raw_match = exhaust_result.raw_match  # already redacted + capped
+
                         redacted = _redact_for_audit(error_msg)
                         queue.last_error = (
-                            f"TOKEN_EXHAUSTED: {redacted}"
+                            f"EXHAUSTION[{category}]: {redacted}"
                             + (f" (resets at {reset_time.isoformat()})" if reset_time else "")
                         )
-                        queue.status = QueueStatus.WAITING_RESET
-                        queue.pause_reason = "token_exhaustion"
-                        queue.reset_time = reset_time
-                        self._logger.warning(
-                            "Queue %s paused — token exhaustion on %s (reset: %s)",
-                            queue_id, task.issue_key, reset_time,
-                        )
-                        # Reset task to pending so it can be retried after resume
+
+                        # auth_failure / credit_exhaustion → PAUSED, no timer.
+                        # All others → WAITING_RESET with auto-resume.
+                        no_auto_resume = category in NO_AUTO_RESUME_CATEGORIES
+                        if no_auto_resume:
+                            # CB-2797: use _transition so DB is written before in-memory update.
+                            try:
+                                await self._transition(queue, QueueStatus.PAUSED, category)
+                            except Exception:
+                                self._logger.exception("Queue %s: _transition(paused, %s) failed", queue_id, category)
+                            queue.reset_time = None
+                            self._logger.warning(
+                                "Queue %s paused (no auto-resume) — %s on %s",
+                                queue_id, category, task.issue_key,
+                            )
+                        else:
+                            # Default reset_time when unknown: now + 5 min (CB-2749)
+                            if reset_time is None:
+                                from datetime import timedelta
+                                reset_time = datetime.utcnow() + timedelta(minutes=5)
+                            # CB-2797: use _transition so DB is written before in-memory update.
+                            try:
+                                await self._transition(queue, QueueStatus.WAITING_RESET, category)
+                            except Exception:
+                                self._logger.exception("Queue %s: _transition(waiting_reset, %s) failed", queue_id, category)
+                            queue.reset_time = reset_time
+                            self._logger.warning(
+                                "Queue %s paused — exhaustion(%s) on %s (reset: %s)",
+                                queue_id, category, task.issue_key, reset_time,
+                            )
+
+                        # Reset task to pending so it re-runs after resume.
                         task.status = TaskStatus.PENDING
                         task.session_id = None
                         task.started_at = None
                         task.completed_at = None
                         task.error = None
 
-                        # Persist auto-pause state so the recovery banner can
-                        # surface it across a backend restart. (CB-1951 E3.3.2)
-                        await self._persist(queue, "auto_paused", {
-                            "reason": "token_exhaustion",
-                            "issue_key": task.issue_key,
+                        # Persist TOKEN_EXHAUSTION_DETECTED event (CB-2749).
+                        # Payload capped at 8 KB per audit log policy.
+                        event_payload: dict = {
+                            "category": category,
                             "reset_time": reset_time.isoformat() if reset_time else None,
-                        })
+                            "raw_match": raw_match,
+                            "issue_key": task.issue_key,
+                            "no_auto_resume": no_auto_resume,
+                        }
+                        await self._persist(queue, "TOKEN_EXHAUSTION_DETECTED", event_payload)
 
-                        # CB-1951 E4.2.1: arm the auto-resume timer if we
-                        # know when the quota resets. Manual resume cancels
-                        # the timer; if the timer fires it just calls
-                        # resume_queue → sets _pause_event.
-                        if reset_time is not None:
+                        # Arm auto-resume timer for eligible categories.
+                        if not no_auto_resume and reset_time is not None:
                             self._schedule_auto_resume(queue_id, reset_time)
 
-                        # Block until resumed (manual button OR timer fires)
+                        # Block until resumed (manual button OR timer fires).
                         queue._pause_event.clear()
                         await queue._pause_event.wait()
 
                         if queue._stop_flag:
                             break
-                        queue.status = QueueStatus.RUNNING
+                        # CB-2797: use _transition so DB is written before in-memory update.
+                        try:
+                            await self._transition(queue, QueueStatus.RUNNING, None)
+                        except Exception:
+                            self._logger.exception("Queue %s: _transition(running) post-exhaust failed", queue_id)
                         queue.last_error = None
-                        queue.pause_reason = None
                         queue.reset_time = None
-                        # Persist resume state
-                        await self._persist(queue, "resumed", {"from": "token_exhaustion"})
-                        # Re-run the same index (don't increment)
+                        await self._persist(queue, "resumed", {"from": category})
+                        # Re-run the same index (don't increment).
+                        continue
+
+                    # CB-2792 / CB-2799: SYSTEMIC FAILURE HEURISTIC.
+                    # The session-level detector returned None — meaning the
+                    # claude CLI exited without printing an Anthropic-format
+                    # error string. This is the silent-credit-exhaustion case
+                    # where the binary's HTTP client fails internally and
+                    # returns exit code 1 without writing anything we capture.
+                    #
+                    # Two complementary checks (either fires → systemic pause):
+                    # 1. Window-based: N identical failures within the last 30 min
+                    #    (CB-2792, widened from 60 s in CB-2799).
+                    # 2. Streak-based: N identical failures in a row regardless of
+                    #    elapsed time (CB-2799 — handles slow queues like LINK-124
+                    #    where tasks run 2-15 min each).
+                    queue.recent_failures.append((datetime.utcnow(), error_msg or "Unknown failure"))
+                    consecutive_systemic = _is_consecutive_systemic_failure(queue, error_msg or "Unknown failure")
+                    if _is_systemic_failure(queue, error_msg or "Unknown failure") or consecutive_systemic:
+                        category = "unknown_systemic"
+                        from datetime import timedelta
+                        reset_time = datetime.utcnow() + timedelta(seconds=_SYSTEMIC_AUTO_RESUME_DELAY_SECONDS)
+                        redacted = _redact_for_audit(error_msg or "")
+                        queue.last_error = f"SYSTEMIC[{category}]: {len(queue.recent_failures)} consecutive identical failures — {redacted} (suspected credit/quota exhaustion; auto-resume at {reset_time.isoformat()})"
+                        # CB-2797: use _transition so DB is written before in-memory update.
+                        try:
+                            await self._transition(queue, QueueStatus.WAITING_RESET, category)
+                        except Exception:
+                            self._logger.exception("Queue %s: _transition(waiting_reset, %s) failed", queue_id, category)
+                        queue.reset_time = reset_time
+                        self._logger.warning(
+                            "Queue %s paused — SYSTEMIC failure detected (%d identical exits in %ds window) on %s; auto-resume in %ds",
+                            queue_id, len(queue.recent_failures),
+                            _SYSTEMIC_FAILURE_WINDOW_SECONDS, task.issue_key,
+                            _SYSTEMIC_AUTO_RESUME_DELAY_SECONDS,
+                        )
+                        # Reset task to pending so it re-runs on resume.
+                        task.status = TaskStatus.PENDING
+                        task.session_id = None
+                        task.started_at = None
+                        task.completed_at = None
+                        task.error = None
+                        # Clear both heuristic windows so post-resume cycle
+                        # can re-trigger independently if failures persist.
+                        queue.recent_failures = []
+                        _reset_consecutive_failure_streak(queue)
+                        await self._persist(queue, "TOKEN_EXHAUSTION_DETECTED", {
+                            "category": category,
+                            "reset_time": reset_time.isoformat(),
+                            "raw_match": _redact_for_audit(error_msg or "")[:500],
+                            "issue_key": task.issue_key,
+                            "no_auto_resume": False,
+                        })
+                        self._schedule_auto_resume(queue_id, reset_time)
+                        # Block until resumed (manual or timer).
+                        queue._pause_event.clear()
+                        await queue._pause_event.wait()
+                        if queue._stop_flag:
+                            break
+                        # CB-2797: use _transition so DB is written before in-memory update.
+                        try:
+                            await self._transition(queue, QueueStatus.RUNNING, None)
+                        except Exception:
+                            self._logger.exception("Queue %s: _transition(running) post-systemic failed", queue_id)
+                        queue.last_error = None
+                        queue.reset_time = None
+                        await self._persist(queue, "resumed", {"from": category})
                         continue
 
                     # Normal failure handling
@@ -796,11 +1449,15 @@ class AutoPilotQueueService:
                 queue.current_index += 1
 
         except Exception as exc:
-            # CB-1951 E2 LOW-1: redact loop exception message before exposing
-            # via last_error (surfaced through recovery API).
+            # CB-1951 E2 LOW-1 / CB-2765: redact loop exception message before
+            # exposing via last_error (surfaced through recovery API).
             self._logger.exception("Unhandled error in queue %s loop", queue_id)
-            queue.last_error = _redact_for_audit(f"Internal queue error: {exc}")
-            queue.status = QueueStatus.ABORTED
+            queue.last_error = redact_secrets(_redact_for_audit(f"Internal queue error: {exc}"))
+            # CB-2797: use _transition so DB is written before in-memory update.
+            try:
+                await self._transition(queue, QueueStatus.ABORTED, "internal_error")
+            except Exception:
+                self._logger.exception("Queue %s: _transition(aborted) on exception failed", queue_id)
 
         # ---- Finalize ----
         await self._finalize_queue(queue)
@@ -1075,6 +1732,47 @@ class AutoPilotQueueService:
         if preflight == "abort":
             return "failed"
 
+        # CB-2676: belt-and-braces fallback — if issue_key/issue_title are
+        # empty (legacy data or a rehydrated queue that predates the T2/T3
+        # schema fix), re-fetch them from the Issue table before proceeding.
+        # This ensures the audit log, progress display, and any future callers
+        # that depend on these fields never see blank values.
+        if not task.issue_key or not task.issue_title:
+            try:
+                async with AsyncSessionLocal() as _fb_db:
+                    _fb_result = await _fb_db.execute(
+                        select(Issue).where(Issue.id == task.issue_id)
+                    )
+                    _fb_issue = _fb_result.scalar_one_or_none()
+                    if _fb_issue:
+                        if not task.issue_key:
+                            task.issue_key = _fb_issue.key or ""
+                        if not task.issue_title:
+                            task.issue_title = _fb_issue.title or ""
+                        # CB-2683: redact via _redact_for_audit before %r — defense-in-depth.
+                        _redacted_key = _redact_for_audit(task.issue_key or "")
+                        _redacted_title = _redact_for_audit((task.issue_title or "")[:40])
+                        self._logger.warning(
+                            "[AutoPilot] CB-2676 fallback: re-fetched issue_key=%r "
+                            "issue_title=%r for task order=%d (issue_id=%s). "
+                            "This indicates a legacy task row that predates the "
+                            "CB-2673 schema migration — re-persisting to fix drift.",
+                            _redacted_key, _redacted_title,
+                            task.order, task.issue_id,
+                        )
+                        # Write the now-populated fields back to the DB so
+                        # future restarts won't hit this path again.
+                        await self._persist(queue, "task_key_backfill", {
+                            "issue_key": task.issue_key,
+                            "order": task.order,
+                        })
+            except Exception:
+                self._logger.exception(
+                    "[AutoPilot] CB-2676 fallback re-fetch failed for task %d "
+                    "(issue_id=%s) — continuing with empty key/title",
+                    task.order, task.issue_id,
+                )
+
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.utcnow()
         # Persist task-started state (CB-1951)
@@ -1166,23 +1864,61 @@ class AutoPilotQueueService:
             # Store session reference on the task
             task.session_id = session.id
 
+            # CB-2756: persist subprocess PID for zombie detection on next boot.
+            # Look up the DB record id by queue+sequence, then write the PID.
+            # Best-effort — PID tracking failure must not abort the task.
+            _pid = None
+            if session.process is not None:
+                _pid = session.process.pid
+            if _pid is not None:
+                try:
+                    _task_db_id = await get_task_record_id(queue.id, task.order)
+                    if _task_db_id:
+                        await set_subprocess_pid(_task_db_id, _pid, queue_id=queue.id)
+                except Exception:
+                    self._logger.exception(
+                        "Queue %s: set_subprocess_pid failed for task order=%d (non-fatal)",
+                        queue.id, task.order,
+                    )
+
             # If the session failed immediately (e.g. path validation, pool full)
             if session.status == ExecutionStatus.FAILED:
                 task.status = TaskStatus.FAILED
-                task.error = session.error
+                task.error = redact_secrets(session.error or "")  # CB-2765
                 task.completed_at = datetime.utcnow()
+                # CB-2756: clear PID — subprocess is gone
+                try:
+                    if _task_db_id := await get_task_record_id(queue.id, task.order):
+                        await set_subprocess_pid(_task_db_id, None)
+                except Exception:
+                    pass
                 return "failed"
 
             # ---- Poll for completion ----
-            return await self._poll_session(queue, task, session.id)
+            result = await self._poll_session(queue, task, session.id)
+
+            # CB-2756: clear PID after polling ends (task completed/failed/skipped/stopped)
+            try:
+                if _task_db_id2 := await get_task_record_id(queue.id, task.order):
+                    await set_subprocess_pid(_task_db_id2, None)
+            except Exception:
+                pass  # best-effort
+
+            return result
 
         except Exception as exc:
             self._logger.exception(
                 "Error executing task %s in queue %s", task.issue_key, queue.id
             )
             task.status = TaskStatus.FAILED
-            task.error = str(exc)
+            task.error = redact_secrets(str(exc))  # CB-2765
             task.completed_at = datetime.utcnow()
+            # CB-2756: clear PID on exception path
+            try:
+                if _clear_db_id := await get_task_record_id(queue.id, task.order):
+                    await set_subprocess_pid(_clear_db_id, None)
+            except Exception:
+                pass
             return "failed"
 
     async def _poll_session(
@@ -1219,7 +1955,7 @@ class AutoPilotQueueService:
             if not session:
                 # Session disappeared — treat as failure
                 task.status = TaskStatus.FAILED
-                task.error = "Session lost — terminal_service returned None"
+                task.error = "Session lost — terminal_service returned None"  # no secrets
                 task.completed_at = datetime.utcnow()
                 return "failed"
 
@@ -1230,7 +1966,8 @@ class AutoPilotQueueService:
 
             if session.status in (ExecutionStatus.FAILED, ExecutionStatus.CANCELLED):
                 task.status = TaskStatus.FAILED
-                task.error = session.error or f"Session ended with status {session.status.value}"
+                _raw_err = session.error or f"Session ended with status {session.status.value}"
+                task.error = redact_secrets(_raw_err)  # CB-2765
                 task.completed_at = datetime.utcnow()
                 return "failed"
 
@@ -1281,6 +2018,11 @@ class AutoPilotQueueService:
         await self._persist(queue, "task_completed", {
             "issue_key": task.issue_key, "action": action, "order": task.order,
         })
+        # CB-2758: checkpoint after every successful task so lastCheckpointAt is populated
+        try:
+            await checkpoint(queue.id)
+        except Exception:
+            self._logger.exception("Queue %s: checkpoint() failed (non-fatal)", queue.id)
         return "continue"
 
     async def _apply_failure(
@@ -1295,7 +2037,7 @@ class AutoPilotQueueService:
         Returns "continue", "retry", or "terminate".
         """
         action = queue.config.on_fail
-        queue.last_error = f"{task.issue_key}: {error_msg}"
+        queue.last_error = redact_secrets(f"{task.issue_key}: {error_msg}")  # CB-2765
 
         self._logger.warning(
             "Task %s failed (action=%s, retries=%d/%d): %s",
@@ -1304,7 +2046,11 @@ class AutoPilotQueueService:
         )
 
         if action == "TERMINATE":
-            queue.status = QueueStatus.ABORTED
+            # CB-2797: use _transition so DB is written before in-memory update.
+            try:
+                await self._transition(queue, QueueStatus.ABORTED, "terminate_on_fail")
+            except Exception:
+                self._logger.exception("Queue %s: _transition(aborted, terminate) failed", queue.id)
             return "terminate"
 
         if action == "RETRY":
@@ -1417,6 +2163,50 @@ class AutoPilotQueueService:
     # Persistence (CB-1951)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # CB-2797: Canonical state-transition helper
+    # ------------------------------------------------------------------
+
+    async def _transition(
+        self,
+        queue: AutoPilotQueue,
+        new_status: QueueStatus,
+        reason: Optional[str],
+        extra_payload: Optional[dict] = None,
+    ) -> None:
+        """Single authorised path to mutate queue.status.
+
+        Writes to DB FIRST via ``transition_state`` (atomic with
+        STATE_TRANSITION event). Only on DB success, mutates the in-memory
+        dataclass. On DB failure, raises — caller must handle.
+
+        Args:
+            queue: The in-memory queue object to transition.
+            new_status: Target QueueStatus enum value.
+            reason: Pause reason string, or None for non-pause transitions.
+            extra_payload: Additional fields merged into the STATE_TRANSITION
+                event payload.
+
+        Raises:
+            IllegalStateTransitionError: Transition is not in the allow-list.
+                Caller must NOT swallow — the in-memory status is left
+                unchanged to keep memory/DB in sync.
+            OperationalError: SQLite I/O error (disk full, locked).
+            ValueError: queue.id not found in DB.
+        """
+        await transition_state(
+            queue.id,
+            new_status.value,
+            reason,
+            extra_payload=extra_payload,
+        )
+        # DB write succeeded — now mirror to in-memory dataclass.
+        queue.status = new_status
+        if new_status in (QueueStatus.PAUSED, QueueStatus.WAITING_RESET):
+            queue.pause_reason = reason
+        else:
+            queue.pause_reason = None
+
     async def _persist(
         self,
         queue: AutoPilotQueue,
@@ -1433,7 +2223,16 @@ class AutoPilotQueueService:
 
         E10: when ``_persistence_enabled`` is False, returns immediately
         as a no-op. The queue runs in-memory only, matching pre-E1 behaviour.
+
+        CB-2748 G3 fix: no longer swallows ALL exceptions. We now distinguish:
+          - ``OperationalError`` with disk-full / locked indicators → log CRITICAL,
+            emit DISK_FULL_DETECTED or PERSIST_FAILED event (best-effort), then
+            **re-raise** so the run_queue loop can transition to paused/disk_full
+            instead of silently advancing with no durability.
+          - Other unexpected exceptions → emit PERSIST_FAILED (best-effort),
+            log as exception, then re-raise so callers know the write failed.
         """
+        from models.autopilot import AutoPilotEventType as _ET  # local import avoids circular
         if not self._persistence_enabled:
             return
         try:
@@ -1442,12 +2241,43 @@ class AutoPilotQueueService:
                 if event_type:
                     await record_event(db, queue.id, event_type, payload)
                 await db.commit()
-        except Exception:
+        except OperationalError as exc:
+            category = classify_operational_error(exc)
+            error_msg = str(exc)
+            if category == "disk_full":
+                self._logger.critical(
+                    "DISK FULL: failed to persist queue %s (event=%s): %s — "
+                    "stopping queue loop to prevent data loss",
+                    queue.id,
+                    event_type,
+                    error_msg,
+                )
+                await emit_persist_failed_event(
+                    queue.id, _ET.DISK_FULL_DETECTED, error_msg
+                )
+            else:
+                self._logger.critical(
+                    "DB operational error persisting queue %s (event=%s, category=%s): %s",
+                    queue.id,
+                    event_type,
+                    category,
+                    error_msg,
+                )
+                await emit_persist_failed_event(
+                    queue.id, _ET.PERSIST_FAILED, error_msg
+                )
+            raise
+        except Exception as exc:
+            error_msg = str(exc)
             self._logger.exception(
-                "Failed to persist queue %s state (event=%s) — continuing in-memory only",
+                "Unexpected error persisting queue %s state (event=%s) — re-raising",
                 queue.id,
                 event_type,
             )
+            await emit_persist_failed_event(
+                queue.id, _ET.PERSIST_FAILED, error_msg
+            )
+            raise
 
     def _persist_async(
         self,
@@ -1484,14 +2314,22 @@ class AutoPilotQueueService:
 
         # Determine final status
         if queue._stop_flag and queue.status != QueueStatus.ABORTED:
-            queue.status = QueueStatus.ABORTED
+            # CB-2797: use _transition so DB is written before in-memory update.
+            try:
+                await self._transition(queue, QueueStatus.ABORTED, "stop_flag")
+            except Exception:
+                self._logger.exception("Queue %s: _transition(aborted) finalize failed", queue.id)
 
         all_done = all(
             t.status in (TaskStatus.COMPLETED, TaskStatus.SKIPPED)
             for t in queue.tasks
         )
         if all_done and queue.status == QueueStatus.RUNNING:
-            queue.status = QueueStatus.COMPLETED
+            # CB-2797: use _transition so DB is written before in-memory update.
+            try:
+                await self._transition(queue, QueueStatus.COMPLETED, None)
+            except Exception:
+                self._logger.exception("Queue %s: _transition(completed) finalize failed", queue.id)
 
         # If fully completed, mark the feature as COMPLETED_WAITING_QA
         if queue.status == QueueStatus.COMPLETED:
@@ -1520,13 +2358,27 @@ class AutoPilotQueueService:
         # CB-1951 E4.2.2: cancel any pending auto-resume timer for this queue
         self._cancel_auto_resume(queue.id)
 
-        # Persist final terminal state (CB-1951) before pruning so the row
-        # reflects status=completed|aborted on disk.
-        await self._persist(queue, "finalized", {
-            "final_status": queue.status.value,
-            "completed_count": sum(1 for t in queue.tasks if t.status == TaskStatus.COMPLETED),
-            "total": len(queue.tasks),
-        })
+        # CB-2763: wrap the finalize _persist in try/except so a disk-full or DB-locked
+        # error doesn't propagate uncaught out of run_queue, killing the asyncio task
+        # silently. Emit PERSIST_FAILED and continue to prune.
+        try:
+            await self._persist(queue, "finalized", {
+                "final_status": queue.status.value,
+                "completed_count": sum(1 for t in queue.tasks if t.status == TaskStatus.COMPLETED),
+                "total": len(queue.tasks),
+            })
+        except Exception as _fin_exc:
+            self._logger.error(
+                "Queue %s: _finalize_queue _persist failed (%s) — continuing to prune",
+                queue.id, _fin_exc,
+            )
+            from models.autopilot import AutoPilotEventType as _ET2
+            try:
+                await emit_persist_failed_event(
+                    queue.id, _ET2.PERSIST_FAILED, str(_fin_exc)[:512]
+                )
+            except Exception:
+                pass  # best-effort
 
         # Prune old completed/aborted queues (keep last 10)
         self._prune_old_queues(max_history=10)
@@ -1570,21 +2422,55 @@ class AutoPilotQueueService:
         """Get a queue by ID."""
         return self._queues.get(queue_id)
 
+    async def get_or_load_queue(self, queue_id: str) -> Optional["AutoPilotQueue"]:
+        """Return queue from memory if present; otherwise load from DB and cache.
+
+        CB-2743 fix: endpoints that operate on paused queues (e.g. task-reset)
+        must be able to find queues that exist only in the DB — e.g. after a
+        backend restart where the queue was not rehydrated yet because the user
+        had not explicitly resumed it.
+
+        Returns None if not found anywhere (neither in-memory nor in DB).
+        """
+        # Fast path — in-memory cache
+        queue = self._queues.get(queue_id)
+        if queue is not None:
+            return queue
+
+        # DB fallback — load the record and reconstruct the in-memory queue
+        from utils.autopilot_repository import load_queue as _load_queue  # noqa: PLC0415
+
+        async with AsyncSessionLocal() as session:
+            record = await _load_queue(session, queue_id)
+            if record is None:
+                return None
+            queue = self._record_to_queue(record)
+            self._queues[queue_id] = queue
+            self._logger.info(
+                "[AutoPilot] get_or_load_queue: loaded queue %s from DB "
+                "(status=%s, tasks=%d)",
+                queue_id,
+                queue.status.value,
+                len(queue.tasks),
+            )
+            return queue
+
     def get_active_queue(self) -> Optional[AutoPilotQueue]:
         """Get the currently active queue, if any."""
         if self._active_queue_id:
             return self._queues.get(self._active_queue_id)
         return None
 
-    def get_queue_status(self, queue_id: str) -> Optional[dict]:
-        """Get a full serializable status dict for a queue.
+    def _serialize_queue(self, queue: "AutoPilotQueue") -> dict:
+        """Return the canonical JSON shape for a queue, with state derived from
+        queue.status.value.  All response-building code must use this method so
+        there is a single source of truth — no hard-coded string literals.
 
-        Returns None if the queue does not exist.
+        CB-2798 (S5 RC6 fix): previously recovery-status sub-lists hard-coded
+        "state": "running" (zombie) and "state": "waiting_reset" (auto_resume)
+        regardless of the real in-memory/DB status.  Now every list entry goes
+        through this helper.
         """
-        queue = self._queues.get(queue_id)
-        if not queue:
-            return None
-
         tasks_data = []
         for t in queue.tasks:
             # Enrich with live session info if running
@@ -1629,6 +2515,7 @@ class AutoPilotQueueService:
             "project_id": queue.project_id,
             "provider": queue.provider,
             "model": queue.model,
+            # CB-2798: always derived from queue.status — never hard-coded.
             "status": queue.status.value,
             "current_index": queue.current_index,
             "tasks": tasks_data,
@@ -1651,57 +2538,306 @@ class AutoPilotQueueService:
             "last_error": queue.last_error,
         }
 
+    async def get_queue_status(self, queue_id: str) -> Optional[dict]:
+        """Get a full serializable status dict for a queue.
+
+        CB-2798 (S5): changed to async so it can call get_or_load_queue for
+        the DB fallback.  Queues that exist only in DB (not yet loaded into
+        _queues) now return a proper payload instead of 404.
+
+        Returns None if the queue does not exist in memory or DB.
+        """
+        queue = await self.get_or_load_queue(queue_id)
+        if not queue:
+            return None
+        return self._serialize_queue(queue)
+
     # ------------------------------------------------------------------
     # Control methods
     # ------------------------------------------------------------------
 
-    def pause_queue(self, queue_id: str) -> bool:
-        """Pause the queue.  The current task finishes, then the queue blocks."""
-        queue = self._queues.get(queue_id)
+    async def _reset_failed_tasks_locked(self, queue_id: str) -> dict:
+        """Inner body of reset_failed_tasks — caller MUST already hold the per-queue lock.
+
+        CB-2793 Fix2: split from ``reset_failed_tasks`` so the endpoint can acquire
+        the lock once and run both reset + resume inside a single critical section,
+        eliminating the TOCTOU window that existed between the two separate lock
+        acquisitions.
+        """
+        queue = await self.get_or_load_queue(queue_id)
+        if queue is None:
+            return {"queue_id": queue_id, "reset_count": 0, "task_ids": [], "task_keys": []}
+
+        reset_ids: list[str] = []
+        reset_keys: list[str] = []
+        min_order: Optional[int] = None
+
+        for task in queue.tasks:
+            if task.status == TaskStatus.FAILED:
+                task.status = TaskStatus.PENDING
+                task.error = None
+                task.started_at = None
+                task.completed_at = None
+                reset_ids.append(task.issue_id)
+                reset_keys.append(task.issue_key)
+                if min_order is None or task.order < min_order:
+                    min_order = task.order
+
+        if min_order is not None and min_order < queue.current_index:
+            queue.current_index = min_order
+
+        if reset_ids:
+            self._persist_async(
+                queue,
+                "tasks_reset_for_retry",
+                {"reset_count": len(reset_ids), "task_keys": reset_keys},
+            )
+
+        self._logger.info(
+            "[AutoPilot] CB-2796: reset_failed_tasks(%s) — %d tasks reset to PENDING",
+            queue_id,
+            len(reset_ids),
+        )
+
+        return {
+            "queue_id": queue_id,
+            "reset_count": len(reset_ids),
+            "task_ids": reset_ids,
+            "task_keys": reset_keys,
+        }
+
+    async def reset_failed_tasks(self, queue_id: str) -> dict:
+        """Reset all FAILED tasks in the queue back to PENDING so they can be retried.
+
+        CB-2796 (S3): fixes RC3a — when a queue has only failed + completed tasks,
+        ``resume_queue`` refuses (no pending tasks).  This method resets FAILED →
+        PENDING atomically under the per-queue resume lock so a subsequent
+        ``resume_queue`` call can pick them up.
+
+        Side-effects:
+          * ``task.status`` → PENDING
+          * ``task.error`` → None
+          * ``task.started_at`` → None
+          * ``task.completed_at`` → None
+          * ``task.retry_count`` is preserved (informational)
+          * ``queue.current_index`` lowered to the minimum order of any newly-PENDING
+            task if that is lower than the current index.
+          * Persists state via ``save_queue``.
+          * Emits ``tasks_reset_for_retry`` event.
+
+        Returns:
+            dict with ``queue_id``, ``reset_count`` (int), ``task_ids`` ([str]),
+            and ``task_keys`` ([str]).
+        """
+        lock = self._resume_locks.setdefault(queue_id, asyncio.Lock())
+        async with lock:
+            return await self._reset_failed_tasks_locked(queue_id)
+
+    async def pause_queue(self, queue_id: str) -> bool:
+        """Pause the queue.  The current task finishes, then the queue blocks.
+
+        CB-2745: uses get_or_load_queue so DB-only paused queues (after a
+        backend restart where the queue was not rehydrated) can still be
+        found and acted upon.
+        """
+        queue = await self.get_or_load_queue(queue_id)
         if not queue or queue.status not in (QueueStatus.RUNNING, QueueStatus.WAITING_RESET):
             return False
         queue._pause_event.clear()
-        queue.status = QueueStatus.PAUSED
+        # CB-2797: use _transition so DB is written before in-memory update.
+        try:
+            await self._transition(queue, QueueStatus.PAUSED, "manual")
+        except Exception:
+            self._logger.exception("Queue %s: _transition(paused, manual) in pause_queue failed", queue_id)
         self._logger.info("Queue %s paused", queue_id)
         # Persist pause state (CB-1951)
         self._persist_async(queue, "manual_paused", {"reason": "manual"})
         return True
 
-    def resume_queue(self, queue_id: str) -> bool:
+    async def resume_queue(self, queue_id: str, _is_auto_resume: bool = False) -> bool:
         """Resume a paused queue. (CB-1951 E4.1.1 + E4.1.2)
+
+        CB-2750 G8: per-queue asyncio.Lock ensures concurrent callers are
+        serialized. The second caller either sees the queue already RUNNING
+        and returns False immediately (idempotent), or waits for the first
+        caller to commit the transition and then also sees RUNNING.
 
         Refuses to resume if there is no active task to run — returning
         False rather than silently succeeding so the API caller can
         surface a clean error to the user.
-        """
-        queue = self._queues.get(queue_id)
-        if not queue or queue.status not in (QueueStatus.PAUSED, QueueStatus.WAITING_RESET):
-            return False
-        # E4.1.2: refuse resume if there is nothing left to run.
-        if queue.current_index >= len(queue.tasks):
-            self._logger.warning(
-                "Queue %s resume refused — no active task at index %d/%d",
-                queue_id, queue.current_index, len(queue.tasks),
-            )
-            return False
-        # E4.1.1: clear pause/reset bookkeeping so the queue dataclass and
-        # the persisted record both reflect the post-resume state.
-        queue.last_error = None
-        queue.pause_reason = None
-        queue.reset_time = None
-        # Cancel any pending auto-resume timer — manual takes priority.
-        self._cancel_auto_resume(queue_id)
-        queue._pause_event.set()
-        # Status will be set back to RUNNING by the loop
-        self._logger.info("Queue %s resumed", queue_id)
-        # Persist resume state (CB-1951)
-        self._persist_async(queue, "resumed", {})
-        return True
 
-    def skip_current(self, queue_id: str) -> bool:
+        CB-2745: uses get_or_load_queue so DB-only paused queues (after a
+        backend restart where the queue was not rehydrated) can still be
+        found and resumed without a 400 "does not exist" error.
+
+        Args:
+            queue_id: The queue to resume.
+            _is_auto_resume: True when called by an auto-resume timer or tick
+                (not by the user). CB-2761: the counter increment is performed
+                here (inside the lock) so concurrent auto-resume paths cannot
+                double-increment.
+        """
+        # CB-2750 G8: per-queue asyncio.Lock serializes concurrent resume callers.
+        # The second concurrent call sees status already RUNNING and returns False
+        # (idempotent). asyncio is single-threaded so the setdefault + acquire
+        # sequence is safe without a separate meta-lock.
+        lock = self._resume_locks.setdefault(queue_id, asyncio.Lock())
+        async with lock:
+            queue = await self.get_or_load_queue(queue_id)
+            if not queue or queue.status not in (QueueStatus.PAUSED, QueueStatus.WAITING_RESET):
+                return False
+
+            # CB-2761: increment auto_resume_attempts INSIDE the lock so the timer
+            # path (_fire_auto_resume) and the tick path (_recovery_tick_once) cannot
+            # race and double-increment the counter.
+            # CB-2794: check BEFORE increment (>= not >) so the cap is exact at
+            # _AUTO_RESUME_MAX_ATTEMPTS; counter stays at MAX when breaker trips
+            # (prevents the off-by-one that allowed attempt #4 to slip through).
+            if _is_auto_resume:
+                if queue.auto_resume_attempts >= self._AUTO_RESUME_MAX_ATTEMPTS:
+                    # CB-2795: idempotency guard — skip if already tripped.
+                    if queue.pause_reason == self._CIRCUIT_BREAKER_PAUSE_REASON:
+                        return False
+                    # Circuit-breaker: max attempts reached, transition to PAUSED
+                    # (not just setting pause_reason) so the tick/fire predicates
+                    # stop matching. (CB-2795)
+                    self._logger.error(
+                        "[AutoPilot] Queue %s auto-resume circuit breaker tripped "
+                        "after %d attempts — transitioning WAITING_RESET → PAUSED/manual_circuit_breaker",
+                        queue_id, queue.auto_resume_attempts,
+                    )
+                    # CB-2795: cancel any live timer before state transition.
+                    self._cancel_auto_resume(queue_id)
+                    # CB-2797: use _transition so DB is written before in-memory update.
+                    # Safety fallback: if DB write fails, circuit breaker must
+                    # still trip to prevent runaway token burn. CB-2797.
+                    try:
+                        await self._transition(
+                            queue, QueueStatus.PAUSED, self._CIRCUIT_BREAKER_PAUSE_REASON,
+                            extra_payload={"attempts": queue.auto_resume_attempts},
+                        )
+                    except Exception:
+                        self._logger.exception(
+                            "[AutoPilot][CB-2795] _transition failed for queue %s", queue_id
+                        )
+                        # CB-2797: safety fallback — circuit breaker must trip even
+                        # when DB write fails. Direct mutation intentional here.
+                        queue.status = QueueStatus.PAUSED
+                        queue.pause_reason = self._CIRCUIT_BREAKER_PAUSE_REASON
+                    self._persist_async(queue, "auto_resume_circuit_breaker_tripped", {
+                        "attempts": queue.auto_resume_attempts,
+                    })
+                    return False
+                queue.auto_resume_attempts += 1
+
+            # CB-2744 Part B: defensive self-heal — if current_index is past the
+            # end of the task list OR the task at current_index is already finished,
+            # scan forward to find the next pending task.  Only refuse when there
+            # is genuinely no pending task remaining anywhere.
+            def _find_next_pending(q: "AutoPilotQueue") -> Optional[int]:
+                pending = [t.order for t in q.tasks if t.status == TaskStatus.PENDING]
+                return min(pending) if pending else None
+
+            needs_scan = (
+                queue.current_index >= len(queue.tasks)
+                or (
+                    queue.current_index < len(queue.tasks)
+                    and queue.tasks[queue.current_index].status
+                    not in (TaskStatus.PENDING, TaskStatus.RUNNING)
+                )
+            )
+            if needs_scan:
+                next_order = _find_next_pending(queue)
+                if next_order is None:
+                    # E4.1.2: genuinely nothing left to run.
+                    self._logger.warning(
+                        "Queue %s resume refused — no active task at index %d/%d "
+                        "and no pending tasks",
+                        queue_id, queue.current_index, len(queue.tasks),
+                    )
+                    return False
+                self._logger.info(
+                    "[AutoPilot] CB-2744: self-healing current_index %d → %d "
+                    "for queue %s on resume.",
+                    queue.current_index, next_order, queue_id,
+                )
+                queue.current_index = next_order
+
+            # E4.1.1: clear pause/reset bookkeeping so the queue dataclass and
+            # the persisted record both reflect the post-resume state.
+            queue.last_error = None
+            queue.pause_reason = None
+            queue.reset_time = None
+            # Cancel any pending auto-resume timer — manual takes priority.
+            self._cancel_auto_resume(queue_id)
+            queue._pause_event.set()
+            # Status will be set back to RUNNING by the loop
+            self._logger.info("Queue %s resumed", queue_id)
+            # Persist resume state (CB-1951)
+            self._persist_async(queue, "resumed", {})
+            return True
+
+    def _ensure_run_queue_task(self, queue: "AutoPilotQueue") -> None:
+        """Re-launch the ``run_queue`` coroutine if it is absent or finished.
+
+        CB-2681/CB-2682: after a backend crash + rehydration the in-memory
+        ``queue._task`` is always ``None`` — ``resume_queue`` only sets the
+        pause event but nothing is waiting on it, so execution never actually
+        starts.  This helper detects that situation and spawns a fresh
+        ``run_queue`` asyncio.Task via ``create_tracked_task``.
+
+        **Idempotent** — safe to call multiple times; subsequent calls while
+        the task is still running are no-ops.
+
+        **Race-safe** — the ``_launching`` boolean flag on the queue dataclass
+        is set synchronously (no ``await`` between check and set) before the
+        task is created, preventing two concurrent callers from both spawning
+        a coroutine.  Because asyncio is single-threaded, this check-and-set
+        is atomic with respect to other coroutines.
+        """
+        from app.background import create_tracked_task  # local import avoids circular
+
+        task_missing = queue._task is None
+        task_done = (not task_missing) and queue._task.done()
+        if not (task_missing or task_done):
+            # Task is alive — nothing to do.
+            return
+
+        # Guard: if another resume caller already entered this block (before the
+        # asyncio.Task was assigned to queue._task), skip the duplicate launch.
+        if queue._launching:
+            self._logger.warning(
+                "[AutoPilot] CB-2681: _ensure_run_queue_task called while "
+                "_launching=True for queue %s — skipping duplicate launch",
+                queue.id,
+            )
+            return
+
+        queue._launching = True
+
+        def _clear_launching(fut: asyncio.Task) -> None:  # noqa: ARG001
+            queue._launching = False
+
+        self._logger.warning(
+            "[AutoPilot] CB-2681: queue %s has no live run_queue coroutine "
+            "(task_missing=%s, task_done=%s) — re-launching run_queue",
+            queue.id, task_missing, task_done,
+        )
+        t = create_tracked_task(
+            self.run_queue(queue.id),
+            name=f"autopilot-queue-{queue.id}",
+        )
+        t.add_done_callback(_clear_launching)
+        queue._task = t
+
+    async def skip_current(self, queue_id: str) -> bool:
         """Skip the currently executing task.  The session is stopped and the
-        queue advances to the next task."""
-        queue = self._queues.get(queue_id)
+        queue advances to the next task.
+
+        CB-2745: uses get_or_load_queue so DB-only paused queues (after a
+        backend restart where the queue was not rehydrated) can still be found.
+        """
+        queue = await self.get_or_load_queue(queue_id)
         if not queue or queue.status != QueueStatus.RUNNING:
             return False
         queue._skip_flag = True
@@ -1724,13 +2860,20 @@ class AutoPilotQueueService:
                     "mark_failed" — mark all pending tasks as FAILED.
                     "mark_skipped" — mark all pending tasks as SKIPPED.
                     "leave" — leave pending tasks unchanged.
+
+        CB-2745: uses get_or_load_queue so DB-only paused queues (after a
+        backend restart where the queue was not rehydrated) can still be aborted.
         """
-        queue = self._queues.get(queue_id)
+        queue = await self.get_or_load_queue(queue_id)
         if not queue:
             return False
 
         queue._stop_flag = True
-        queue.status = QueueStatus.ABORTED
+        # CB-2797: use _transition so DB is written before in-memory update.
+        try:
+            await self._transition(queue, QueueStatus.ABORTED, "user_abort")
+        except Exception:
+            self._logger.exception("Queue %s: _transition(aborted) abort_queue failed", queue_id)
 
         # CB-1951 E4.2.2: cancel any pending auto-resume timer
         self._cancel_auto_resume(queue_id)
@@ -1786,6 +2929,15 @@ class AutoPilotQueueService:
     # persistently-failing API key. (E4 review HIGH-1 + SEC MEDIUM-1)
     _AUTO_RESUME_MAX_ATTEMPTS = 3
 
+    # CB-2795: pause_reason written when the circuit breaker trips. Using a
+    # dedicated value (not "manual") lets downstream code distinguish a
+    # breaker-tripped queue from a manually-paused one, and — critically —
+    # provides an idempotency guard: a second trip attempt on a queue that
+    # already has this reason is a no-op (status is already PAUSED so the
+    # WAITING_RESET predicate no longer matches, but the guard is belt-and-
+    # suspenders safety for _fire_auto_resume which is called directly).
+    _CIRCUIT_BREAKER_PAUSE_REASON = "manual_circuit_breaker"
+
     # Sanity-check window for rehydrated `reset_time` values. Anything older
     # than this in the past, or further in the future, is treated as
     # corrupted state and the queue is downgraded to manual-resume rather
@@ -1805,7 +2957,7 @@ class AutoPilotQueueService:
         should prefer :meth:`_schedule_auto_resume` with a parsed
         ``datetime`` (see ``extract_reset_time``).
         """
-        queue = self._queues.get(queue_id)
+        queue = await self.get_or_load_queue(queue_id)
         if not queue:
             return
 
@@ -1815,6 +2967,15 @@ class AutoPilotQueueService:
         if target is None:
             from datetime import timedelta
             target = datetime.utcnow() + timedelta(hours=1)
+
+        # CB-2797: use _transition so DB is written before in-memory update.
+        try:
+            await self._transition(queue, QueueStatus.WAITING_RESET, "manual_wait")
+        except Exception:
+            self._logger.exception(
+                "Queue %s: _transition(waiting_reset, manual_wait) failed", queue_id
+            )
+        queue.reset_time = target
 
         self._schedule_auto_resume(queue_id, target)
         # Wait synchronously so existing callers (API endpoint) keep their
@@ -1933,16 +3094,63 @@ class AutoPilotQueueService:
             )
             return
 
-        queue.auto_resume_attempts += 1
-        if queue.auto_resume_attempts > self._AUTO_RESUME_MAX_ATTEMPTS:
+        # CB-2761: do NOT increment here; resume_queue() increments inside the lock
+        # so concurrent timer + tick calls cannot double-count.
+        # CB-2794: use >= (not >) so the pre-flight check here is consistent
+        # with the >= guard in resume_queue; avoids the breaker being bypassed
+        # when attempts == MAX before resume_queue has a chance to check.
+        if queue.auto_resume_attempts >= self._AUTO_RESUME_MAX_ATTEMPTS:
+            # CB-2795: idempotency guard — skip if already tripped.
+            if queue.pause_reason == self._CIRCUIT_BREAKER_PAUSE_REASON:
+                return
             # Circuit breaker: stop auto-resuming and require manual
             # intervention to prevent runaway token burn. (SEC MEDIUM-1)
+            # CB-2795: transition WAITING_RESET → PAUSED so the queue status
+            # changes and subsequent ticks stop matching the WAITING_RESET predicate.
             self._logger.error(
                 "[AutoPilot] Queue %s auto-resume circuit breaker tripped "
-                "after %d consecutive attempts — downgrading to manual",
+                "after %d consecutive attempts — transitioning WAITING_RESET → PAUSED/manual_circuit_breaker",
                 queue_id, queue.auto_resume_attempts,
             )
-            queue.pause_reason = "manual"
+            # CB-2795: cancel any live timer (belt-and-suspenders; the caller
+            # _runner already pops the handle after _fire_auto_resume returns,
+            # but we cancel explicitly so the task.cancelled() state is set
+            # immediately for test assertions).
+            # H1 fix: detect self-cancel — if we ARE the _runner task that owns
+            # this handle, calling task.cancel() would cancel ourselves and the
+            # DB write below would be aborted.
+            # Instead just pop the dict entry; _runner's finally block will not
+            # re-insert it because current_task() == the popped task.
+            existing = self._resume_handles.get(queue_id)
+            if existing is not None and existing is asyncio.current_task():
+                # Self-cancel path: only remove the dict entry, do not call cancel().
+                self._resume_handles.pop(queue_id, None)
+            else:
+                self._cancel_auto_resume(queue_id)
+
+            # CB-2797: use _transition so DB is written before in-memory update.
+            # CancelledError propagates naturally so cooperative cancellation
+            # is still honoured. If the DB write fails (e.g. DB not yet
+            # persisted in tests, or disk I/O error), we MUST still update
+            # in-memory so the circuit breaker actually trips and prevents
+            # runaway token burn — a safety-critical fallback. See CB-2797.
+            try:
+                await self._transition(
+                    queue, QueueStatus.PAUSED, self._CIRCUIT_BREAKER_PAUSE_REASON,
+                    extra_payload={"attempts": queue.auto_resume_attempts},
+                )
+            except asyncio.CancelledError:
+                # Re-raise so cooperative cancellation is honoured. In-memory
+                # will be set in the finally block below.
+                raise
+            except Exception:
+                self._logger.exception(
+                    "[AutoPilot][CB-2795] _transition failed for queue %s", queue_id
+                )
+                # CB-2797: safety fallback — circuit breaker must trip even
+                # when DB write fails. Direct mutation intentional here.
+                queue.status = QueueStatus.PAUSED
+                queue.pause_reason = self._CIRCUIT_BREAKER_PAUSE_REASON
             await self._persist(queue, "auto_resume_circuit_breaker_tripped", {
                 "attempts": queue.auto_resume_attempts,
             })
@@ -1952,7 +3160,11 @@ class AutoPilotQueueService:
             "[AutoPilot] Queue %s auto-resuming after token reset (attempt %d/%d)",
             queue_id, queue.auto_resume_attempts, self._AUTO_RESUME_MAX_ATTEMPTS,
         )
-        if self.resume_queue(queue_id):
+        if await self.resume_queue(queue_id, _is_auto_resume=True):
+            # CB-2681: ensure the run_queue coroutine is live after resume.
+            # After a backend crash + rehydration queue._task is None, so the
+            # pause-event set by resume_queue has nothing waiting on it.
+            self._ensure_run_queue_task(queue)
             await self._persist(queue, "auto_resume_fired", {
                 "attempt": queue.auto_resume_attempts,
             })
@@ -2017,7 +3229,7 @@ class AutoPilotQueueService:
     # Model switching
     # ------------------------------------------------------------------
 
-    def switch_model(
+    async def switch_model(
         self,
         queue_id: str,
         provider: str,
@@ -2027,8 +3239,11 @@ class AutoPilotQueueService:
 
         Useful when tokens are exhausted on one provider and the user
         wants to continue with a different one.
+
+        CB-2745: uses get_or_load_queue so DB-only paused queues (after a
+        backend restart where the queue was not rehydrated) can still be found.
         """
-        queue = self._queues.get(queue_id)
+        queue = await self.get_or_load_queue(queue_id)
         if not queue:
             return False
 
@@ -2041,7 +3256,11 @@ class AutoPilotQueueService:
 
         # If paused or waiting, resume
         if queue.status in (QueueStatus.PAUSED, QueueStatus.WAITING_RESET):
-            self.resume_queue(queue_id)
+            if await self.resume_queue(queue_id):
+                # CB-2682: ensure the run_queue coroutine is live after model-switch
+                # resume. After a backend crash + rehydration queue._task is None,
+                # so the pause-event set by resume_queue has nothing waiting on it.
+                self._ensure_run_queue_task(queue)
 
         return True
 

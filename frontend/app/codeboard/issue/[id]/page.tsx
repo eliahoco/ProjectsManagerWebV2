@@ -119,12 +119,12 @@ export default function IssueDetailPage() {
   if (issueLoading) {
     return (
       <div className="min-h-screen bg-zinc-900 p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="mx-auto">
           <div className="animate-pulse">
             <div className="h-8 bg-zinc-700 rounded w-1/3 mb-4" />
             <div className="h-4 bg-zinc-700 rounded w-2/3 mb-8" />
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-2 space-y-4">
+            <div className="grid grid-cols-4 gap-6">
+              <div className="col-span-3 space-y-4">
                 <div className="h-32 bg-zinc-700 rounded" />
                 <div className="h-48 bg-zinc-700 rounded" />
               </div>
@@ -143,7 +143,7 @@ export default function IssueDetailPage() {
   if (issueError || !issue) {
     return (
       <div className="min-h-screen bg-zinc-900 p-6">
-        <div className="max-w-6xl mx-auto text-center py-12">
+        <div className="mx-auto text-center py-12">
           <h1 className="text-2xl font-bold text-zinc-100">
             {issueError ? 'Error loading issue' : 'Issue not found'}
           </h1>
