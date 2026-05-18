@@ -77,7 +77,8 @@ function makeState(overrides: Record<string, unknown> = {}) {
     featureId: 'f-1',
     featureKey: 'CB-100',
     featureTitle: 'Feature A',
-    projectId: 'p-1',
+    // CB-2802: projectId is now threaded to all scoped queue API calls.
+    projectId: 'project-abc',
     queue: [],
     currentIndex: 0,
     progress: EMPTY_PROGRESS,
@@ -443,6 +444,8 @@ describe('AutoPilotFloatingBar', () => {
         expect(fetchMock).toHaveBeenCalledTimes(2);
         const [url, opts] = fetchMock.mock.calls[1] as [string, RequestInit];
         expect(url).toContain('/queue/q-retry-1/task/2/reset');
+        // CB-2802: project_id must be present on all scoped queue endpoints.
+        expect(url).toContain('project_id=');
         expect(opts.method).toBe('POST');
       });
     });
@@ -688,6 +691,51 @@ describe('AutoPilotFloatingBar', () => {
       expect(mockResumeAutoPilot).not.toHaveBeenCalled();
     });
 
+    // CB-2802: project_id must be present on all scoped queue mutation calls.
+    it('includes project_id query param on the resume mutation call (CB-2802)', async () => {
+      mockState = makeState({
+        queueId: 'q-proj-test',
+        projectId: 'proj-xyz',
+        queueStatus: 'paused',
+        isPaused: true,
+        pauseReason: 'manual',
+        queue: [],
+      });
+
+      const fetchMock = vi.fn()
+        // mount: recovery-status
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ recovered_count: 0, queues: [] }),
+        } as unknown as Response)
+        // refetch queue at click time (handleResumeWithRetry)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ tasks: [] }),
+        } as unknown as Response)
+        // plain resume
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true }),
+        } as unknown as Response);
+
+      global.fetch = fetchMock;
+
+      render(<AutoPilotFloatingBar />);
+      await act(async () => {});
+
+      fireEvent.click(screen.getByTestId('resume-btn'));
+
+      await waitFor(() => {
+        // The resume POST must carry project_id=proj-xyz.
+        const calls = fetchMock.mock.calls as [string, RequestInit][];
+        const resumeCall = calls.find(([url]) => url.includes('/resume'));
+        expect(resumeCall).toBeDefined();
+        expect(resumeCall![0]).toContain('project_id=proj-xyz');
+      });
+    });
+
     // CB-2775 race fix regression: even if state.queue is stale (no failed tasks
     // in client cache), the refetch at click time finds them and triggers reset.
     it('refetches queue at click time so stale state.queue does not skip resets', async () => {
@@ -840,6 +888,8 @@ describe('AutoPilotFloatingBar', () => {
         const retryCall = calls.find(([url]) => url.includes('retry_failed=true'));
         expect(retryCall).toBeDefined();
         expect(retryCall![0]).toContain('/queue/q-conflict-1/resume?retry_failed=true');
+        // CB-2802: project_id must be appended to all scoped queue endpoints.
+        expect(retryCall![0]).toContain('project_id=');
         expect(retryCall![1].method).toBe('POST');
       });
     });

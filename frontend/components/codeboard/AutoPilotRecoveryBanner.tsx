@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 export interface RecoverableEntry {
   queue_id: string;
   key: string;
+  /** CB-2802: project_id is required by all scoped queue endpoints. */
+  project_id: string;
   state: string;
   reason: string | null;
   reset_time?: string | null;
@@ -177,7 +179,16 @@ function getBannerBorderClass(entry: RecoverableEntry): string {
 interface AbortDialogState {
   queueId: string;
   key: string;
+  /** CB-2802: needed to supply ?project_id= to the abort endpoint. */
+  projectId: string;
 }
+
+// ─── Per-card action error ────────────────────────────────────────────────────
+
+interface ActionError {
+  message: string;
+}
+
 
 // ─── Per-entry countdown component ───────────────────────────────────────────
 
@@ -207,9 +218,10 @@ interface BannerCardProps {
   onAction: (entry: RecoverableEntry, action: string) => Promise<void>;
   actionLoading: boolean;
   onAbortRequest: (entry: RecoverableEntry) => void;
+  actionError?: ActionError | null;
 }
 
-function BannerCard({ entry, onDismiss, onAction, actionLoading, onAbortRequest }: BannerCardProps) {
+function BannerCard({ entry, onDismiss, onAction, actionLoading, onAbortRequest, actionError }: BannerCardProps) {
   const label = getStateFriendlyLabel(entry.state, entry.reason ?? null);
   const explanation = getReasonExplanation(entry.state, entry.reason ?? null);
 
@@ -342,6 +354,18 @@ function BannerCard({ entry, onDismiss, onAction, actionLoading, onAbortRequest 
       <div className="flex items-center gap-2 mt-0.5">
         {renderActionButton()}
       </div>
+
+      {/* Per-action error — surfaced when action call returns a non-ok response */}
+      {actionError && (
+        <p
+          className="text-xs text-red-400 leading-snug flex items-center gap-1"
+          data-testid={`banner-action-error-${entry.queue_id}`}
+          role="alert"
+        >
+          <AlertCircle className="w-3 h-3 shrink-0" />
+          {actionError.message}
+        </p>
+      )}
     </div>
   );
 }
@@ -396,6 +420,7 @@ export function AutoPilotRecoveryBanner() {
   const [allEntries, setAllEntries] = useState<RecoverableEntry[]>([]);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<Set<string>>(new Set());
+  const [actionErrors, setActionErrors] = useState<Map<string, ActionError>>(new Map());
   const [abortDialog, setAbortDialog] = useState<AbortDialogState | null>(null);
   const [abortLoading, setAbortLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -481,24 +506,41 @@ export function AutoPilotRecoveryBanner() {
 
   // ── Action handlers ──
 
+  const setActionError = useCallback((queueId: string, error: ActionError | null) => {
+    setActionErrors(prev => {
+      const next = new Map(prev);
+      if (error === null) {
+        next.delete(queueId);
+      } else {
+        next.set(queueId, error);
+      }
+      return next;
+    });
+  }, []);
+
   const handleAction = useCallback(async (entry: RecoverableEntry, action: string) => {
     setActionLoading(prev => new Set([...prev, entry.queue_id]));
+    // Clear any previous error for this card when re-attempting.
+    setActionError(entry.queue_id, null);
     try {
       let url: string;
       let method = 'POST';
 
+      // CB-2802: all scoped queue endpoints require ?project_id=<id>.
+      const pid = encodeURIComponent(entry.project_id);
       switch (action) {
         case 'resume':
-          url = `${BACKEND_API}/queue/${entry.queue_id}/resume`;
+          url = `${BACKEND_API}/queue/${entry.queue_id}/resume?project_id=${pid}`;
           break;
         case 'retry-failed':
-          // Resume the queue — backend will re-run failed tasks based on config.
-          // If a dedicated retry-failed endpoint exists, use it; otherwise resume.
-          url = `${BACKEND_API}/queue/${entry.queue_id}/resume`;
+          // CB-2806: Use the dedicated ?retry_failed=true param so the backend
+          // bulk-resets all failed tasks then resumes — matches AutoPilotFloatingBar's
+          // handleRetryAndResume pattern (POST resume?retry_failed=true).
+          url = `${BACKEND_API}/queue/${entry.queue_id}/resume?retry_failed=true&project_id=${pid}`;
           break;
         case 'force-recover':
           // Force-recover: abort the zombie queue with 'leave' action.
-          url = `${BACKEND_API}/queue/${entry.queue_id}/abort`;
+          url = `${BACKEND_API}/queue/${entry.queue_id}/abort?project_id=${pid}`;
           break;
         default:
           return;
@@ -519,9 +561,36 @@ export function AutoPilotRecoveryBanner() {
         // Remove from list optimistically, then re-fetch to sync truth
         setAllEntries(prev => prev.filter(e => e.queue_id !== entry.queue_id));
         setTimeout(fetchStatus, 1000);
+        return;
       }
-    } catch {
-      // Show nothing — fetch cycle will surface updated state
+
+      // Non-ok response — surface it in the banner rather than silently swallowing.
+      // For 409 the backend returns { details: { failed_count, pending_count, suggestion } }.
+      let errorMessage: string;
+      try {
+        const body = await res.json();
+        const details = body?.details ?? {};
+        // Prefer the backend's suggestion (matches FloatingBar's pattern),
+        // then fall back to the top-level message, then a generic string.
+        errorMessage =
+          details.suggestion ??
+          body?.message ??
+          `Action failed (${res.status})`;
+
+        // If the 409 also carries counts, prepend them for clarity.
+        if (res.status === 409 && typeof details.failed_count === 'number') {
+          errorMessage = `${details.failed_count} failed, ${details.pending_count ?? 0} pending — ${errorMessage}`;
+        }
+      } catch {
+        errorMessage = `Action failed (${res.status})`;
+      }
+
+      setActionError(entry.queue_id, { message: errorMessage });
+    } catch (err) {
+      // CB-2806: surface network-level failures so the user gets feedback rather
+      // than silent failure.
+      const msg = err instanceof Error ? err.message : 'Network error';
+      setActionError(entry.queue_id, { message: `Request failed: ${msg}` });
     } finally {
       setActionLoading(prev => {
         const next = new Set(prev);
@@ -529,16 +598,19 @@ export function AutoPilotRecoveryBanner() {
         return next;
       });
     }
-  }, [fetchStatus]);
+  }, [fetchStatus, setActionError]);
 
   const handleAbortRequest = useCallback((entry: RecoverableEntry) => {
-    setAbortDialog({ queueId: entry.queue_id, key: entry.key });
+    setAbortDialog({ queueId: entry.queue_id, key: entry.key, projectId: entry.project_id });
   }, []);
 
   const handleAbortConfirm = useCallback(async (queueId: string) => {
+    // CB-2802: look up projectId from abortDialog state which was set in handleAbortRequest.
+    const projectId = abortDialog?.projectId ?? '';
+    const pid = encodeURIComponent(projectId);
     setAbortLoading(true);
     try {
-      const res = await fetch(`${BACKEND_API}/queue/${queueId}/abort`, {
+      const res = await fetch(`${BACKEND_API}/queue/${queueId}/abort?project_id=${pid}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'leave' }),
@@ -554,7 +626,7 @@ export function AutoPilotRecoveryBanner() {
     } finally {
       setAbortLoading(false);
     }
-  }, [fetchStatus]);
+  }, [fetchStatus, abortDialog]);
 
   // ── Visible entries — filter dismissed (re-shows if state/reason changed) ──
 
@@ -576,6 +648,7 @@ export function AutoPilotRecoveryBanner() {
           onAction={handleAction}
           actionLoading={actionLoading.has(entry.queue_id)}
           onAbortRequest={handleAbortRequest}
+          actionError={actionErrors.get(entry.queue_id) ?? null}
         />
       ))}
 

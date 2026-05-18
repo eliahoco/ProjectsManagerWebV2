@@ -89,10 +89,21 @@ _ALLOWED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset([
 def is_transition_allowed(from_state: str, to_state: str) -> bool:
     """Return True if transitioning from_state → to_state is legal.
 
-    Terminal states (completed, aborted) reject all outgoing transitions.
+    Self-edges (from_state == to_state) are always permitted as idempotent
+    no-ops — calling code that re-applies the same state after a swallowed
+    DB write failure must not raise an error. Terminal states (completed,
+    aborted) still reject ALL outgoing transitions (including self-edges)
+    so they cannot be accidentally re-entered.
+
     The from_state is compared case-insensitively.
     """
-    return (from_state.lower(), to_state.lower()) in _ALLOWED_TRANSITIONS
+    f = from_state.lower()
+    t = to_state.lower()
+    # CB-2804: idempotent self-edge — legal for all non-terminal states.
+    _TERMINAL_STATES = frozenset(["completed", "aborted"])
+    if f == t and f not in _TERMINAL_STATES:
+        return True
+    return (f, t) in _ALLOWED_TRANSITIONS
 
 
 class AutoPilotQueueRecord(Base):

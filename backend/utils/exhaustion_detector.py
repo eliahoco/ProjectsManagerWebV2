@@ -98,10 +98,61 @@ class ExhaustionResult:
 # ---------------------------------------------------------------------------
 
 _REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # --- Existing patterns (CB-1951 / CB-2765) ---
     (re.compile(r"Bearer\s+\S+", re.IGNORECASE), "Bearer ***REDACTED***"),
     (re.compile(r"sk-[A-Za-z0-9_\-]{20,}"), "sk-***REDACTED***"),
     (re.compile(r"api[_-]?key\s*[:=]\s*\S+", re.IGNORECASE), "api_key=***REDACTED***"),
     (re.compile(r"x-api-key\s*:\s*\S+", re.IGNORECASE), "x-api-key: ***REDACTED***"),
+
+    # --- CB-2801 additions ---
+
+    # GitHub personal-access tokens (ghp_/gho_/ghs_/ghu_/ghr_ + 36 base62 chars)
+    (
+        re.compile(r"\bgh[poshur]_[A-Za-z0-9]{36,}\b"),
+        "gh*_***REDACTED***",
+    ),
+
+    # AWS access key IDs — covers all IAM key-type prefixes (AKIA/ASIA/AROA/AIDA/ANPA/ANVA/APKA)
+    # CB-2802: extended from bare AKIA to all documented AWS key-type prefixes.
+    (
+        re.compile(r"\b(?:AKIA|ASIA|AROA|AIDA|ANPA|ANVA|APKA)[A-Z0-9]{16}\b"),
+        "AKIA***REDACTED***",
+    ),
+
+    # Generic JWTs: three base64url segments separated by dots.
+    # eyJ header guarantees a real JWT; the payload and signature must also
+    # be non-trivial base64url to avoid matching coincidental dots.
+    (
+        re.compile(
+            r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"
+        ),
+        "eyJ***REDACTED***",
+    ),
+
+    # password=/passwd= values — requires word boundary + explicit suffix to prevent
+    # false-positives on bypass=, compass=, surpass=, trespass= etc.
+    # CB-2802: added \b word-boundary anchor and made the suffix non-optional (word|wd)?.
+    (
+        re.compile(r"\bpass(?:word|wd)?\s*[:=]\s*\S+", re.IGNORECASE),
+        "password=***REDACTED***",
+    ),
+
+    # Authorization: Basic <base64>
+    (
+        re.compile(r"Authorization\s*:\s*Basic\s+\S+", re.IGNORECASE),
+        "Authorization: Basic ***REDACTED***",
+    ),
+
+    # Generic long secrets after secret/token/key = or : (at least 16 non-space chars)
+    # Conservative: require the keyword to immediately precede = or : so normal
+    # log lines like "secret key not found" are not affected.
+    (
+        re.compile(
+            r"\b(?:secret|token)\s*[:=]\s*[A-Za-z0-9_\-\.=+/]{16,}",
+            re.IGNORECASE,
+        ),
+        "secret=***REDACTED***",
+    ),
 ]
 
 _RAW_MATCH_MAX_CHARS = 500
@@ -184,19 +235,26 @@ _WEEKLY_SIGNALS: frozenset[str] = frozenset([
 ])
 
 # Server-overload phrasing (HTTP 529 / overloaded_error).
+# CB-2809: bare "529" removed — a line-number, port, or SHA fragment
+# containing 529 (e.g. Foo.tsx:529) would cause a false-positive.  Real
+# HTTP 529 responses are caught by _extract_http_status() and the
+# "overloaded_error" JSON error-type path, which are already sufficient.
 _OVERLOADED_SIGNALS: frozenset[str] = frozenset([
     "overloaded_error",
     "overloaded",
-    "529",
 ])
 
 # Generic rate-limit (HTTP 429) phrasing that does NOT fit 5 h / weekly buckets.
+# CB-2809: bare "429" removed — file paths / line numbers containing 429
+# (e.g. src/components/Foo.tsx:429) triggered false exhaustion classification.
+# Real HTTP 429 responses are caught by _extract_http_status() and the
+# "rate_limit_error" JSON error-type path; the substring set covers only
+# prose-level signals that cannot appear in normal diagnostic output.
 _GENERIC_429_SIGNALS: frozenset[str] = frozenset([
     "rate_limit_error",
     "rate limit exceeded",
     "rate limit",
     "too many requests",
-    "429",
     "quota exceeded",
     "resets at",
     "resets in",

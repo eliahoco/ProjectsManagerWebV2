@@ -85,6 +85,8 @@ function entry(overrides: Partial<RecoverableEntry>): RecoverableEntry {
   return {
     queue_id: 'q-1',
     key: 'CB-2038',
+    // CB-2802: project_id is required by all scoped queue endpoints.
+    project_id: 'proj-test',
     state: 'paused',
     reason: 'crash_recovery',
     reset_time: null,
@@ -206,6 +208,9 @@ describe('AutoPilotRecoveryBanner', () => {
         expect.stringContaining('/queue/q-1/resume'),
         expect.objectContaining({ method: 'POST' }),
       );
+      // CB-2802: project_id must be present on all scoped queue endpoints.
+      const [resumeUrl] = postMock.mock.calls[0] as [string, RequestInit];
+      expect(resumeUrl).toContain('project_id=');
     });
   });
 
@@ -296,7 +301,7 @@ describe('AutoPilotRecoveryBanner', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          recoverable: [entry({ queue_id: 'q-abort', key: 'CB-9999', state: 'paused', reason: 'manual', suggested_action: 'abort' })],
+          recoverable: [entry({ queue_id: 'q-abort', key: 'CB-9999', project_id: 'proj-abort', state: 'paused', reason: 'manual', suggested_action: 'abort' })],
           zombie: [],
           auto_resume_pending: [],
         }),
@@ -318,10 +323,13 @@ describe('AutoPilotRecoveryBanner', () => {
         expect.stringContaining('/queue/q-abort/abort'),
         expect.objectContaining({ method: 'POST' }),
       );
+      // CB-2802: project_id must be present on all scoped queue endpoints.
+      const [abortUrl] = abortMock.mock.calls[0] as [string, RequestInit];
+      expect(abortUrl).toContain('project_id=');
     });
   });
 
-  // 8. Retry-failed banner
+  // 8. Retry-failed banner — renders correct button and calls the dedicated endpoint
 
   it('retry-failed banner renders correct action button', async () => {
     mockFetch({
@@ -333,6 +341,122 @@ describe('AutoPilotRecoveryBanner', () => {
 
     await waitFor(() => screen.getByTestId('banner-retry-failed-q-1'));
     expect(screen.getByTestId('banner-retry-failed-q-1').textContent).toContain('Retry failed tasks');
+  });
+
+  it('retry-failed action POSTs to resume?retry_failed=true (CB-2806)', async () => {
+    const postMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          recoverable: [entry({ state: 'paused', reason: 'crash_recovery', suggested_action: 'retry-failed' })],
+          zombie: [],
+          auto_resume_pending: [],
+        }),
+      } as unknown as Response)
+      .mockImplementation(postMock);
+
+    render(<AutoPilotRecoveryBanner />);
+
+    await waitFor(() => screen.getByTestId('banner-retry-failed-q-1'));
+    fireEvent.click(screen.getByTestId('banner-retry-failed-q-1'));
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        expect.stringContaining('/queue/q-1/resume?retry_failed=true'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+      // CB-2802: project_id must be present on all scoped queue endpoints.
+      const [retryUrl] = postMock.mock.calls[0] as [string, RequestInit];
+      expect(retryUrl).toContain('project_id=');
+    });
+  });
+
+  it('retry-failed 409 response surfaces error message in banner (CB-2806)', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          recoverable: [entry({ state: 'paused', reason: 'crash_recovery', suggested_action: 'retry-failed' })],
+          zombie: [],
+          auto_resume_pending: [],
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        // 409 response from POST resume?retry_failed=true
+        ok: false,
+        status: 409,
+        json: async () => ({
+          message: 'Queue is not resumable',
+          details: {
+            failed_count: 3,
+            pending_count: 1,
+            suggestion: 'Reset individual tasks before retrying',
+          },
+        }),
+      } as unknown as Response);
+
+    render(<AutoPilotRecoveryBanner />);
+
+    await waitFor(() => screen.getByTestId('banner-retry-failed-q-1'));
+    fireEvent.click(screen.getByTestId('banner-retry-failed-q-1'));
+
+    // Error should appear in the banner's per-card error element
+    await waitFor(() => screen.getByTestId('banner-action-error-q-1'));
+    const errorEl = screen.getByTestId('banner-action-error-q-1');
+    expect(errorEl.textContent).toContain('3 failed');
+    expect(errorEl.textContent).toContain('1 pending');
+    expect(errorEl.textContent).toContain('Reset individual tasks before retrying');
+  });
+
+  it('non-ok response without details surfaces generic error in banner', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          recoverable: [entry({ state: 'paused', reason: 'crash_recovery', suggested_action: 'resume' })],
+          zombie: [],
+          auto_resume_pending: [],
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ message: 'Internal server error' }),
+      } as unknown as Response);
+
+    render(<AutoPilotRecoveryBanner />);
+
+    await waitFor(() => screen.getByTestId('banner-resume-q-1'));
+    fireEvent.click(screen.getByTestId('banner-resume-q-1'));
+
+    await waitFor(() => screen.getByTestId('banner-action-error-q-1'));
+    const errorEl = screen.getByTestId('banner-action-error-q-1');
+    expect(errorEl.textContent).toContain('Internal server error');
+  });
+
+  // CB-2806: network errors in handleAction must surface feedback, not silently swallow.
+
+  it('network fetch failure surfaces error message in banner (CB-2806)', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          recoverable: [entry({ state: 'paused', reason: 'crash_recovery', suggested_action: 'resume' })],
+          zombie: [],
+          auto_resume_pending: [],
+        }),
+      } as unknown as Response)
+      .mockRejectedValueOnce(new Error('Failed to fetch'));
+
+    render(<AutoPilotRecoveryBanner />);
+
+    await waitFor(() => screen.getByTestId('banner-resume-q-1'));
+    fireEvent.click(screen.getByTestId('banner-resume-q-1'));
+
+    await waitFor(() => screen.getByTestId('banner-action-error-q-1'));
+    const errorEl = screen.getByTestId('banner-action-error-q-1');
+    expect(errorEl.textContent).toContain('Failed to fetch');
   });
 
   // 9. Wait action renders disabled button

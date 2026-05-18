@@ -98,9 +98,16 @@ def test_empty_error_does_not_trigger():
 
 
 def test_threshold_constant_matches_design():
-    """Design contract: 3 identical failures in 60s window."""
+    """Design contract: 3 identical failures.
+
+    CB-2799: The window was widened from 60 s → 1800 s (30 min) because
+    individual tasks run 2–15 min each; 3 failures within 60 s was
+    mathematically impossible.  The consecutive-failure streak heuristic
+    (_CONSECUTIVE_FAILURE_THRESHOLD=3) is the primary signal; the window
+    is a backstop to allow trimming entries that predate the current run.
+    """
     assert _SYSTEMIC_FAILURE_THRESHOLD == 3
-    assert _SYSTEMIC_FAILURE_WINDOW_SECONDS == 60.0
+    assert _SYSTEMIC_FAILURE_WINDOW_SECONDS == 1800.0
 
 
 def test_normalised_match_across_session_ids():

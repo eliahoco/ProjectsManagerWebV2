@@ -171,11 +171,13 @@ export function AutoPilotFloatingBar() {
   // When the queue is paused and has failed tasks, resets each one first then resumes.
   const handleResumeWithRetry = useCallback(async () => {
     if (!state.queueId) return;
+    // CB-2802: project_id is required by all scoped queue endpoints.
+    const pid = encodeURIComponent(state.projectId ?? '');
     // CB-2775 race fix: refetch queue from API at click time so we don't
     // miss failed tasks because state.queue is mid-flight from SSE.
     let failedTasks: QueueTask[];
     try {
-      const res = await fetch(`${BACKEND_API}/queue/${state.queueId}`, {
+      const res = await fetch(`${BACKEND_API}/queue/${state.queueId}?project_id=${pid}`, {
         signal: AbortSignal.timeout(5_000),
       });
       if (res.ok) {
@@ -194,7 +196,7 @@ export function AutoPilotFloatingBar() {
       // that client hasn't received yet via SSE).
       try {
         const res = await fetch(
-          `${BACKEND_API}/queue/${state.queueId}/resume`,
+          `${BACKEND_API}/queue/${state.queueId}/resume?project_id=${pid}`,
           { method: 'POST', signal: AbortSignal.timeout(15_000) },
         );
         if (res.status === 409) {
@@ -235,7 +237,7 @@ export function AutoPilotFloatingBar() {
     for (const task of failedTasks) {
       try {
         const res = await fetch(
-          `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset`,
+          `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset?project_id=${pid}`,
           { method: 'POST', signal: AbortSignal.timeout(15_000) },
         );
         if (res.status === 409) {
@@ -259,17 +261,19 @@ export function AutoPilotFloatingBar() {
 
     // All resets succeeded — now resume
     await resumeAutoPilot();
-  }, [state.queueId, state.queue, resumeAutoPilot, showToast]);
+  }, [state.queueId, state.projectId, state.queue, resumeAutoPilot, showToast]);
 
   // CB-2796 (S3): Retry & Resume — calls POST resume?retry_failed=true.
   // Used when the backend has returned a 409 with failed_count > 0, indicating
   // the server-side bulk reset is the right recovery path.
   const handleRetryAndResume = useCallback(async () => {
     if (!state.queueId) return;
+    // CB-2802: project_id is required by all scoped queue endpoints.
+    const pid = encodeURIComponent(state.projectId ?? '');
     setResumeConflict(null);
     try {
       const res = await fetch(
-        `${BACKEND_API}/queue/${state.queueId}/resume?retry_failed=true`,
+        `${BACKEND_API}/queue/${state.queueId}/resume?retry_failed=true&project_id=${pid}`,
         { method: 'POST', signal: AbortSignal.timeout(30_000) },
       );
       if (res.ok) {
@@ -282,15 +286,17 @@ export function AutoPilotFloatingBar() {
     } catch (err) {
       showToast(`Resume failed: ${err instanceof Error ? err.message : 'Network error'}`);
     }
-  }, [state.queueId, showToast]);
+  }, [state.queueId, state.projectId, showToast]);
 
   // Retry a single failed task — POST to backend reset endpoint, then refetch.
   const handleRetryTask = useCallback(async (task: QueueTask) => {
     if (!state.queueId) return;
+    // CB-2802: project_id is required by all scoped queue endpoints.
+    const pid = encodeURIComponent(state.projectId ?? '');
     setRetryingTasks(prev => new Set(prev).add(task.order));
     try {
       const res = await fetch(
-        `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset`,
+        `${BACKEND_API}/queue/${state.queueId}/task/${task.order}/reset?project_id=${pid}`,
         { method: 'POST', signal: AbortSignal.timeout(15_000) },
       );
       if (res.status === 409) {
@@ -312,7 +318,7 @@ export function AutoPilotFloatingBar() {
         return next;
       });
     }
-  }, [state.queueId, showToast]);
+  }, [state.queueId, state.projectId, showToast]);
 
   // Bulk retry — loop over all failed tasks sequentially.
   // CB-2775: handleRetryAllFailed removed — superseded by handleResumeWithRetry

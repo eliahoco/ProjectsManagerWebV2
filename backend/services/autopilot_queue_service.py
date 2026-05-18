@@ -136,20 +136,20 @@ def _redact_for_audit(text: Optional[str], max_chars: int = 200) -> str:
     endpoint (E2/E5), so any token-like substrings observable from upstream
     error messages must not survive into the persisted record. (CB-1951)
 
-    Strips common credential patterns (Bearer tokens, sk-* keys, api_key=…)
-    and truncates to ``max_chars`` from the first line only.
+    CB-2802: Refactored to delegate secret-scrubbing to ``redact_secrets()``
+    from ``utils.exhaustion_detector`` as the single source of truth.  This
+    ensures GitHub/AWS/JWT/password patterns added in CB-2801 are also applied
+    at audit-write time (previously only the exhaustion_detector path applied
+    them, leaving gaps in the SSE event stream and queue.last_error).
+
+    The audit-specific behaviour (first-line extraction + length cap) is
+    preserved on top of the comprehensive redaction.
     """
     if not text:
         return ""
     first_line = text.splitlines()[0] if text else ""
-    redacted = re.sub(r"sk-[A-Za-z0-9_\-]{8,}", "sk-***REDACTED***", first_line)
-    redacted = re.sub(r"Bearer\s+[A-Za-z0-9_\-\.=]+", "Bearer ***REDACTED***", redacted)
-    redacted = re.sub(
-        r"(api[_-]?key|authorization|token)\s*[:=]\s*[A-Za-z0-9_\-\.=]+",
-        r"\1=***REDACTED***",
-        redacted,
-        flags=re.IGNORECASE,
-    )
+    # Primary redaction: comprehensive patterns from exhaustion_detector.
+    redacted = redact_secrets(first_line)
     return redacted[:max_chars]
 
 
@@ -1036,13 +1036,16 @@ class AutoPilotQueueService:
             self._zombie_queue_ids.discard(queue_id)
 
             transitions: list[str] = []
-            # Transition to PAUSED only if the queue is in a non-terminal, non-already-paused state.
-            # PAUSED→PAUSED is illegal per the state machine; WAITING_RESET and RUNNING are legal.
-            if queue.status in (QueueStatus.WAITING_RESET, QueueStatus.RUNNING):
+            # CB-2804: PAUSED→PAUSED is now a legal idempotent self-edge in the
+            # state machine, so we can always route through _transition regardless
+            # of the current status. Terminal states (completed, aborted) are the
+            # only ones we must skip — transitioning them would raise.
+            if queue.status not in (QueueStatus.COMPLETED, QueueStatus.ABORTED):
                 old_status = queue.status.value
+                old_reason = queue.pause_reason
                 try:
                     await self._transition(queue, QueueStatus.PAUSED, "manual_cleared")
-                    transitions.append(f"{old_status}→paused/manual_cleared")
+                    transitions.append(f"{old_status}/{old_reason}→paused/manual_cleared")
                     await self._persist(
                         queue,
                         _ET.STATE_TRANSITION,
@@ -1057,30 +1060,6 @@ class AutoPilotQueueService:
                         "[AutoPilot][CB-2798] clear_recovery_state: _transition failed for queue %s",
                         queue_id,
                     )
-            elif queue.status == QueueStatus.PAUSED and queue.pause_reason != "manual_cleared":
-                # Already paused — update the pause_reason in-memory and persist
-                # without going through _transition (which would reject PAUSED→PAUSED).
-                old_reason = queue.pause_reason
-                queue.pause_reason = "manual_cleared"
-                try:
-                    await self._persist(
-                        queue,
-                        _ET.STATE_TRANSITION,
-                        {
-                            "queue_id": queue_id,
-                            "source": "clear_recovery_state",
-                            "from_reason": old_reason,
-                            "cancelled_timer": cancelled_timer,
-                        },
-                    )
-                    transitions.append(f"paused/{old_reason}→paused/manual_cleared")
-                except Exception:
-                    self._logger.exception(
-                        "[AutoPilot][CB-2798] clear_recovery_state: persist failed for queue %s",
-                        queue_id,
-                    )
-                    # Revert in-memory change
-                    queue.pause_reason = old_reason
 
         return {
             "ok": True,
@@ -2422,7 +2401,11 @@ class AutoPilotQueueService:
         """Get a queue by ID."""
         return self._queues.get(queue_id)
 
-    async def get_or_load_queue(self, queue_id: str) -> Optional["AutoPilotQueue"]:
+    async def get_or_load_queue(
+        self,
+        queue_id: str,
+        expected_project_id: Optional[str] = None,
+    ) -> Optional["AutoPilotQueue"]:
         """Return queue from memory if present; otherwise load from DB and cache.
 
         CB-2743 fix: endpoints that operate on paused queues (e.g. task-reset)
@@ -2430,11 +2413,26 @@ class AutoPilotQueueService:
         backend restart where the queue was not rehydrated yet because the user
         had not explicitly resumed it.
 
-        Returns None if not found anywhere (neither in-memory nor in DB).
+        CB-2802: when ``expected_project_id`` is supplied and the loaded queue's
+        ``project_id`` does not match, returns ``None`` (treated as not-found by
+        callers) so the queue's existence is NOT leaked to the caller.  This
+        closes the IDOR / broken-access-control gap where any caller knowing a
+        ``queue_id`` UUID could inspect or mutate ANY queue.
+
+        Returns None if not found anywhere (neither in-memory nor in DB) OR
+        if the project-id check fails.
         """
         # Fast path — in-memory cache
         queue = self._queues.get(queue_id)
         if queue is not None:
+            # CB-2802: project-scope check on in-memory hit.
+            if expected_project_id and queue.project_id != expected_project_id:
+                self._logger.warning(
+                    "[AutoPilot][CB-2802] get_or_load_queue: queue %s belongs to "
+                    "project %s but caller expects %s — returning None (not-found)",
+                    queue_id, queue.project_id, expected_project_id,
+                )
+                return None
             return queue
 
         # DB fallback — load the record and reconstruct the in-memory queue
@@ -2443,6 +2441,14 @@ class AutoPilotQueueService:
         async with AsyncSessionLocal() as session:
             record = await _load_queue(session, queue_id)
             if record is None:
+                return None
+            # CB-2802: project-scope check on DB load — do NOT cache if mismatch.
+            if expected_project_id and record.projectId != expected_project_id:
+                self._logger.warning(
+                    "[AutoPilot][CB-2802] get_or_load_queue: queue %s belongs to "
+                    "project %s but caller expects %s — returning None (not-found)",
+                    queue_id, record.projectId, expected_project_id,
+                )
                 return None
             queue = self._record_to_queue(record)
             self._queues[queue_id] = queue
@@ -2497,7 +2503,12 @@ class AutoPilotQueueService:
                 "session_id": t.session_id,
                 "started_at": t.started_at.isoformat() if t.started_at else None,
                 "completed_at": t.completed_at.isoformat() if t.completed_at else None,
-                "error": t.error,
+                # CB-2802: redact secrets from task error before serialising
+                # into API response — this field is the SOLE control on an
+                # externally-visible field; in-memory errors are already run
+                # through redact_secrets() at write time (CB-2765) but a
+                # defence-in-depth pass here catches any direct mutations.
+                "error": redact_secrets(t.error) if t.error else t.error,
                 "retry_count": t.retry_count,
                 "session_info": session_info,
             })
@@ -2535,7 +2546,10 @@ class AutoPilotQueueService:
             "created_at": queue.created_at.isoformat() if queue.created_at else None,
             "started_at": queue.started_at.isoformat() if queue.started_at else None,
             "completed_at": queue.completed_at.isoformat() if queue.completed_at else None,
-            "last_error": queue.last_error,
+            # CB-2802: redact secrets from last_error before exposing in API
+            # responses and SSE stream — defence-in-depth on top of the CB-2765
+            # write-time redaction in the run_queue loop.
+            "last_error": redact_secrets(queue.last_error) if queue.last_error else queue.last_error,
         }
 
     async def get_queue_status(self, queue_id: str) -> Optional[dict]:

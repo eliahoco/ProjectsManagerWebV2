@@ -1017,7 +1017,7 @@ async def create_queue(
     return await autopilot_queue_service.get_queue_status(queue.id)
 
 
-@router.get("/queue/active")
+@router.get("/queue/active", dependencies=[InternalAuthDep])  # CB-2802: auth gate added
 async def get_active_queue():
     """Get the currently active autopilot queue status."""
     active = autopilot_queue_service.get_active_queue()
@@ -1067,7 +1067,7 @@ async def get_queue_recovery_status():
     def _suggested_action(q) -> str:
         if q.id in zombie_ids:
             return "force-recover"
-        if q.auto_resume_attempts > autopilot_queue_service._AUTO_RESUME_MAX_ATTEMPTS:
+        if q.auto_resume_attempts >= autopilot_queue_service._AUTO_RESUME_MAX_ATTEMPTS:
             return "abort"
         if q.status == QueueStatus.WAITING_RESET:
             return "wait"
@@ -1082,6 +1082,9 @@ async def get_queue_recovery_status():
         return {
             "queue_id": q.id,
             "key": q.feature_key,
+            # CB-2802: project_id included so frontend can supply it as a
+            # required query param on all scoped queue endpoints.
+            "project_id": q.project_id,
             # CB-2798: state comes from q.status.value — no hard-coded literals.
             "state": q.status.value,
             "reason": q.pause_reason,
@@ -1094,6 +1097,11 @@ async def get_queue_recovery_status():
 
     recoverable_entries = [_entry(q, "recoverable") for q in recovered]
 
+    # CB-2802: the zombie and auto_resume_pending loops below use unscoped
+    # get_or_load_queue (no expected_project_id).  This is intentional —
+    # recovery-status is the operator crash-recovery console, not a per-project
+    # endpoint.  It is protected by InternalAuthDep and is a single-operator
+    # console; breadth across all projects is a feature, not a bug.
     zombie_entries = []
     for qid in zombie_ids:
         q = await autopilot_queue_service.get_or_load_queue(qid)
@@ -1123,14 +1131,22 @@ async def get_queue_recovery_status():
 
 
 @router.post("/queue/{queue_id}/clear-recovery", dependencies=[InternalAuthDep])  # CB-2766
-async def clear_queue_recovery(queue_id: str):
+async def clear_queue_recovery(
+    queue_id: str,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
     """Drop a queue from the post-crash recovery set after user takes action.
 
     CB-2798 (S5 RC5 fix): now awaits the expanded clear_recovery_state which
     cancels the auto-resume timer, removes from zombie/recovery sets, and
     transitions the queue to PAUSED/manual_cleared.  Returns 404 if the queue
     is not found in memory or DB.
+
+    CB-2802: project_id is REQUIRED — added to close the IDOR gap on this endpoint.
     """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
     result = await autopilot_queue_service.clear_recovery_state(queue_id)
     if not result.get("ok"):
         raise HTTPException(status_code=404, detail=result.get("error", "not_found"))
@@ -1307,17 +1323,35 @@ async def get_available_models():
 
 
 @router.get("/queue/{queue_id}")
-async def get_queue_status(queue_id: str):
-    """Get full status for a specific autopilot queue."""
-    status = await autopilot_queue_service.get_queue_status(queue_id)
-    if not status:
+async def get_queue_status(
+    queue_id: str,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
+    """Get full status for a specific autopilot queue.
+
+    CB-2802: project_id is REQUIRED (FastAPI auto-422s callers that omit it).
+    The lookup returns 404 on project mismatch so queue existence is not leaked
+    to callers from unrelated projects.
+    """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
         raise HTTPException(status_code=404, detail="Queue not found")
+    status = autopilot_queue_service._serialize_queue(queue)
     return status
 
 
 @router.post("/queue/{queue_id}/pause", dependencies=[InternalAuthDep])  # CB-2766
-async def pause_queue(queue_id: str):
-    """Pause the queue.  The current task finishes, then the queue waits."""
+async def pause_queue(
+    queue_id: str,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
+    """Pause the queue.  The current task finishes, then the queue waits.
+
+    CB-2802: project_id is REQUIRED and always enforced unconditionally.
+    """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
     success = await autopilot_queue_service.pause_queue(queue_id)
     if not success:
         raise HTTPException(
@@ -1331,6 +1365,7 @@ async def pause_queue(queue_id: str):
 async def resume_queue(
     queue_id: str,
     retry_failed: bool = Query(False, description="Reset all FAILED tasks to PENDING before resuming"),
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
 ):
     """Resume a paused or waiting queue.
 
@@ -1352,8 +1387,8 @@ async def resume_queue(
     from fastapi.responses import JSONResponse
     from services.autopilot_queue_service import QueueStatus, TaskStatus
 
-    # ── 1. Existence check ──────────────────────────────────────────────────
-    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    # ── 1. Existence check (CB-2802: also validates project ownership) ──────
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
     if queue is None:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -1458,9 +1493,24 @@ async def resume_queue(
     return {"success": True, "status": "resumed"}
 
 
+def _queue_id_key(request: Request) -> str:
+    """Rate-limit key function: use queue_id path param instead of client IP.
+
+    CB-2810: behind the local proxy all callers share the same IP, so an IP-
+    keyed limiter would exhaust a single shared bucket for ALL queues. Keying
+    on queue_id means each queue gets its own 5/min budget; different queues
+    cannot exhaust each other's budget.
+    """
+    return request.path_params.get("queue_id", "unknown")
+
+
 @router.post("/queue/{queue_id}/reset-failed-tasks", dependencies=[InternalAuthDep])  # CB-2796
-@limiter.limit("5/minute")  # CB-2793 Security Fix4: rate-limit to prevent repeated DB-walk abuse
-async def reset_failed_tasks(request: Request, queue_id: str):
+@limiter.limit("5/minute", key_func=_queue_id_key)  # CB-2810: per-queue bucket (not per-IP)
+async def reset_failed_tasks(
+    request: Request,
+    queue_id: str,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
     """Reset all FAILED tasks in the queue back to PENDING.
 
     CB-2796 (S3): new endpoint that allows the user to unblock a queue where
@@ -1469,9 +1519,9 @@ async def reset_failed_tasks(request: Request, queue_id: str):
     Returns:
         200 — ``{"queue_id": ..., "reset_count": int, "task_ids": [...], "task_keys": [...]}``
         404 — queue not found.
-        429 — rate limit exceeded (5 calls/minute per IP).
+        429 — rate limit exceeded (5 calls/minute per queue_id).
     """
-    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
     if queue is None:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -1480,8 +1530,17 @@ async def reset_failed_tasks(request: Request, queue_id: str):
 
 
 @router.post("/queue/{queue_id}/skip", dependencies=[InternalAuthDep])  # CB-2766
-async def skip_current_task(queue_id: str):
-    """Skip the currently executing task and move to the next one."""
+async def skip_current_task(
+    queue_id: str,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
+    """Skip the currently executing task and move to the next one.
+
+    CB-2802: project_id is REQUIRED and always enforced unconditionally.
+    """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
     success = await autopilot_queue_service.skip_current(queue_id)
     if not success:
         raise HTTPException(
@@ -1492,7 +1551,11 @@ async def skip_current_task(queue_id: str):
 
 
 @router.post("/queue/{queue_id}/abort", dependencies=[InternalAuthDep])  # CB-2766
-async def abort_queue(queue_id: str, request: AbortQueueRequest):
+async def abort_queue(
+    queue_id: str,
+    request: AbortQueueRequest,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
     """
     Abort the queue entirely.
 
@@ -1501,12 +1564,17 @@ async def abort_queue(queue_id: str, request: AbortQueueRequest):
     - "mark_failed": mark all pending tasks as FAILED
     - "mark_skipped": mark all pending tasks as SKIPPED
     - "reset_todo": PATCH all pending tasks back to TODO in the database
+
+    CB-2802: project_id is REQUIRED and always enforced unconditionally.
     """
+    # CB-2802: unconditional ownership check — 404 on project mismatch.
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
+
     # Handle reset_todo action: reset pending issues in DB, then abort with "leave"
-    # CB-2745: use get_or_load_queue so DB-only paused queues are found.
     abort_action = request.action
     if request.action == "reset_todo":
-        queue = await autopilot_queue_service.get_or_load_queue(queue_id)
         if queue:
             async with AsyncSessionLocal() as session_db:
                 for task in queue.tasks:
@@ -1531,15 +1599,19 @@ async def abort_queue(queue_id: str, request: AbortQueueRequest):
 async def wait_for_token_reset(
     queue_id: str,
     request: WaitForResetRequest,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
 ):
     """
     Schedule an automatic resume when tokens reset.
 
     If reset_time is provided (e.g. "3:00 PM"), the service will sleep
     until that time.  Otherwise it defaults to 60 minutes.
+
+    CB-2802: project_id is REQUIRED and always enforced unconditionally.
     """
     # CB-2745: use get_or_load_queue so DB-only paused queues are found.
-    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    # CB-2802: unconditional project-scope check.
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -1555,7 +1627,11 @@ async def wait_for_token_reset(
 
 
 @router.post("/queue/{queue_id}/task/{task_order}/reset", dependencies=[InternalAuthDep])  # CB-2766
-async def reset_queue_task(queue_id: str, task_order: int):
+async def reset_queue_task(
+    queue_id: str,
+    task_order: int,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
     """Reset a single task within a queue back to ``pending`` so it will be
     re-run on the next resume.
 
@@ -1573,7 +1649,8 @@ async def reset_queue_task(queue_id: str, task_order: int):
 
     # CB-2743: use get_or_load_queue so DB-only paused queues (i.e. after a
     # backend restart where rehydration hasn't run yet) can still be found.
-    queue = await autopilot_queue_service.get_or_load_queue(queue_id)
+    # CB-2802: pass project_id to validate project ownership (mismatch → 404).
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
     if not queue:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -1638,12 +1715,20 @@ async def reset_queue_task(queue_id: str, task_order: int):
     }
 
 
-@router.post("/queue/{queue_id}/switch-model")
+@router.post("/queue/{queue_id}/switch-model", dependencies=[InternalAuthDep])  # CB-2802: auth gate added
 async def switch_queue_model(
     queue_id: str,
     request: SwitchModelRequest,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
 ):
-    """Switch the execution provider/model and resume the queue."""
+    """Switch the execution provider/model and resume the queue.
+
+    CB-2802: project_id is REQUIRED and unconditionally enforced.
+    Auth gate added — was missing InternalAuthDep (CB-2802 fix 6).
+    """
+    queue = await autopilot_queue_service.get_or_load_queue(queue_id, expected_project_id=project_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail="Queue not found")
     success = await autopilot_queue_service.switch_model(
         queue_id, request.provider, request.model
     )
@@ -1657,10 +1742,16 @@ async def switch_queue_model(
 
 
 @router.get("/queue/{queue_id}/stream")
-async def stream_queue_status(queue_id: str, request: Request):
+async def stream_queue_status(
+    queue_id: str,
+    request: Request,
+    project_id: str = Query(..., description="Owning project id — required for access scoping (CB-2802)"),
+):
     """SSE endpoint for real-time autopilot queue status updates.
 
     Streams the full queue state every 2 seconds.
+    CB-2802: project_id is REQUIRED so callers cannot subscribe to SSE
+    streams for queues belonging to other projects.
     """
     async def event_generator():
         last_data = None
@@ -1669,7 +1760,15 @@ async def stream_queue_status(queue_id: str, request: Request):
                 logger.debug("SSE client disconnected from stream_queue_status (queue=%s)", queue_id)
                 break
             try:
-                status = await autopilot_queue_service.get_queue_status(queue_id)
+                # CB-2802: use project-scoped load so callers cannot subscribe
+                # to SSE streams for queues belonging to other projects.
+                queue = await autopilot_queue_service.get_or_load_queue(
+                    queue_id, expected_project_id=project_id
+                )
+                if not queue:
+                    yield f"event: error\ndata: {json.dumps({'error': 'Queue not found'})}\n\n"
+                    break
+                status = autopilot_queue_service._serialize_queue(queue)
                 if not status:
                     yield f"event: error\ndata: {json.dumps({'error': 'Queue not found'})}\n\n"
                     break

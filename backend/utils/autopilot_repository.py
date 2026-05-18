@@ -109,12 +109,18 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
     pause_reason = getattr(queue, "pause_reason", None)
     reset_time = getattr(queue, "reset_time", None)
 
+    _status_value = queue.status.value if hasattr(queue.status, "value") else str(queue.status)
     if record is None:
         record = AutoPilotQueueRecord(
             id=queue.id,
             projectId=queue.project_id,
             featureId=queue.feature_id,
-            status=queue.status.value if hasattr(queue.status, "value") else str(queue.status),
+            status=_status_value,
+            # CB-2808: mirror state == status so the two columns never diverge.
+            # transition_state() validates off `record.state or record.status`
+            # so a drift between them would cause spurious IllegalStateTransition
+            # errors after a save_queue-only update (e.g. safety-fallback path).
+            state=_status_value,
             currentIndex=queue.current_index,
             pauseReason=pause_reason,
             resetTime=reset_time,
@@ -129,7 +135,9 @@ async def save_queue(session: AsyncSession, queue) -> AutoPilotQueueRecord:
     else:
         record.projectId = queue.project_id
         record.featureId = queue.feature_id
-        record.status = queue.status.value if hasattr(queue.status, "value") else str(queue.status)
+        record.status = _status_value
+        # CB-2808: keep state == status so transition_state validation is correct.
+        record.state = _status_value
         record.currentIndex = queue.current_index
         record.pauseReason = pause_reason
         record.resetTime = reset_time
@@ -428,7 +436,13 @@ async def transition_state(
             record.stateReason = new_reason
             # Mirror to legacy columns so existing callers keep working.
             record.status = new_state
-            record.pauseReason = new_reason
+            # CB-2807: only clear/set pauseReason when transitioning INTO a
+            # pause-type state (paused / waiting_reset). For running / completed
+            # / aborted transitions we leave the column intact to preserve
+            # audit context — the in-memory _transition() mirror does the same.
+            _PAUSE_STATES = frozenset(["paused", "waiting_reset"])
+            if new_state in _PAUSE_STATES:
+                record.pauseReason = new_reason
             record.updatedAt = now
 
             if emit_event:
