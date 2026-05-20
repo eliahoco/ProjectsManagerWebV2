@@ -58,11 +58,12 @@ export function ChatInput({
   return (
     <div
       className={cn(
-        'flex items-end gap-2 border-t border-zinc-200/20 px-3 py-3',
-        'bg-white/80 backdrop-blur-sm',
+        // CB-2813: theme-aware. Light = parchment, Dark = zinc-900 match.
+        'flex items-end gap-2 border-t px-3 py-3 backdrop-blur-sm',
+        'bg-[#f5f4ed]/90 border-zinc-200/40',
+        'dark:bg-zinc-900/90 dark:border-zinc-800/60',
         className,
       )}
-      style={{ backgroundColor: 'rgba(245, 244, 237, 0.9)' }}
     >
       <textarea
         ref={textareaRef}
@@ -74,12 +75,14 @@ export function ChatInput({
         rows={1}
         aria-label="Chat message input"
         className={cn(
-          'flex-1 resize-none rounded-lg bg-white/70 border border-zinc-200',
-          'px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400',
+          'flex-1 resize-none rounded-lg border px-3 py-2 text-sm transition-colors',
+          // light theme
+          'bg-white/70 border-zinc-200 text-zinc-800 placeholder:text-zinc-400',
+          // dark theme override
+          'dark:bg-zinc-950/60 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder:text-zinc-500',
           'focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           'min-h-[38px] max-h-[150px] overflow-y-auto',
-          'transition-colors',
         )}
         style={{
           // Auto-grow: line-height ~1.5, clamp between 1 and 6 rows
@@ -102,7 +105,7 @@ export function ChatInput({
           'flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg transition-colors',
           canSubmit
             ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-            : 'bg-zinc-200 text-zinc-400 cursor-not-allowed',
+            : 'bg-zinc-200 text-zinc-400 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600',
         )}
       >
         <Send className="w-4 h-4" />

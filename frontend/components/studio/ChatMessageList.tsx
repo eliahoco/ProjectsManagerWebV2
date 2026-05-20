@@ -17,9 +17,10 @@ import type { StudioMessage } from '@/hooks/useStudio';
 // ─── Role badge ───────────────────────────────────────────────────────────────
 
 const ROLE_STYLES: Record<string, { label: string; className: string }> = {
-  user:      { label: 'You',   className: 'bg-zinc-700 text-zinc-200' },
-  assistant: { label: 'Jonny', className: 'bg-cyan-900/50 text-cyan-300' },
-  tool:      { label: 'Tool',  className: 'bg-purple-900/50 text-purple-300' },
+  // CB-2813: theme-aware badge colors so labels read on both surfaces.
+  user:      { label: 'You',   className: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200' },
+  assistant: { label: 'Jonny', className: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' },
+  tool:      { label: 'Tool',  className: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300' },
 };
 
 function RoleBadge({ role }: { role: string }) {
@@ -57,9 +58,11 @@ function ChatMessageBubble({ message }: { message: StudioMessage }) {
       <div
         className={cn(
           'max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed',
+          // CB-2813: theme-aware bubbles. Light = parchment-on-white,
+          // Dark = zinc-on-dark. Assistant bubble stays transparent.
           isUser
-            ? 'bg-zinc-800 text-zinc-100'
-            : 'bg-transparent text-zinc-200',
+            ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
+            : 'bg-transparent text-zinc-800 dark:text-zinc-200',
         )}
       >
         <p className="whitespace-pre-wrap break-words">{message.content}</p>

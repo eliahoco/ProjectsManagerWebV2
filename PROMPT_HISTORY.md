@@ -15845,3 +15845,9 @@ i don't know ho wyou idd the test but i can't even open a new conversation from 
 
 ---
 
+## 2026-05-20 23:12:00
+
+i see you fix part of the dark mode, but there is still ian issue, the studio now is in black more but the text box still white
+
+---
+
