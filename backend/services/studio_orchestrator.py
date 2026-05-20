@@ -440,37 +440,81 @@ class StudioOrchestrator:
                     from services.studio_chat_agent import get_studio_chat_agent  # noqa: PLC0415
 
                     agent = get_studio_chat_agent()
-                    async for event in agent.run_turn(session=session, db=db):
-                        event_type = event.get("type", "unknown")
 
-                        # ----- Visibility Principle: tool_call_started -----
-                        if event_type == "tool_call_started":
-                            await self._on_tool_call_started(
-                                tenant_id=tenant_id,
-                                session_id=session_id,
-                                event=event,
-                                db=db,
-                            )
+                    # SHIELD the agent generator from SSE-handler cancellation.
+                    # When the SSE client disconnects (StrictMode unmount, tab
+                    # close, network blip), the request task is cancelled. Without
+                    # shielding, the chat agent gets CancelledError mid-Anthropic-
+                    # call, the assistant message is never persisted, and the next
+                    # SSE reconnect sees `last=USER` and fires a FRESH duplicate
+                    # turn — exactly the "investigate / stop / start over" loop.
+                    #
+                    # We run the agent's stream as a background task that owns a
+                    # SEPARATE DB session. Events drain into a queue; the SSE
+                    # handler yields from the queue. If SSE is cancelled, the
+                    # background task keeps running, persists the assistant
+                    # message, releases the lock. Next SSE reconnect short-
+                    # circuits via the `last != USER` check above.
+                    event_queue: asyncio.Queue = asyncio.Queue()
+                    _SENTINEL = object()
 
-                        # ----- Persist assistant messages -----
-                        elif event_type == "message_complete":
-                            await self._on_assistant_message_complete(
-                                tenant_id=tenant_id,
-                                session_id=session_id,
-                                event=event,
-                                db=db,
-                            )
+                    async def _drain_agent() -> None:
+                        # Owns its own DB session so it survives SSE cancellation.
+                        async with AsyncSessionLocal() as drain_db:
+                            sess_local = await self.get_session(tenant_id, session_id, drain_db)
+                            if sess_local is None:
+                                await event_queue.put(_SENTINEL)
+                                return
+                            try:
+                                async for ev in agent.run_turn(session=sess_local, db=drain_db):
+                                    ev_type = ev.get("type", "unknown")
+                                    if ev_type == "tool_call_started":
+                                        await self._on_tool_call_started(
+                                            tenant_id=tenant_id,
+                                            session_id=session_id,
+                                            event=ev,
+                                            db=drain_db,
+                                        )
+                                    elif ev_type == "message_complete":
+                                        await self._on_assistant_message_complete(
+                                            tenant_id=tenant_id,
+                                            session_id=session_id,
+                                            event=ev,
+                                            db=drain_db,
+                                        )
+                                    elif ev_type == "subagent_started":
+                                        await self._on_subagent_started(
+                                            tenant_id=tenant_id,
+                                            session_id=session_id,
+                                            event=ev,
+                                            db=drain_db,
+                                        )
+                                    await event_queue.put(ev)
+                            except Exception:
+                                logger.exception(
+                                    "studio.run_turn background error session=%s",
+                                    session_id,
+                                )
+                                await event_queue.put({
+                                    "type": "error",
+                                    "code": "internal_error",
+                                    "message": "An internal error occurred",
+                                })
+                            finally:
+                                await event_queue.put(_SENTINEL)
 
-                        # ----- Sub-agent activity -----
-                        elif event_type == "subagent_started":
-                            await self._on_subagent_started(
-                                tenant_id=tenant_id,
-                                session_id=session_id,
-                                event=event,
-                                db=db,
-                            )
-
-                        yield event
+                    drain_task = asyncio.create_task(_drain_agent())
+                    try:
+                        while True:
+                            ev = await event_queue.get()
+                            if ev is _SENTINEL:
+                                break
+                            yield ev
+                    finally:
+                        # SSE may be cancelled — DO NOT cancel the drain task.
+                        # It keeps running to completion so the assistant
+                        # message gets persisted regardless.
+                        pass
 
                 except ImportError:
                     # Phase 6 agent not yet available — yield a graceful stub.

@@ -1201,12 +1201,21 @@ input[type="range"]::-moz-range-thumb:hover {
 }
 
 /* ─── Studio surface tokens (CB-2384) ──────────────────────────────────────── */
+/* CB-2813: split by theme class so chat panel matches the platform theme.
+   Default + .dark = deep neutrals matching the dark dashboard.
+   .light = original design-doc intent (Claude parchment + Cursor warm-dark). */
 
-:root {
-  /* Chat panel — Claude warm parchment */
-  --studio-chat-bg: #f5f4ed;
-  /* Artifact panel — Cursor warm-dark */
-  --studio-artifact-bg: #26251e;
+:root,
+.dark {
+  /* Chat panel — deep neutral matching dark dashboard */
+  --studio-chat-bg: #0a0a0c;
+  --studio-chat-text: #e4e4e7;
+  --studio-chat-border: rgba(255, 255, 255, 0.06);
+  --studio-user-bubble-bg: #18181b;
+  --studio-user-bubble-text: #f4f4f5;
+  --studio-assistant-text: #d4d4d8;
+  /* Artifact panel — slightly different dark for split-view contrast */
+  --studio-artifact-bg: #1a1a1d;
   /* Canvas background (Crew Map chrome) */
   --color-canvas: #08090a;
   /* Panel background */
@@ -1221,6 +1230,30 @@ input[type="range"]::-moz-range-thumb:hover {
   /* Text */
   --color-text-active: #f7f8f8;
   --color-text-muted: #8a8f98;
+}
+
+.light {
+  /* Chat panel — Claude warm parchment (design-doc intent for light mode) */
+  --studio-chat-bg: #f5f4ed;
+  --studio-chat-text: #18181b;
+  --studio-chat-border: rgba(0, 0, 0, 0.08);
+  --studio-user-bubble-bg: #e4e3dc;
+  --studio-user-bubble-text: #18181b;
+  --studio-assistant-text: #27272a;
+  /* Artifact panel — Cursor warm-dark (intentional split-view contrast) */
+  --studio-artifact-bg: #26251e;
+  /* Light-mode Crew Map chrome */
+  --color-canvas: #f8f9fa;
+  --color-panel: #ffffff;
+  --color-card: rgba(0, 0, 0, 0.02);
+  --color-card-border: rgba(0, 0, 0, 0.08);
+  /* Accent (Linear indigo on light) */
+  --color-accent: #5e6ad2;
+  /* Status */
+  --color-status-green: #16a34a;
+  /* Text */
+  --color-text-active: #18181b;
+  --color-text-muted: #71717a;
 }
 
 /* Inter Variable weight 510 — tab labels, priority pills, agent badges */
