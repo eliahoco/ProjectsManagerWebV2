@@ -32,7 +32,12 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/contexts/TenantContext', () => ({
   TenantProvider: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
-  useTenant: () => ({ workspaceId: 'default', tenantId: 'default' }),
+  useTenant: () => ({
+    workspaceId: 'default',
+    tenantId: 'default',
+    projectId: '1511e54f71dccd3fa79f67fe',
+    setProjectId: vi.fn(),
+  }),
 }));
 
 // ─── Zustand store mock ───────────────────────────────────────────────────────

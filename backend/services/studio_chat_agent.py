@@ -436,6 +436,11 @@ class StudioChatAgent:
         total_input_tokens = 0
         total_output_tokens = 0
         message_id = str(uuid.uuid4())
+        # Final assistant text across all tool-use rounds — sent in
+        # message_complete so the orchestrator can persist it to
+        # StudioMessage.content (otherwise the DB row has empty content
+        # and the UI shows no assistant response after refetch).
+        final_assistant_text = ""
 
         # We keep an accumulated messages list that grows with tool results
         working_messages = list(messages)
@@ -499,6 +504,13 @@ class StudioChatAgent:
                         tc["input"] = _json.loads(raw) if raw else {}
                     except _json.JSONDecodeError:
                         tc["input"] = {}
+
+            # Append this round's text to the final response. Each round
+            # ends with either a final answer (text + no tool calls) or
+            # an intermediate text block + tool calls. We want the full
+            # concatenation persisted into StudioMessage.content.
+            if text_accumulated:
+                final_assistant_text += text_accumulated
 
             # If no tool calls, we're done
             if not tool_calls_this_round:
@@ -578,6 +590,7 @@ class StudioChatAgent:
         yield {
             "type": "message_complete",
             "message_id": message_id,
+            "content": final_assistant_text,
             "tokens_input": total_input_tokens,
             "tokens_output": total_output_tokens,
             "cost_usd": cost_usd,

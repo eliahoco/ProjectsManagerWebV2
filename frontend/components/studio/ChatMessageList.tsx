@@ -23,7 +23,10 @@ const ROLE_STYLES: Record<string, { label: string; className: string }> = {
 };
 
 function RoleBadge({ role }: { role: string }) {
-  const style = ROLE_STYLES[role] ?? ROLE_STYLES.assistant;
+  // Backend persists role uppercase (StudioMessageRole.USER / ASSISTANT / TOOL_RESULT
+  // / SUB_AGENT). Normalize to lowercase for the style lookup.
+  const key = String(role || '').toLowerCase().split('_')[0];
+  const style = ROLE_STYLES[key] ?? ROLE_STYLES.assistant;
   return (
     <span
       className={cn(
@@ -39,7 +42,7 @@ function RoleBadge({ role }: { role: string }) {
 // ─── Single message bubble ────────────────────────────────────────────────────
 
 function ChatMessageBubble({ message }: { message: StudioMessage }) {
-  const isUser = message.role === 'user';
+  const isUser = String(message.role || '').toLowerCase() === 'user';
 
   return (
     <div

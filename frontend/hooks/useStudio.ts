@@ -5,17 +5,21 @@
  * so the cache is fully scoped per workspace and never bleeds across
  * workspace switches.
  *
+ * projectId is read from TenantContext (set via WorkspaceSwitcher). Switching
+ * projects invalidates the sessions list because the query key includes
+ * projectId: ['workspace', workspaceId, 'studio', 'projects', projectId, 'sessions'].
+ *
  * Backend stubs: endpoints return 404 until the backend lands. All hooks
  * handle non-2xx gracefully via React Query's built-in retry + error state.
  * The components receiving these hooks must render skeleton/empty states
  * on isLoading and fallback UI on isError (they will never crash).
  *
  * Endpoints (Phase 0 stub, Phase 1 real):
- *   GET  /api/studio/sessions          — list all sessions for workspace
- *   GET  /api/studio/sessions/:id      — single session detail
- *   POST /api/studio/sessions          — create new session
- *   GET  /api/studio/sessions/:id/messages — messages for a session
- *   POST /api/studio/sessions/:id/messages — send a message (returns 202 + streamUrl)
+ *   GET  /api/studio/projects/:projectId/sessions — list all sessions for project
+ *   GET  /api/studio/sessions/:id                 — single session detail
+ *   POST /api/studio/projects/:projectId/sessions — create new session
+ *   GET  /api/studio/sessions/:id/messages        — messages for a session
+ *   POST /api/studio/sessions/:id/messages        — send a message (returns 202 + streamUrl)
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -59,14 +63,10 @@ export interface SendMessageResponse {
   streamUrl: string;
 }
 
-// Phase 1 default project — the host platform itself (ProjectsManagerWebV2).
-// Phase 2 will replace this with a workspace-scoped project picker.
-export const DEFAULT_STUDIO_PROJECT_ID = '1511e54f71dccd3fa79f67fe';
-
 // ─── Session list ─────────────────────────────────────────────────────────────
 
-export function useStudioSessions(projectId: string = DEFAULT_STUDIO_PROJECT_ID) {
-  const { workspaceId, tenantId } = useTenant();
+export function useStudioSessions() {
+  const { workspaceId, tenantId, projectId } = useTenant();
 
   return useQuery<StudioSession[]>({
     queryKey: ['workspace', workspaceId, 'studio', 'projects', projectId, 'sessions'],
@@ -150,8 +150,8 @@ export function useStudioMessages(sessionId: string | null) {
 
 // ─── Create session ───────────────────────────────────────────────────────────
 
-export function useCreateStudioSession(projectId: string = DEFAULT_STUDIO_PROJECT_ID) {
-  const { workspaceId, tenantId } = useTenant();
+export function useCreateStudioSession() {
+  const { workspaceId, tenantId, projectId } = useTenant();
   const queryClient = useQueryClient();
 
   return useMutation<StudioSession, Error, CreateSessionInput>({
@@ -162,7 +162,12 @@ export function useCreateStudioSession(projectId: string = DEFAULT_STUDIO_PROJEC
         tenantId,
         {
           method: 'POST',
-          body: JSON.stringify(input),
+          // Pydantic StudioSessionCreate requires both projectId and title.
+          // projectId from URL is for routing; backend re-validates against body.
+          body: JSON.stringify({
+            projectId,
+            title: input.title ?? 'New conversation',
+          }),
         },
       ),
     onSuccess: () => {

@@ -16,11 +16,12 @@
  */
 
 import { useEffect, useRef, useReducer, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 const API_BASE =
   typeof process !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? '')
-    : '';
+    ? (process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8401')
+    : 'http://localhost:8401';
 
 // ─── Agent status types ───────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ export function useConversationStream(
   sessionId: string | null,
   workspaceId: string,
 ): ConversationStreamResult {
+  const queryClient = useQueryClient();
   const tokenBufferRef = useRef('');
   const [streamedContent, setStreamedContent] = useState('');
   const [agentStatuses, dispatch] = useReducer(agentStatusReducer, {});
@@ -218,6 +220,17 @@ export function useConversationStream(
             }
             break;
           }
+          case 'message_complete':
+          case 'message_replay':
+          case 'turn_complete':
+            // Server finished writing the assistant message. Force a refetch
+            // of useStudioMessages so the new ASSISTANT bubble renders.
+            // The streaming-text buffer keeps the visible text in place
+            // until the refetched messages arrive and supersede it.
+            queryClient.invalidateQueries({
+              queryKey: ['workspace', workspaceId, 'studio', 'sessions', sessionId, 'messages'],
+            });
+            break;
           default:
             break;
         }

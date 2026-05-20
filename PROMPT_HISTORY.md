@@ -15827,3 +15827,9 @@ Every table has: `id` (cuid PK), `tenantId` (nullable String), `createdAt` (serv
 
 ---
 
+## 2026-05-20 14:40:47
+
+I'm not sure you did the Chrome QA, user QA for regression. Two things I noticed at the beginning. First of all, I can see the studio on the top. Looks fine. The layout... I mean, the front end looks okay. The project manager basically show only the project manager VM to production project. I can't open conversation on one of the other projects because it's not in the list. And when I send a message, nothing answered. So the two major problems, uh, I see here. From... just from looking at it.
+
+---
+

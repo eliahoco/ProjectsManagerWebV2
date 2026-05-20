@@ -1672,3 +1672,89 @@ backlog routes: 11 | crew-map routes: 9
 
 ---
 
+## 2026-05-20 15:09:37
+
+<task-notification>
+<task-id>ab41580b29eaae4d8</task-id>
+<tool-use-id>toolu_01VznkUJWAdPetj2YNg1hTU2</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/ab41580b29eaae4d8.output</output-file>
+<status>completed</status>
+<summary>Agent "Fix workspace switcher real project list" completed</summary>
+<result>No TS errors in any of our changed files. All clear.
+
+Here is a summary of every file changed and the test/tsc results:
+
+---
+
+## Files Changed
+
+**`frontend/contexts/TenantContext.tsx`**
+Extended the context interface and provider to carry `projectId: string` and `setProjectId(id: string)`. The provider initialises `projectId` from `localStorage.getItem('studio-active-project-id')` (SSR-safe via `typeof window !== 'undefined'` guard) falling back to `'1511e54f71dccd3fa79f67fe'`. A `useEffect` persists every change back to `localStorage`. `useCallback` wraps the setter so it is stable across renders.
+
+**`frontend/components/workspace/WorkspaceSwitcher.tsx`**
+Replaced the hardcoded stub with a real implementation. `useQuery` (key `['projects-list']`) fetches `GET http://localhost:8401/api/projects`. Renders a `&lt;select&gt;` populated from the response. On change calls `setProjectId(...)` from `useTenant()`. Shows a disabled loading/error placeholder option during fetch. The `workspaceId` prop is now optional (the component reads what it needs from context directly).
+
+**`frontend/hooks/useStudio.ts`**
+Removed `DEFAULT_STUDIO_PROJECT_ID` constant and the default-parameter pattern on `useStudioSessions` and `useCreateStudioSession`. All hooks now call `useTenant()` and pull `projectId` from context. Query keys already included `projectId` in the correct position (`['workspace', workspaceId, 'studio', 'projects', projectId, 'sessions']`) — that structure is now driven by context rather than a call-site argument.
+
+**`frontend/hooks/useBacklog.ts`**
+Added `projectId` from `useTenant()` to the `useBacklogItems` query key (`['workspace', workspaceId, 'backlog', projectId, filters]`) and to all `invalidateQueries` calls in `useCreateBacklogItem` and `useUpdateBacklogItem`. Switching projects now correctly invalidates the backlog cache.
+
+**`frontend/__tests__/StudioPage.test.tsx`**
+Updated the `useTenant` mock to include `projectId: '1511e54f71dccd3fa79f67fe'` and `setProjectId: vi.fn()` to match the expanded context shape.
+
+**`frontend/__tests__/WorkspaceSwitcher.test.tsx`** (new file)
+9 tests across 3 describe blocks: loaded state (5 tests — all 3 projects rendered, default selection, setProjectId called on change, no call on same selection, chevron icon present), loading state (2 tests — select disabled, loading placeholder shown), error state (2 tests — select disabled, error placeholder shown). Uses a mutable `mockQueryResult` ref controlled per-test via `beforeEach` to avoid the `vi.mocked().mockReturnValue` incompatibility with static `vi.mock` factories.
+
+---
+
+## Test Results
+
+```
+Test Files   3 passed (3)
+      Tests  46 passed (46)
+   StudioPage.test.tsx         5 passed
+   AutoPilotFloatingBar.test.tsx  32 passed
+   WorkspaceSwitcher.test.tsx  9 passed
+```
+
+## TSC Results
+
+Zero TypeScript errors in any of the modified files. The pre-existing errors in `tests/components/IssueDetailModal.test.tsx`, `__tests__/bug-detail-view.test.tsx`, and `app/api/docker/metrics/route.ts` are unchanged from before this work.</result>
+<usage><total_tokens>67893</total_tokens><tool_uses>55</tool_uses><duration_ms>1431079</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 15:25:08
+
+<task-notification>
+<task-id>b9d3ws01s</task-id>
+<summary>Monitor event: "backend health after idempotency fix"</summary>
+<event>ready</event>
+</task-notification>
+
+---
+
+## 2026-05-20 15:25:08
+
+<task-notification>
+<task-id>b9d3ws01s</task-id>
+<tool-use-id>toolu_01GVPx3pJ5My2whqE5Ykgkfx</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/b9d3ws01s.output</output-file>
+<status>completed</status>
+<summary>Monitor "backend health after idempotency fix" stream ended</summary>
+</task-notification>
+
+---
+
+## 2026-05-20 15:30:09
+
+<task-notification>
+<task-id>bdjrydk8t</task-id>
+<summary>Monitor event: "backend ready w/ assistant-content fix"</summary>
+<event>ready</event>
+</task-notification>
+
+---
+

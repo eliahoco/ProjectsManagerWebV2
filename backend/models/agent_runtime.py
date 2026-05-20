@@ -53,7 +53,7 @@ class AgentTemplate(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -106,7 +106,7 @@ class AgentInstance(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -146,7 +146,7 @@ class TenantTokenUsage(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     __table_args__ = (

@@ -1,8 +1,12 @@
 /**
  * useBacklog — React Query hooks for the Studio Backlog feature.
  *
- * All query keys prefixed ['workspace', workspaceId, 'backlog', ...]
- * for workspace-scoped cache isolation.
+ * All query keys prefixed ['workspace', workspaceId, 'backlog', projectId, ...]
+ * for workspace- and project-scoped cache isolation. Switching projects via
+ * WorkspaceSwitcher causes the query keys to change, correctly invalidating
+ * the backlog cache for the previous project.
+ *
+ * projectId is read from TenantContext (set via WorkspaceSwitcher).
  *
  * 10-second polling keeps the list live without requiring SSE for backlog.
  *
@@ -59,7 +63,7 @@ export type UpdateBacklogItemInput = Partial<Omit<BacklogItem, 'id' | 'createdAt
 // ─── List backlog items ───────────────────────────────────────────────────────
 
 export function useBacklogItems(filters: BacklogFilters = {}) {
-  const { workspaceId, tenantId } = useTenant();
+  const { workspaceId, tenantId, projectId } = useTenant();
 
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
@@ -71,7 +75,7 @@ export function useBacklogItems(filters: BacklogFilters = {}) {
   const path = `/api/backlog/items${queryString ? `?${queryString}` : ''}`;
 
   return useQuery<BacklogItem[]>({
-    queryKey: ['workspace', workspaceId, 'backlog', filters],
+    queryKey: ['workspace', workspaceId, 'backlog', projectId, filters],
     queryFn: async () => {
       try {
         return await workspaceFetch<BacklogItem[]>(path, workspaceId, tenantId);
@@ -95,7 +99,7 @@ export function useBacklogItems(filters: BacklogFilters = {}) {
 // ─── Create backlog item ──────────────────────────────────────────────────────
 
 export function useCreateBacklogItem() {
-  const { workspaceId, tenantId } = useTenant();
+  const { workspaceId, tenantId, projectId } = useTenant();
   const queryClient = useQueryClient();
 
   return useMutation<BacklogItem, Error, CreateBacklogItemInput>({
@@ -106,7 +110,7 @@ export function useCreateBacklogItem() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['workspace', workspaceId, 'backlog'],
+        queryKey: ['workspace', workspaceId, 'backlog', projectId],
       });
     },
   });
@@ -115,7 +119,7 @@ export function useCreateBacklogItem() {
 // ─── Update backlog item ──────────────────────────────────────────────────────
 
 export function useUpdateBacklogItem() {
-  const { workspaceId, tenantId } = useTenant();
+  const { workspaceId, tenantId, projectId } = useTenant();
   const queryClient = useQueryClient();
 
   return useMutation<
@@ -135,10 +139,10 @@ export function useUpdateBacklogItem() {
       ),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({
-        queryKey: ['workspace', workspaceId, 'backlog'],
+        queryKey: ['workspace', workspaceId, 'backlog', projectId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['workspace', workspaceId, 'backlog', id],
+        queryKey: ['workspace', workspaceId, 'backlog', projectId, id],
       });
     },
   });

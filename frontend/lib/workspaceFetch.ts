@@ -3,8 +3,10 @@
  *
  * Injects X-Tenant-ID and X-Workspace-Id headers on every request to
  * /api/studio/, /api/backlog/, /api/crew-map/ (and any other Studio-layer
- * endpoint). No localhost hardcodes — API base URL comes from
- * NEXT_PUBLIC_API_URL or falls back to an empty string (same origin).
+ * endpoint). API base URL comes from NEXT_PUBLIC_BACKEND_URL (the existing
+ * codebase env var — matches `hooks/useCodeBoard.ts` `SSE_BACKEND_URL` and
+ * `components/codeboard/AutoPilotFloatingBar.tsx` `BACKEND_API`). Falls back
+ * to `http://localhost:8401` for local dev when the env var is unset.
  *
  * Phase 1: single tenant; tenantId defaults to "default".
  * Phase 2: JWT will replace this header; workspaceFetch shape stays the same.
@@ -12,8 +14,8 @@
 
 const API_BASE =
   typeof process !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? '')
-    : '';
+    ? (process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8401')
+    : 'http://localhost:8401';
 
 export interface WorkspaceFetchOptions extends Omit<RequestInit, 'headers'> {
   headers?: Record<string, string>;

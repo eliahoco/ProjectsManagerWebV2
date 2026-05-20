@@ -55,6 +55,16 @@ def _cuid() -> str:
     return str(uuid.uuid4())
 
 
+# Per-session locks preventing duplicate Anthropic turns when multiple SSE
+# connections open simultaneously (React StrictMode double-mount, reconnect
+# storms, multi-tab subscribes). The first connection acquires the lock and
+# drives the turn; later connections see `locked()` and short-circuit. After
+# the turn persists the assistant message, subsequent SSE handlers also
+# short-circuit via the "last message is USER?" check.
+_session_turn_locks: dict[str, "asyncio.Lock"] = {}
+import asyncio  # noqa: E402 — placed here to keep the comment block self-contained
+
+
 class StudioOrchestrator:
     """Orchestrates Studio sessions, messages, tool calls, and artifacts.
 
@@ -391,61 +401,93 @@ class StudioOrchestrator:
                 yield {"type": "error", "code": "session_not_found"}
                 return
 
-            try:
-                # Use the module-level singleton which is correctly wired with
-                # db_factory.  Importing StudioChatAgent() bare (no args) would
-                # raise TypeError because __init__ requires db_factory.
-                from services.studio_chat_agent import get_studio_chat_agent  # noqa: PLC0415
-
-                agent = get_studio_chat_agent()
-                async for event in agent.run_turn(session=session, db=db):
-                    event_type = event.get("type", "unknown")
-
-                    # ----- Visibility Principle: tool_call_started -----
-                    if event_type == "tool_call_started":
-                        await self._on_tool_call_started(
-                            tenant_id=tenant_id,
-                            session_id=session_id,
-                            event=event,
-                            db=db,
-                        )
-
-                    # ----- Persist assistant messages -----
-                    elif event_type == "message_complete":
-                        await self._on_assistant_message_complete(
-                            tenant_id=tenant_id,
-                            session_id=session_id,
-                            event=event,
-                            db=db,
-                        )
-
-                    # ----- Sub-agent activity -----
-                    elif event_type == "subagent_started":
-                        await self._on_subagent_started(
-                            tenant_id=tenant_id,
-                            session_id=session_id,
-                            event=event,
-                            db=db,
-                        )
-
-                    yield event
-
-            except ImportError:
-                # Phase 6 agent not yet available — yield a graceful stub.
-                logger.warning(
-                    "studio_chat_agent not found — streaming stub response"
+            # ── Idempotency: only run a turn if there is a pending USER message
+            # without a following ASSISTANT. Multiple SSE reconnects (React
+            # StrictMode dev-mode double-mount, exp-backoff retry, browser
+            # tab focus reload) would otherwise fire duplicate Anthropic turns
+            # for the same prompt. The SSE endpoint handles replay via
+            # last_seq separately; this short-circuit is for "no new work."
+            last = (
+                await db.execute(
+                    select(StudioMessage)
+                    .where(StudioMessage.sessionId == session_id)
+                    .order_by(StudioMessage.sequenceNum.desc())
+                    .limit(1)
                 )
-                yield {
-                    "type": "error",
-                    "code": "agent_not_available",
-                    "message": "StudioChatAgent not yet installed (Phase 6 pending)",
-                }
-            except Exception as exc:
-                # CRIT-2: log full exception server-side, never leak raw exc text to client.
-                logger.exception(
-                    "studio.stream_response error session=%s", session_id
-                )
-                yield {"type": "error", "code": "internal_error", "message": "An internal error occurred"}
+            ).scalar_one_or_none()
+            if last is None or last.role != "USER":
+                # No pending user prompt — emit terminator and exit.
+                yield {"type": "turn_complete", "reason": "no_pending_user_message"}
+                return
+
+            # Per-session lock so concurrent SSE handlers (StrictMode + reconnect)
+            # don't double-start the turn. The lock is released when the first
+            # generator finishes; subsequent SSE handlers find no pending USER
+            # (the assistant message has been persisted) and short-circuit above.
+            lock = _session_turn_locks.setdefault(session_id, asyncio.Lock())
+            if lock.locked():
+                # Another SSE handler is already driving this turn.
+                # Yield a turn_complete and exit; the client's primary EventSource
+                # will receive the real events from the live handler.
+                yield {"type": "turn_complete", "reason": "turn_in_flight_elsewhere"}
+                return
+
+            async with lock:
+                try:
+                    # Use the module-level singleton which is correctly wired with
+                    # db_factory.  Importing StudioChatAgent() bare (no args) would
+                    # raise TypeError because __init__ requires db_factory.
+                    from services.studio_chat_agent import get_studio_chat_agent  # noqa: PLC0415
+
+                    agent = get_studio_chat_agent()
+                    async for event in agent.run_turn(session=session, db=db):
+                        event_type = event.get("type", "unknown")
+
+                        # ----- Visibility Principle: tool_call_started -----
+                        if event_type == "tool_call_started":
+                            await self._on_tool_call_started(
+                                tenant_id=tenant_id,
+                                session_id=session_id,
+                                event=event,
+                                db=db,
+                            )
+
+                        # ----- Persist assistant messages -----
+                        elif event_type == "message_complete":
+                            await self._on_assistant_message_complete(
+                                tenant_id=tenant_id,
+                                session_id=session_id,
+                                event=event,
+                                db=db,
+                            )
+
+                        # ----- Sub-agent activity -----
+                        elif event_type == "subagent_started":
+                            await self._on_subagent_started(
+                                tenant_id=tenant_id,
+                                session_id=session_id,
+                                event=event,
+                                db=db,
+                            )
+
+                        yield event
+
+                except ImportError:
+                    # Phase 6 agent not yet available — yield a graceful stub.
+                    logger.warning(
+                        "studio_chat_agent not found — streaming stub response"
+                    )
+                    yield {
+                        "type": "error",
+                        "code": "agent_not_available",
+                        "message": "StudioChatAgent not yet installed (Phase 6 pending)",
+                    }
+                except Exception:
+                    # CRIT-2: log full exception server-side, never leak raw exc text to client.
+                    logger.exception(
+                        "studio.stream_response error session=%s", session_id
+                    )
+                    yield {"type": "error", "code": "internal_error", "message": "An internal error occurred"}
 
     # ------------------------------------------------------------------
     # Internal helpers for Visibility Principle writes

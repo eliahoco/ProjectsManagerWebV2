@@ -71,7 +71,7 @@ class StudioSession(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -154,7 +154,7 @@ class StudioMessage(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -210,7 +210,7 @@ class StudioToolCall(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -264,7 +264,7 @@ class StudioSubAgentRun(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -313,7 +313,7 @@ class StudioArtifact(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -357,7 +357,7 @@ class StudioHierarchyDraft(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
@@ -397,7 +397,7 @@ class StudioAgentActivity(Base):
 
     createdAt = Column(DateTime, server_default=func.now(), nullable=False)
     updatedAt = Column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime, default=func.now(), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
