@@ -61,7 +61,17 @@ function Provider({ sessionId, workspaceId, children }: ProviderProps) {
   // Single EventSource per session — children read `streamedContent` from
   // context rather than re-invoking the hook (which would open a second
   // SSE connection for every consumer).
-  const { streamedContent } = useConversationStream(sessionId, workspaceId);
+  // `sendTrigger` from Zustand is bumped by Chat.Input on every send so the
+  // hook re-opens the SSE for the next turn (previous SSE closed terminally
+  // after `done` to prevent reconnect storms).
+  const sendTrigger = useStudioStore((s) =>
+    sessionId ? (s.sendCounters[sessionId] ?? 0) : 0,
+  );
+  const { streamedContent } = useConversationStream(
+    sessionId,
+    workspaceId,
+    sendTrigger,
+  );
   const isStreaming = streamedContent.length > 0;
 
   return (
@@ -100,7 +110,7 @@ interface InputProps {
 function Input({ className }: InputProps) {
   const { sessionId, workspaceId, isStreaming } = useChatContext();
   const sendMessage = useSendMessage(sessionId);
-  const { drafts, setDraft } = useStudioStore();
+  const { drafts, setDraft, bumpSendCounter } = useStudioStore();
 
   const draft = sessionId ? (drafts[sessionId] ?? '') : '';
 
@@ -115,9 +125,18 @@ function Input({ className }: InputProps) {
     (value: string) => {
       if (!sessionId) return;
       setDraft(sessionId, '');
-      sendMessage.mutate({ content: value });
+      sendMessage.mutate(
+        { content: value },
+        {
+          onSuccess: () => {
+            // Re-open SSE for this turn — the previous one closed terminally
+            // after the last turn_complete to avoid reconnect storms.
+            bumpSendCounter(sessionId);
+          },
+        },
+      );
     },
-    [sessionId, setDraft, sendMessage],
+    [sessionId, setDraft, sendMessage, bumpSendCounter],
   );
 
   return (

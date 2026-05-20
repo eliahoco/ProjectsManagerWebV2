@@ -37,6 +37,14 @@ interface StudioStoreState extends PersistedShape {
   tabs: TabState[];
   activeTabId: string | null;
   drafts: Record<string, string>;
+  /**
+   * Per-session counter incremented every time the user sends a new message.
+   * `useConversationStream` reads this via its `sendTrigger` arg — bumping it
+   * causes the hook's useEffect to re-fire and open a fresh SSE connection
+   * for the new turn. (After turn_complete the previous SSE closes
+   * terminally; without this bump the next prompt would never get a stream.)
+   */
+  sendCounters: Record<string, number>;
 
   // Actions
   openTab: (tab: TabState) => void;
@@ -45,6 +53,7 @@ interface StudioStoreState extends PersistedShape {
   setDraft: (sessionId: string, text: string) => void;
   setPanelRatio: (ratio: number) => void;
   updateTab: (id: string, patch: Partial<Omit<TabState, 'id'>>) => void;
+  bumpSendCounter: (sessionId: string) => void;
 }
 
 export const useStudioStore = create<StudioStoreState>()(
@@ -54,6 +63,7 @@ export const useStudioStore = create<StudioStoreState>()(
       tabs: [],
       activeTabId: null,
       drafts: {},
+      sendCounters: {},
       panelRatio: 0.6,
 
       // ─── Actions ──────────────────────────────────────────────────────
@@ -113,6 +123,15 @@ export const useStudioStore = create<StudioStoreState>()(
       updateTab(id, patch) {
         set((s) => ({
           tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+        }));
+      },
+
+      bumpSendCounter(sessionId) {
+        set((s) => ({
+          sendCounters: {
+            ...s.sendCounters,
+            [sessionId]: (s.sendCounters[sessionId] ?? 0) + 1,
+          },
         }));
       },
     }),

@@ -416,7 +416,11 @@ class StudioOrchestrator:
                 )
             ).scalar_one_or_none()
             if last is None or last.role != "USER":
-                # No pending user prompt — emit terminator and exit.
+                # No pending user prompt — close cleanly with a terminal event.
+                # The frontend hook MUST treat `done` as terminal (no reconnect),
+                # otherwise it would reconnect-storm. Keeping the connection
+                # idle here leaks server sockets if the client tab vanishes
+                # without sending FIN (Chrome doesn't always reliably emit it).
                 yield {"type": "turn_complete", "reason": "no_pending_user_message"}
                 return
 
@@ -427,8 +431,7 @@ class StudioOrchestrator:
             lock = _session_turn_locks.setdefault(session_id, asyncio.Lock())
             if lock.locked():
                 # Another SSE handler is already driving this turn.
-                # Yield a turn_complete and exit; the client's primary EventSource
-                # will receive the real events from the live handler.
+                # Close cleanly. Frontend hook treats `done` as terminal.
                 yield {"type": "turn_complete", "reason": "turn_in_flight_elsewhere"}
                 return
 

@@ -15839,3 +15839,9 @@ tring to run something on the studio and it looks like it is in a loop
 
 ---
 
+## 2026-05-20 22:33:46
+
+i don't know ho wyou idd the test but i can't even open a new conversation from the UI
+
+---
+

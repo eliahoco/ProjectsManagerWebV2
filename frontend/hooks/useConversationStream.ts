@@ -125,6 +125,11 @@ export interface ConversationStreamResult {
 export function useConversationStream(
   sessionId: string | null,
   workspaceId: string,
+  // Incremented by the caller every time a new user message is sent.
+  // Triggers a fresh SSE connection so the agent's response streams.
+  // Without this, after the first turn closes cleanly (terminalClosed),
+  // the hook would not reconnect for subsequent prompts.
+  sendTrigger: number = 0,
 ): ConversationStreamResult {
   const queryClient = useQueryClient();
   const tokenBufferRef = useRef('');
@@ -139,6 +144,11 @@ export function useConversationStream(
   const reconnectDelayRef = useRef(1000);
   const lastEventIdRef = useRef<string | undefined>(undefined);
   const isMountedRef = useRef(true);
+  // Set true when the backend signals turn_complete + done — DO NOT reconnect.
+  // Native EventSource would otherwise treat the server close as an error
+  // and reconnect endlessly, producing a connection storm that exhausts
+  // Chrome's per-origin socket pool and freezes the tab.
+  const terminalClosedRef = useRef(false);
 
   const clearStreamedContent = () => {
     tokenBufferRef.current = '';
@@ -233,9 +243,18 @@ export function useConversationStream(
               queryKey: ['workspace', workspaceId, 'studio', 'sessions', sessionId, 'messages'],
             });
             // Clear the streaming buffer — the persisted DB message replaces it.
-            // (If both stayed visible we'd render a duplicate Jonny bubble.)
             tokenBufferRef.current = '';
             setStreamedContent('');
+            // Mark this connection terminal so onerror doesn't reconnect-storm.
+            terminalClosedRef.current = true;
+            break;
+          case 'done':
+            // Backend's final SSE frame. Close the EventSource intentionally
+            // and DO NOT reconnect — the conversation is parked. A new POST
+            // /messages will trigger a new EventSource later.
+            terminalClosedRef.current = true;
+            esRef.current?.close();
+            setIsConnected(false);
             break;
           default:
             break;
@@ -267,12 +286,15 @@ export function useConversationStream(
       es.onerror = () => {
         if (!isMountedRef.current) return;
 
-        // Check for 401 — stop reconnecting
-        // EventSource doesn't expose status directly; we rely on the
-        // backend convention of closing cleanly on 401 vs erroring on other cases.
-        // Best effort: if we were never connected, treat as potential auth error.
         es.close();
         setIsConnected(false);
+
+        // If the backend sent `done`, we deliberately closed — DO NOT reconnect.
+        // Without this guard, every chat turn that completes would trigger an
+        // endless reconnect loop and exhaust Chrome's per-origin socket pool.
+        if (terminalClosedRef.current) {
+          return;
+        }
 
         const delay = Math.min(reconnectDelayRef.current, 30_000);
         reconnectDelayRef.current = delay * 2;
@@ -300,7 +322,10 @@ export function useConversationStream(
       clearTimeout(reconnectTimeoutRef.current);
       setIsConnected(false);
     };
-  }, [sessionId, workspaceId]);
+    // Reset terminal flag on every (re)connect attempt so a new sendTrigger
+    // re-opens the SSE after the previous turn closed.
+    terminalClosedRef.current = false;
+  }, [sessionId, workspaceId, sendTrigger]);
 
   return {
     streamedContent,
