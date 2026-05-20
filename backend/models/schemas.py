@@ -7,7 +7,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from typing import Optional, List, Any, Dict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 
 
@@ -1447,3 +1447,743 @@ class AutoPilotMetricsResponse(BaseModel):
     aborted: int = 0
     autoPause24h: int = 0
     avgResetWaitSeconds: Optional[float] = None
+
+
+# ============================================
+# Studio Schemas (CB-2384)
+# ============================================
+
+
+class StudioSessionStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    HIBERNATED = "HIBERNATED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class StudioMessageRole(str, Enum):
+    USER = "USER"
+    ASSISTANT = "ASSISTANT"
+    TOOL_RESULT = "TOOL_RESULT"
+    SUB_AGENT = "SUB_AGENT"
+
+
+class StudioToolCallStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class StudioSubAgentRole(str, Enum):
+    RESEARCHER = "RESEARCHER"
+    DESIGNER = "DESIGNER"
+    BREAKDOWN_WRITER = "BREAKDOWN_WRITER"
+    AUDITOR = "AUDITOR"
+
+
+class StudioSubAgentStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    DONE = "DONE"
+    FAILED = "FAILED"
+
+
+class StudioArtifactKind(str, Enum):
+    MARKDOWN = "MARKDOWN"
+    MERMAID = "MERMAID"
+    CODE = "CODE"
+    HTML = "HTML"
+    HIERARCHY_JSON = "HIERARCHY_JSON"
+    IMAGE = "IMAGE"
+    OTHER = "OTHER"
+
+
+class StudioHierarchyDraftStatus(str, Enum):
+    DRAFT = "DRAFT"
+    REVIEWING = "REVIEWING"
+    APPROVED = "APPROVED"
+    PROMOTED = "PROMOTED"
+    FAILED = "FAILED"
+
+
+class StudioAgentActivityVerb(str, Enum):
+    NOTIFY = "NOTIFY"
+    REQUEST = "REQUEST"
+    DELEGATE = "DELEGATE"
+    BROADCAST = "BROADCAST"
+
+
+# --- StudioSession ---
+
+class StudioSessionCreate(BaseModel):
+    """Schema for creating a new StudioSession."""
+    projectId: str
+    title: str = Field(..., min_length=1, max_length=500)
+    status: StudioSessionStatus = StudioSessionStatus.ACTIVE
+    planningState: Dict[str, Any] = Field(default_factory=dict)
+    tokenBudget: int = Field(default=50000, ge=1)
+    createdBy: Optional[str] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioSessionUpdate(BaseModel):
+    """Schema for PATCHing a StudioSession — all fields optional."""
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+    status: Optional[StudioSessionStatus] = None
+    planningState: Optional[Dict[str, Any]] = None
+    tokenBudget: Optional[int] = Field(None, ge=1)
+    tokensUsed: Optional[int] = Field(None, ge=0)
+    lastMessageAt: Optional[datetime] = None
+
+
+class StudioSessionResponse(BaseModel):
+    """Schema for StudioSession response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    projectId: str
+    title: str
+    status: str
+    planningState: Dict[str, Any] = Field(default_factory=dict)
+    lastMessageAt: Optional[datetime] = None
+    tokenBudget: int
+    tokensUsed: int
+    createdBy: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("lastMessageAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioMessage ---
+
+class StudioMessageCreate(BaseModel):
+    """Schema for appending a new StudioMessage."""
+    sessionId: str
+    sequenceNum: int = Field(..., ge=0)
+    role: StudioMessageRole
+    content: Any
+    model: Optional[str] = None
+    tokensInput: int = Field(default=0, ge=0)
+    tokensOutput: int = Field(default=0, ge=0)
+    costUsd: float = Field(default=0.0, ge=0.0)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioMessageUpdate(BaseModel):
+    """Schema for PATCHing a StudioMessage — content corrections only."""
+    content: Optional[Any] = None
+    tokensInput: Optional[int] = Field(None, ge=0)
+    tokensOutput: Optional[int] = Field(None, ge=0)
+    costUsd: Optional[float] = Field(None, ge=0.0)
+
+
+class StudioMessageResponse(BaseModel):
+    """Schema for StudioMessage response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    sequenceNum: int
+    role: str
+    content: Any
+    model: Optional[str] = None
+    tokensInput: int
+    tokensOutput: int
+    costUsd: float
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioToolCall ---
+
+class StudioToolCallCreate(BaseModel):
+    """Schema for recording a new StudioToolCall."""
+    sessionId: str
+    messageId: Optional[str] = None
+    toolName: str = Field(..., min_length=1, max_length=200)
+    input: Any
+    output: Optional[Any] = None
+    status: StudioToolCallStatus = StudioToolCallStatus.PENDING
+    error: Optional[str] = None
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioToolCallUpdate(BaseModel):
+    """Schema for PATCHing a StudioToolCall."""
+    output: Optional[Any] = None
+    status: Optional[StudioToolCallStatus] = None
+    error: Optional[str] = None
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+
+
+class StudioToolCallResponse(BaseModel):
+    """Schema for StudioToolCall response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    messageId: Optional[str] = None
+    toolName: str
+    input: Any
+    output: Optional[Any] = None
+    status: str
+    error: Optional[str] = None
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("startedAt", "completedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioSubAgentRun ---
+
+class StudioSubAgentRunCreate(BaseModel):
+    """Schema for recording a new StudioSubAgentRun."""
+    sessionId: str
+    parentMessageId: Optional[str] = None
+    agentRole: StudioSubAgentRole
+    inputSnapshot: Any
+    outputSnapshot: Optional[Any] = None
+    status: StudioSubAgentStatus = StudioSubAgentStatus.PENDING
+    model: str = Field(..., min_length=1)
+    tokensInput: int = Field(default=0, ge=0)
+    tokensOutput: int = Field(default=0, ge=0)
+    costUsd: float = Field(default=0.0, ge=0.0)
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioSubAgentRunUpdate(BaseModel):
+    """Schema for PATCHing a StudioSubAgentRun."""
+    outputSnapshot: Optional[Any] = None
+    status: Optional[StudioSubAgentStatus] = None
+    tokensInput: Optional[int] = Field(None, ge=0)
+    tokensOutput: Optional[int] = Field(None, ge=0)
+    costUsd: Optional[float] = Field(None, ge=0.0)
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+
+
+class StudioSubAgentRunResponse(BaseModel):
+    """Schema for StudioSubAgentRun response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    parentMessageId: Optional[str] = None
+    agentRole: str
+    inputSnapshot: Any
+    outputSnapshot: Optional[Any] = None
+    status: str
+    model: str
+    tokensInput: int
+    tokensOutput: int
+    costUsd: float
+    startedAt: Optional[datetime] = None
+    completedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("startedAt", "completedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioArtifact ---
+
+class StudioArtifactCreate(BaseModel):
+    """Schema for creating a new StudioArtifact."""
+    sessionId: str
+    name: str = Field(..., min_length=1, max_length=500)
+    kind: StudioArtifactKind
+    content: Optional[str] = None
+    storageUrl: Optional[str] = None
+    sizeBytes: int = Field(default=0, ge=0)
+    sha256: str = Field(..., min_length=64, max_length=64)
+    version: int = Field(default=1, ge=1)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioArtifactUpdate(BaseModel):
+    """Schema for PATCHing a StudioArtifact (version bump only)."""
+    content: Optional[str] = None
+    storageUrl: Optional[str] = None
+    sizeBytes: Optional[int] = Field(None, ge=0)
+    sha256: Optional[str] = Field(None, min_length=64, max_length=64)
+    version: Optional[int] = Field(None, ge=1)
+
+
+class StudioArtifactResponse(BaseModel):
+    """Schema for StudioArtifact response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    name: str
+    kind: str
+    content: Optional[str] = None
+    storageUrl: Optional[str] = None
+    sizeBytes: int
+    sha256: str
+    version: int
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioHierarchyDraft ---
+
+class StudioHierarchyDraftCreate(BaseModel):
+    """Schema for creating a new StudioHierarchyDraft."""
+    sessionId: str
+    tree: Any
+    status: StudioHierarchyDraftStatus = StudioHierarchyDraftStatus.DRAFT
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioHierarchyDraftUpdate(BaseModel):
+    """Schema for PATCHing a StudioHierarchyDraft."""
+    tree: Optional[Any] = None
+    status: Optional[StudioHierarchyDraftStatus] = None
+    promotedToFeatureId: Optional[str] = None
+    approvedBy: Optional[str] = None
+    approvedAt: Optional[datetime] = None
+
+
+class StudioHierarchyDraftResponse(BaseModel):
+    """Schema for StudioHierarchyDraft response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    tree: Any
+    status: str
+    promotedToFeatureId: Optional[str] = None
+    approvedBy: Optional[str] = None
+    approvedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("approvedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- StudioAgentActivity ---
+
+class StudioAgentActivityCreate(BaseModel):
+    """Schema for appending a new StudioAgentActivity entry."""
+    sessionId: str
+    verb: StudioAgentActivityVerb
+    sourceAgent: str = Field(..., min_length=1, max_length=200)
+    targetAgent: Optional[str] = Field(None, max_length=200)
+    payload: Any
+    chainDepth: int = Field(default=0, ge=0)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class StudioAgentActivityUpdate(BaseModel):
+    """Schema for PATCHing a StudioAgentActivity (payload correction)."""
+    payload: Optional[Any] = None
+
+
+class StudioAgentActivityResponse(BaseModel):
+    """Schema for StudioAgentActivity response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: str
+    verb: str
+    sourceAgent: str
+    targetAgent: Optional[str] = None
+    payload: Any
+    chainDepth: int
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# ============================================
+# Agent Runtime Schemas (CB-2384)
+# ============================================
+
+
+# --- AgentTemplate ---
+
+class AgentTemplateCreate(BaseModel):
+    """Schema for registering a new AgentTemplate."""
+    key: str = Field(..., min_length=1, max_length=200)
+    version: int = Field(..., ge=1)
+    systemPrompt: str = Field(..., min_length=1)
+    tools: Any
+    modelDefault: str = Field(..., min_length=1, max_length=200)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class AgentTemplateUpdate(BaseModel):
+    """Schema for PATCHing an AgentTemplate."""
+    systemPrompt: Optional[str] = None
+    tools: Optional[Any] = None
+    modelDefault: Optional[str] = Field(None, min_length=1, max_length=200)
+
+
+class AgentTemplateResponse(BaseModel):
+    """Schema for AgentTemplate response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    key: str
+    version: int
+    systemPrompt: str
+    tools: Any
+    modelDefault: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- AgentInstance ---
+
+class AgentInstanceCreate(BaseModel):
+    """Schema for creating a new AgentInstance."""
+    sessionId: Optional[str] = None
+    templateId: str
+    memory: Dict[str, Any] = Field(default_factory=dict)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class AgentInstanceUpdate(BaseModel):
+    """Schema for PATCHing an AgentInstance (memory update)."""
+    memory: Optional[Dict[str, Any]] = None
+
+
+class AgentInstanceResponse(BaseModel):
+    """Schema for AgentInstance response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    sessionId: Optional[str] = None
+    templateId: str
+    memory: Dict[str, Any]
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- TenantTokenUsage ---
+
+class TenantTokenUsageCreate(BaseModel):
+    """Schema for upserting a TenantTokenUsage row."""
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+    date: date
+    tokensInput: int = Field(default=0, ge=0)
+    tokensOutput: int = Field(default=0, ge=0)
+    costUsd: float = Field(default=0.0, ge=0.0)
+    modelBreakdown: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TenantTokenUsageUpdate(BaseModel):
+    """Schema for PATCHing a TenantTokenUsage row (increment deltas)."""
+    tokensInput: Optional[int] = Field(None, ge=0)
+    tokensOutput: Optional[int] = Field(None, ge=0)
+    costUsd: Optional[float] = Field(None, ge=0.0)
+    modelBreakdown: Optional[Dict[str, Any]] = None
+
+
+class TenantTokenUsageResponse(BaseModel):
+    """Schema for TenantTokenUsage response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    date: date
+    tokensInput: int
+    tokensOutput: int
+    costUsd: float
+    modelBreakdown: Dict[str, Any]
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("date", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# ============================================
+# Backlog Schemas (CB-2384)
+# ============================================
+
+
+class BacklogItemStatus(str, Enum):
+    DRAFT = "DRAFT"
+    REVIEWING = "REVIEWING"
+    APPROVED = "APPROVED"
+    SCHEDULED = "SCHEDULED"
+    PROMOTED = "PROMOTED"
+    SHIPPED = "SHIPPED"
+    ARCHIVED = "ARCHIVED"
+
+
+class BacklogItemPriority(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+# --- BacklogItem ---
+
+class BacklogItemCreate(BaseModel):
+    """Schema for creating a new BacklogItem."""
+    projectId: str
+    title: str = Field(..., min_length=1, max_length=500)
+    description: Optional[str] = None
+    priority: BacklogItemPriority = BacklogItemPriority.MEDIUM
+    status: BacklogItemStatus = BacklogItemStatus.DRAFT
+    scheduledFor: Optional[datetime] = None
+    cronExpression: Optional[str] = None
+    sourceSessionId: Optional[str] = None
+    sourceArtifactId: Optional[str] = None
+    ownerEmail: Optional[str] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class BacklogItemUpdate(BaseModel):
+    """Schema for PATCHing a BacklogItem — all fields optional."""
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
+    description: Optional[str] = None
+    priority: Optional[BacklogItemPriority] = None
+    status: Optional[BacklogItemStatus] = None
+    scheduledFor: Optional[datetime] = None
+    cronExpression: Optional[str] = None
+    # LOW-6: promotedToFeatureId and promoteJobId are written only by the server-side
+    # promote pipeline, never accepted from PATCH request bodies.
+    ownerEmail: Optional[str] = None
+
+
+class BacklogItemResponse(BaseModel):
+    """Schema for BacklogItem response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    projectId: str
+    title: str
+    description: Optional[str] = None
+    priority: str
+    status: str
+    scheduledFor: Optional[datetime] = None
+    cronExpression: Optional[str] = None
+    sourceSessionId: Optional[str] = None
+    sourceArtifactId: Optional[str] = None
+    promotedToFeatureId: Optional[str] = None
+    promoteJobId: Optional[str] = None
+    ownerEmail: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("scheduledFor", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- BacklogComment ---
+
+class BacklogCommentCreate(BaseModel):
+    """Schema for creating a new BacklogComment."""
+    itemId: str
+    author: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class BacklogCommentUpdate(BaseModel):
+    """Schema for PATCHing a BacklogComment."""
+    content: Optional[str] = Field(None, min_length=1)
+
+
+class BacklogCommentResponse(BaseModel):
+    """Schema for BacklogComment response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    itemId: str
+    author: str
+    content: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- BacklogActivity ---
+
+class BacklogActivityCreate(BaseModel):
+    """Schema for appending a new BacklogActivity entry."""
+    itemId: str
+    action: str = Field(..., min_length=1, max_length=200)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    actor: Optional[str] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class BacklogActivityUpdate(BaseModel):
+    """Schema for PATCHing a BacklogActivity (payload correction only)."""
+    payload: Optional[Dict[str, Any]] = None
+
+
+class BacklogActivityResponse(BaseModel):
+    """Schema for BacklogActivity response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    itemId: str
+    action: str
+    payload: Dict[str, Any]
+    actor: Optional[str] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# ============================================
+# Crew Map Schemas (CB-2384)
+# ============================================
+
+
+class CrewAssignmentStatus(str, Enum):
+    ASSIGNED = "ASSIGNED"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    RELEASED = "RELEASED"
+
+
+# --- CrewAssignment ---
+
+class CrewAssignmentCreate(BaseModel):
+    """Schema for creating a new CrewAssignment."""
+    projectId: str
+    issueId: str
+    agentTemplateId: str
+    roleLabel: str = Field(..., min_length=1, max_length=200)
+    status: CrewAssignmentStatus = CrewAssignmentStatus.ASSIGNED
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class CrewAssignmentUpdate(BaseModel):
+    """Schema for PATCHing a CrewAssignment."""
+    roleLabel: Optional[str] = Field(None, min_length=1, max_length=200)
+    status: Optional[CrewAssignmentStatus] = None
+
+
+class CrewAssignmentResponse(BaseModel):
+    """Schema for CrewAssignment response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    projectId: str
+    issueId: str
+    agentTemplateId: str
+    roleLabel: str
+    status: str
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)
+
+
+# --- CrewSkillUsage ---
+
+class CrewSkillUsageCreate(BaseModel):
+    """Schema for recording a new CrewSkillUsage row."""
+    assignmentId: str
+    skillName: str = Field(..., min_length=1, max_length=200)
+    invocationCount: int = Field(default=0, ge=0)
+    lastUsedAt: Optional[datetime] = None
+    # HIGH-3: tenantId must be derived from TenantDep on the server, never accepted from client.
+
+
+class CrewSkillUsageUpdate(BaseModel):
+    """Schema for PATCHing a CrewSkillUsage (counter increment)."""
+    invocationCount: Optional[int] = Field(None, ge=0)
+    lastUsedAt: Optional[datetime] = None
+
+
+class CrewSkillUsageResponse(BaseModel):
+    """Schema for CrewSkillUsage response."""
+    id: str
+    # INFO-6: tenantId omitted from response; clients should not see tenant IDs.
+    assignmentId: str
+    skillName: str
+    invocationCount: int
+    lastUsedAt: Optional[datetime] = None
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer("lastUsedAt", "createdAt", "updatedAt", when_used="json")
+    def _serialize_utc(self, dt: Optional[datetime]) -> Optional[str]:
+        return _isoformat_utc_z(dt)

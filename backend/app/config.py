@@ -2,6 +2,7 @@
 Application configuration settings
 """
 
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
@@ -50,6 +51,11 @@ class Settings(BaseSettings):
     WEBHOOK_SECRET: str = ""  # GitHub webhook secret - required in production
     REQUIRE_WEBHOOK_SIGNATURE: bool = True  # Set to False only for development
 
+    # CB-2384 Studio: default tenant used in Phase 1 (single-user mode).
+    # Every new Studio table carries tenant_id nullable now; this constant
+    # is the fallback so the get_tenant_id dep never returns None.
+    DEFAULT_TENANT_ID: str = "default"
+
     # CB-2666: shared secret gating Origin-less reads of project-identifier
     # endpoints (currently /api/projects, /api/projects/{id}). Empty string
     # = pass-through (loopback-bind perimeter alone — preserves dev workflow).
@@ -58,6 +64,20 @@ class Settings(BaseSettings):
     # and backend/docs/DOC_PIPELINE_RUNBOOK.md §3 for the deploy gate before
     # widening HOST/ALLOW_LAN.
     INTERNAL_API_TOKEN: str = ""
+
+    # CB-2384 Studio: filesystem root for read_repo_file tool.
+    # Defaults to the parent of the directory containing this config file
+    # (i.e. the repository root when running from backend/).  Override via
+    # PROJECT_ROOT env var for Docker / CI environments.
+    PROJECT_ROOT: str = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+    )
+
+    # CB-2384 Studio: loopback base URL for internal CodeBoard API calls
+    # (e.g. search_codeboard tool).  Defaults to http://<HOST>:<PORT>.
+    # Override via BACKEND_BASE_URL env var if running behind a proxy or in
+    # Docker where the bind address differs from the reachable address.
+    BACKEND_BASE_URL: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -69,6 +89,19 @@ class Settings(BaseSettings):
     def effective_host(self) -> str:
         """Returns the actual host to bind to. Respects ALLOW_LAN override."""
         return "0.0.0.0" if self.ALLOW_LAN else self.HOST
+
+    @property
+    def backend_base_url(self) -> str:
+        """Resolved base URL for internal CodeBoard API loopback calls.
+
+        Uses BACKEND_BASE_URL env var when set; otherwise constructs
+        ``http://<HOST>:<PORT>`` using the bound host/port so the value is
+        always consistent with the running server.
+        """
+        if self.BACKEND_BASE_URL:
+            return self.BACKEND_BASE_URL.rstrip("/")
+        # Always use 127.0.0.1 for loopback calls regardless of bind address.
+        return f"http://127.0.0.1:{self.PORT}"
 
     @property
     def is_development(self) -> bool:

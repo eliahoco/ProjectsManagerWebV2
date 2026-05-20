@@ -1,0 +1,163 @@
+'use client';
+
+/**
+ * ChatMessageList — renders a list of chat messages with support for
+ * streaming partial assistant content.
+ *
+ * Background: warm parchment #f5f4ed (Claude style) per design doc.
+ * Streaming content is displayed in a separate streaming bubble that
+ * updates every 50ms via the ref-buffer flush from useConversationStream.
+ */
+
+import { useRef, useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { StudioMessage } from '@/hooks/useStudio';
+
+// ─── Role badge ───────────────────────────────────────────────────────────────
+
+const ROLE_STYLES: Record<string, { label: string; className: string }> = {
+  user:      { label: 'You',   className: 'bg-zinc-700 text-zinc-200' },
+  assistant: { label: 'Jonny', className: 'bg-cyan-900/50 text-cyan-300' },
+  tool:      { label: 'Tool',  className: 'bg-purple-900/50 text-purple-300' },
+};
+
+function RoleBadge({ role }: { role: string }) {
+  const style = ROLE_STYLES[role] ?? ROLE_STYLES.assistant;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0',
+        style.className,
+      )}
+    >
+      {style.label}
+    </span>
+  );
+}
+
+// ─── Single message bubble ────────────────────────────────────────────────────
+
+function ChatMessageBubble({ message }: { message: StudioMessage }) {
+  const isUser = message.role === 'user';
+
+  return (
+    <div
+      className={cn(
+        'flex gap-3 px-4 py-3',
+        isUser ? 'flex-row-reverse' : 'flex-row',
+      )}
+    >
+      <div className="flex-shrink-0 pt-0.5">
+        <RoleBadge role={message.role} />
+      </div>
+      <div
+        className={cn(
+          'max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed',
+          isUser
+            ? 'bg-zinc-800 text-zinc-100'
+            : 'bg-transparent text-zinc-200',
+        )}
+      >
+        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Streaming bubble ─────────────────────────────────────────────────────────
+
+function StreamingBubble({ content }: { content: string }) {
+  if (!content) return null;
+
+  return (
+    <div className="flex gap-3 px-4 py-3 flex-row" role="status" aria-live="polite">
+      <div className="flex-shrink-0 pt-0.5">
+        <RoleBadge role="assistant" />
+      </div>
+      <div className="max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-transparent text-zinc-200">
+        <p className="whitespace-pre-wrap break-words">{content}</p>
+        {/* Streaming cursor */}
+        <span
+          className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 animate-pulse align-middle"
+          aria-hidden="true"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Loading skeletons ────────────────────────────────────────────────────────
+
+const SKELETON_WIDTHS = ['w-[90%]', 'w-[60%]', 'w-[75%]', 'w-[50%]'] as const;
+
+export function ChatMessageSkeleton() {
+  return (
+    <div className="space-y-4 px-4 py-3">
+      {SKELETON_WIDTHS.map((w, i) => (
+        <div key={i} className={cn('flex gap-3', i % 2 === 1 && 'flex-row-reverse')}>
+          <Skeleton className="w-12 h-5 rounded flex-shrink-0" />
+          <Skeleton className={cn('h-10 rounded-xl', w)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+interface ChatMessageListProps {
+  messages: StudioMessage[];
+  streamedContent?: string;
+  isLoading?: boolean;
+  className?: string;
+}
+
+export function ChatMessageList({
+  messages,
+  streamedContent = '',
+  isLoading = false,
+  className,
+}: ChatMessageListProps) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages / streaming updates
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, streamedContent]);
+
+  return (
+    <div
+      className={cn(
+        'flex-1 overflow-y-auto',
+        // Claude parchment background
+        'studio-chat-bg',
+        className,
+      )}
+      style={{ backgroundColor: 'var(--studio-chat-bg, #f5f4ed)' }}
+      aria-label="Chat messages"
+    >
+      {isLoading ? (
+        <ChatMessageSkeleton />
+      ) : messages.length === 0 && !streamedContent ? (
+        <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-zinc-800/60 flex items-center justify-center mb-4">
+            <span className="text-2xl" aria-hidden="true">✦</span>
+          </div>
+          <p className="text-zinc-500 text-sm">No messages yet</p>
+          <p className="text-zinc-600 text-xs mt-1">
+            Start a conversation to plan your next feature
+          </p>
+        </div>
+      ) : (
+        <>
+          {messages.map((msg) => (
+            <ChatMessageBubble key={msg.id} message={msg} />
+          ))}
+          {streamedContent && <StreamingBubble content={streamedContent} />}
+        </>
+      )}
+      <div ref={bottomRef} aria-hidden="true" />
+    </div>
+  );
+}

@@ -27,6 +27,15 @@ model Project {
   watchdogEnabled Boolean     @default(false)
   watchdogEvents  WatchdogEvent[]
   autopilotQueues AutoPilotQueueRecord[]
+  // CB-2384 Studio
+  studioSessions  StudioSession[]
+  backlogItems    BacklogItem[]
+  crewAssignments CrewAssignment[]
+  // Git integration
+  commitLinks     CommitLink[]
+  gitSyncState    GitSyncState?
+  // Issue Groups
+  issueGroups     IssueGroup[]
 }
 
 model Port {
@@ -141,6 +150,14 @@ model Issue {
   // Relations - Implementation Documentation
   executionSummaries    ExecutionSummary[]
   implementationNotes   ImplementationNote[]
+  // CB-2384 Crew Map
+  crewAssignments       CrewAssignment[]
+  // Git integration
+  commitLinks           CommitLink[]
+  // Issue Groups
+  groupMemberships      IssueGroupMember[]
+  // Pipeline
+  pipelineExecutions    PipelineExecution[]
 
   @@index([projectId])
   @@index([breakdownBatchId])
@@ -533,4 +550,513 @@ model AutoPilotEvent {
 
   @@index([queueId, createdAt])
   @@index([type, createdAt])
+}
+
+// ============================================
+// Studio — CB-2384
+// ============================================
+
+model StudioSession {
+  id             String    @id @default(cuid())
+  tenantId       String?
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title          String
+  // ACTIVE | PAUSED | HIBERNATED | COMPLETED | FAILED
+  status         String    @default("ACTIVE")
+  planningState  String    @default("{}") // JSON blob
+  lastMessageAt  DateTime?
+  tokenBudget    Int       @default(50000)
+  tokensUsed     Int       @default(0)
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  messages        StudioMessage[]
+  toolCalls       StudioToolCall[]
+  subAgentRuns    StudioSubAgentRun[]
+  artifacts       StudioArtifact[]
+  hierarchyDrafts StudioHierarchyDraft[]
+  agentActivities StudioAgentActivity[]
+  agentInstances  AgentInstance[]
+  backlogItems    BacklogItem[]         @relation("SessionBacklogItems")
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([status])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+}
+
+model StudioMessage {
+  id           String        @id @default(cuid())
+  tenantId     String?
+  sessionId    String
+  session      StudioSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sequenceNum  Int
+  // USER | ASSISTANT | TOOL_RESULT | SUB_AGENT
+  role         String
+  content      String        // JSON blob
+  model        String?
+  tokensInput  Int           @default(0)
+  tokensOutput Int           @default(0)
+  costUsd      Float         @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  toolCalls    StudioToolCall[]    @relation("MessageToolCalls")
+  subAgentRuns StudioSubAgentRun[] @relation("ParentMessageSubAgentRuns")
+
+  @@unique([sessionId, sequenceNum])
+  @@index([sessionId])
+  @@index([tenantId])
+  @@index([sessionId, sequenceNum])
+}
+
+model StudioToolCall {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  sessionId   String
+  session     StudioSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId   String?
+  message     StudioMessage? @relation("MessageToolCalls", fields: [messageId], references: [id], onDelete: SetNull)
+  toolName    String
+  input       String         // JSON blob
+  output      String?        // JSON blob
+  // PENDING | RUNNING | COMPLETED | FAILED
+  status      String         @default("PENDING")
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+model StudioSubAgentRun {
+  id               String         @id @default(cuid())
+  tenantId         String?
+  sessionId        String
+  session          StudioSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentMessageId  String?
+  parentMessage    StudioMessage? @relation("ParentMessageSubAgentRuns", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  // RESEARCHER | DESIGNER | BREAKDOWN_WRITER | AUDITOR
+  agentRole        String
+  inputSnapshot    String         // JSON blob
+  outputSnapshot   String?        // JSON blob
+  // PENDING | RUNNING | DONE | FAILED
+  status           String         @default("PENDING")
+  model            String
+  tokensInput      Int            @default(0)
+  tokensOutput     Int            @default(0)
+  costUsd          Float          @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([sessionId])
+  @@index([parentMessageId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([agentRole])
+}
+
+model StudioArtifact {
+  id          String        @id @default(cuid())
+  tenantId    String?
+  sessionId   String
+  session     StudioSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  // MARKDOWN | MERMAID | CODE | HTML | HIERARCHY_JSON | IMAGE | OTHER
+  kind        String
+  content     String?       // inline up to 64 KB
+  storageUrl  String?
+  sizeBytes   Int           @default(0)
+  sha256      String
+  version     Int           @default(1)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  backlogItems BacklogItem[] @relation("ArtifactBacklogItems")
+
+  @@index([sessionId])
+  @@index([tenantId])
+  @@index([kind])
+  @@index([sha256])
+}
+
+model StudioHierarchyDraft {
+  id                  String        @id @default(cuid())
+  tenantId            String?
+  sessionId           String
+  session             StudioSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tree                String        // JSON blob
+  // DRAFT | REVIEWING | APPROVED | PROMOTED | FAILED
+  status              String        @default("DRAFT")
+  promotedToFeatureId String?
+  approvedBy          String?
+  approvedAt          DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([sessionId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([sessionId, status])
+}
+
+model StudioAgentActivity {
+  id          String        @id @default(cuid())
+  tenantId    String?
+  sessionId   String
+  session     StudioSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // NOTIFY | REQUEST | DELEGATE | BROADCAST
+  verb        String
+  sourceAgent String
+  targetAgent String?
+  payload     String        // JSON blob
+  chainDepth  Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([sessionId])
+  @@index([tenantId])
+  @@index([verb])
+  @@index([sessionId, createdAt])
+}
+
+// ============================================
+// Agent Runtime — CB-2384
+// ============================================
+
+model AgentTemplate {
+  id           String    @id @default(cuid())
+  tenantId     String?
+  key          String
+  version      Int
+  systemPrompt String
+  tools        String    // JSON blob
+  modelDefault String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  instances       AgentInstance[]
+  crewAssignments CrewAssignment[]
+
+  @@unique([key, version])
+  @@index([tenantId])
+  @@index([key])
+  @@index([key, version])
+}
+
+model AgentInstance {
+  id         String         @id @default(cuid())
+  tenantId   String?
+  sessionId  String?
+  session    StudioSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  templateId String
+  template   AgentTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  memory     String         @default("{}") // JSON blob
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([sessionId])
+  @@index([templateId])
+  @@index([tenantId])
+  @@index([tenantId, sessionId])
+}
+
+model TenantTokenUsage {
+  id             String    @id @default(cuid())
+  tenantId       String?
+  date           DateTime
+  tokensInput    Int       @default(0)
+  tokensOutput   Int       @default(0)
+  costUsd        Float     @default(0)
+  modelBreakdown String    @default("{}") // JSON blob
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, date])
+  @@index([tenantId])
+  @@index([date])
+  @@index([tenantId, date])
+}
+
+// ============================================
+// Backlog — CB-2384
+// ============================================
+
+model BacklogItem {
+  id                  String         @id @default(cuid())
+  tenantId            String?
+  projectId           String
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title               String
+  description         String?
+  // LOW | MEDIUM | HIGH | CRITICAL
+  priority            String         @default("MEDIUM")
+  // DRAFT | REVIEWING | APPROVED | SCHEDULED | PROMOTED | SHIPPED | ARCHIVED
+  status              String         @default("DRAFT")
+  scheduledFor        DateTime?
+  cronExpression      String?
+  sourceSessionId     String?
+  sourceSession       StudioSession? @relation("SessionBacklogItems", fields: [sourceSessionId], references: [id], onDelete: SetNull)
+  sourceArtifactId    String?
+  sourceArtifact      StudioArtifact? @relation("ArtifactBacklogItems", fields: [sourceArtifactId], references: [id], onDelete: SetNull)
+  promotedToFeatureId String?
+  promoteJobId        String?
+  ownerEmail          String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  comments   BacklogComment[]
+  activities BacklogActivity[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([status])
+  @@index([priority])
+  @@index([sourceSessionId])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+  @@index([scheduledFor])
+}
+
+model BacklogComment {
+  id        String      @id @default(cuid())
+  tenantId  String?
+  itemId    String
+  item      BacklogItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  author    String
+  content   String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([itemId])
+  @@index([tenantId])
+}
+
+model BacklogActivity {
+  id        String      @id @default(cuid())
+  tenantId  String?
+  itemId    String
+  item      BacklogItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  action    String
+  payload   String      @default("{}") // JSON blob
+  actor     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([itemId])
+  @@index([tenantId])
+  @@index([itemId, createdAt])
+}
+
+// ============================================
+// Crew Map — CB-2384
+// ============================================
+
+model CrewAssignment {
+  id              String        @id @default(cuid())
+  tenantId        String?
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id])
+  issueId         String
+  issue           Issue         @relation(fields: [issueId], references: [id])
+  agentTemplateId String
+  agentTemplate   AgentTemplate @relation(fields: [agentTemplateId], references: [id])
+  roleLabel       String
+  // ASSIGNED | ACTIVE | PAUSED | RELEASED
+  status          String        @default("ASSIGNED")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  skillUsages CrewSkillUsage[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([issueId])
+  @@index([agentTemplateId])
+  @@index([status])
+  @@index([tenantId, projectId])
+  @@index([projectId, status])
+}
+
+model CrewSkillUsage {
+  id               String         @id @default(cuid())
+  tenantId         String?
+  assignmentId     String
+  assignment       CrewAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  skillName        String
+  invocationCount  Int            @default(0)
+  lastUsedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([assignmentId])
+  @@index([tenantId])
+  @@index([skillName])
+  @@index([assignmentId, skillName])
+}
+
+// ============================================
+// Backend-only models mirrored to prevent schema drift
+// These tables are created by SQLAlchemy (init_db) and exist in the DB.
+// Adding them here so prisma db push does not drop them.
+// ============================================
+
+model CommitLink {
+  id                   String   @id @default(cuid())
+  issueId              String
+  issue                Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  projectId            String
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  commitHash           String
+  shortHash            String
+  message              String
+  author               String
+  authorEmail          String?
+  committedAt          DateTime
+  linkType             String   @default("MENTIONS")
+  autoLinked           Boolean  @default(true)
+  triggeredStatusChange Boolean @default(false)
+  createdAt            DateTime @default(now())
+
+  @@unique([issueId, commitHash])
+  @@index([issueId])
+  @@index([projectId])
+  @@index([commitHash])
+  @@index([author])
+  @@index([projectId, author])
+  @@index([committedAt])
+  @@index([projectId, committedAt])
+}
+
+model GitSyncState {
+  id                      String   @id @default(cuid())
+  projectId               String   @unique
+  project                 Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lastSyncedCommitHash    String?
+  lastSyncedAt            DateTime?
+  totalCommitsLinked      String   @default("0")
+  totalStatusUpdates      String   @default("0")
+  autoSyncEnabled         Boolean  @default(true)
+  autoStatusUpdateEnabled Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model IssueGroup {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members IssueGroupMember[]
+
+  @@index([projectId])
+}
+
+model IssueGroupMember {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     IssueGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  issueId   String
+  issue     Issue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  @@unique([groupId, issueId])
+  @@index([groupId])
+  @@index([issueId])
+}
+
+model DocSettings {
+  key           String   @id
+  autoGenerate  Boolean  @default(true)
+  retentionDays Int      @default(90)
+  maxPerIssue   Int      @default(20)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PipelineExecution {
+  id                String    @id @default(cuid())
+  issueId           String
+  issue             Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  projectId         String
+  projectPath       String?
+  agentId           String?
+  status            String    @default("PENDING")
+  currentStageIndex Int       @default(0)
+  maxRetries        Int       @default(3)
+  retryCount        Int       @default(0)
+  error             String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  stages PipelineStage[]
+
+  @@index([issueId])
+  @@index([projectId])
+  @@index([status])
+}
+
+model PipelineStage {
+  id          String            @id @default(cuid())
+  executionId String
+  execution   PipelineExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stageType   String
+  stageIndex  Int
+  status      String            @default("PENDING")
+  sessionId   String?
+  error       String?
+  inputData   String?
+  resultData  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@index([executionId])
+}
+
+model PipelineConfig {
+  id                  String   @id @default(cuid())
+  projectId           String   @unique
+  enableVerification  Boolean  @default(true)
+  enableAutoFix       Boolean  @default(true)
+  maxRetries          Int      @default(3)
+  verificationTimeout Int      @default(120)
+  defaultAgentId      String?
+  verificationRules   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model park_events {
+  id                  String   @id
+  project_id          String
+  parked_at           DateTime?
+  services_snapshot   String?
+  ai_sessions_stopped Int      @default(0)
+  pipelines_cancelled Int      @default(0)
+  parking_steps_log   String?
+  duration_ms         Int?
+
+  @@index([project_id])
 }

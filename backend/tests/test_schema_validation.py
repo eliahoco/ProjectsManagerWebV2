@@ -105,6 +105,7 @@ class TestIssueSchema:
         "estimatedHours": {"notnull": False},
         "actualHours": {"notnull": False},
         "complexity": {"notnull": False},
+        "aiContext": {"notnull": False},
     }
 
     async def test_issue_table_columns(self, test_engine):

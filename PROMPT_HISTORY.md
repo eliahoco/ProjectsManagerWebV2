@@ -14143,3 +14143,1687 @@ All 11 queue endpoints are now scoped with a required `project_id` query paramet
 
 ---
 
+## 2026-05-19 00:09:56
+
+Resume CB-2793 QA remediation: check correction-agent results, run re-audit + regression.
+
+---
+
+## 2026-05-19 00:10:28
+
+2
+
+---
+
+## 2026-05-19 00:18:14
+
+stack is back up and the autopilot is show on the buttom right side
+
+---
+
+## 2026-05-19 00:20:21
+
+i don't understand the question and the 2 failed tasks still fail, not sure why and 1078 1079 1080 are on skipped status not sure why as well
+
+---
+
+## 2026-05-19 00:29:56
+
+Before continuing, can you kill the autopilot and, uh, cloud bot for LinkedIn job hunter? think it's running something over there. The stop button doesn't work for me, but we're gonna deal with that later. Just need you to kill it and stop it. Tell it.
+
+---
+
+## 2026-05-19 00:30:08
+
+Before continuing, can you kill the autopilot and, uh, cloud bot for LinkedIn job hunter? think it's running something over there. The stop button doesn't work for me, but we're gonna deal with that later. Just need you to kill it and stop it totally
+
+---
+
+## 2026-05-19 00:32:46
+
+what!??!? i lsot you what are those quesitions?
+
+---
+
+## 2026-05-19 10:43:56
+
+Good morning, Johnny. I'm totally confused. We need to do a plan here. What we're gonna work very, very clear short and precise plan You're telling me too many stories. Go check. What do we have? Why do we need to complete? What are the features... pending features? We had a very, very big one that's related to a studio, if I remember correctly. There are a lot of features, tasks, bugs in the backlog, and I need you to look on the codeboard UI. Maybe there's a bug. Things are there, and they're not in the database. So create a list of everything that's in the backlog or in the to do list or in progress. Let's finish everything and take the features that we never touched them and decide what we're gonna do. I'm leaving now. I'm gonna come back later. I wanna see show table with a very, very accurate explanation, not engineering stuff. You need to do this. You need to do that. I don't remember the numbers of the bugs and features. I wanna know each one of them, what is all about, short storytelling. I don't understand how and what is more important and how we're gonna complete that.
+
+---
+
+## 2026-05-19 10:48:00
+
+things that we completed, I don't want in the table. Just things that are messy in to do in progress. What we completed, we completed. I don't wanna say that.
+
+---
+
+## 2026-05-19 10:48:47
+
+sory continue
+
+---
+
+## 2026-05-19 10:52:02
+
+there are lots of things that we work directly here and never put on the code board. So let's leave the gap outside. What's important to understand is the, uh, if there are things that are in the code board or in progress to do in backlog, and we're basically completed. And in the database, they were completed. So that's an audit you must do as soon as possible. With regard to features, never started. That's a good table. Let's keep that printed again next time. the backlog started work and still open. This is where I need to go deep and understand what has been done, why it's stuck, and it's still open. Maybe there are things that were completed and they are here because they were never, um, updated, and we did it... let's see a live from here and not through the cupboard. For example, the the co... the port validation and registry, they're... I think we already completed that. That's a long, long time ago. Please... and also, by the way, date next to each one of them so we'll know when they were, uh, put into the codeboard. And another date is when we last worked on them. From the codeboard, and if we worked on them from the CLI, add this thing to the table. I want the table, not a list. So make sure it's a table. And I want you to print it here. Don't send me to read the file. k? if there are tasks, bugs, and things that are floating in the backlog to do or in progress, we need to go one by one and understand if they were handled and just stuck there. So you need to check-in the database if they were implemented, maybe also in the code. This require an audit to make sure they were done or not, and then prioritize them by, uh, urgency. I hope this is clear. If you don't understand, ask questions.
+
+---
+
+## 2026-05-19 11:00:20
+
+<task-notification>
+<task-id>a13eea16e66f3ca23</task-id>
+<tool-use-id>toolu_01PdAx39BXMLrp7nEbiKnCBG</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a13eea16e66f3ca23.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify docs/studio/auth vs code" completed</summary>
+<result>Now I have enough information for a comprehensive audit. Let me compile the findings.
+
+---
+
+## Audit Results
+
+---
+
+### CB-1203 — Intelligent Documentation System
+
+**Verdict: DONE (effectively superseded and fully delivered via CB-2038 and subsequent tasks)**
+
+**Evidence:**
+
+The feature is comprehensively implemented across multiple layers:
+
+1. **Backend models** (`/backend/models/documentation.py`): All three models exist and are fully defined — `ExecutionSummary` (captures what each AI run did: files touched, lines added/removed, git diffs, AI-written summaries with architecture notes, technical notes, challenges faced, lessons learned), `FeatureDocumentation` (aggregated feature-level doc with ChromaDB embedding fields), and `ImplementationNote` (structured, user-editable notes per issue with category, importance, tags).
+
+2. **Documentation generator service** (`/backend/services/documentation_generator.py`): Fully implemented — 1,755 lines. Runs automatically after every AI execution: captures `git diff --stat` and diff body, sends them to the AI to produce structured JSON summaries, persists the `ExecutionSummary` row, and indexes it in ChromaDB for RAG. Also generates `FeatureDocumentation` on demand (aggregates all descendant execution summaries + QA task results, calls AI for synthesis, upserts the row, indexes in ChromaDB).
+
+3. **API router** (`/backend/api/documentation.py`): Full CRUD — `GET /issues/{id}/documentation` (list summaries), `GET /issues/{id}/documentation/latest`, `GET/POST /issues/{id}/documentation/notes`, `DELETE /issues/{id}/documentation/notes/{note_id}`, `GET /features/{id}/documentation`, `POST /features/{id}/documentation/generate`. All endpoints carry CB-2117 projectId scoping as IDOR guard.
+
+4. **Frontend** (`/frontend/components/codeboard/FeatureDocumentationView.tsx`, `/frontend/app/codeboard/features/[id]/documentation/page.tsx`, `/frontend/components/codeboard/ImplementationTab.tsx`, `/frontend/components/codeboard/GenerateFeatureDocButton.tsx`): Full UI — indexed/not-indexed status strip, tech stack badges, progress metrics grid, markdown sections (overview, requirements, implementation, architecture, testing strategy), generate button.
+
+**What CB-1203 originally described** (auto-capture implementation knowledge, reuse it later via RAG) is exactly what CB-2038 delivered. CB-1203 is not "open work" — it is the planning ticket for a system that was fully built. The only thing CB-1203 still formally owns is its CodeBoard status column, which should be marked DONE.
+
+**Plain-English explanation:** Every AI coding run automatically records what it built, which files it touched, and what architectural decisions were made; that knowledge is stored, shown per-issue, and searchable via the vector database — the full system is live and working.
+
+---
+
+### CB-2384 — AI Project Workspace (Studio + Backlog + Crew Map)
+
+**Verdict: NOT STARTED**
+
+**Evidence:**
+
+- No `/workspace`, `/studio`, or `/crew` route exists anywhere in `/frontend/app/`. The complete list of app routes was inspected and none match.
+- No `StudioView`, `CrewMap`, `StagingBacklog`, or any workspace-related component file exists in `/frontend/components/`. A global search across all `.tsx`/`.ts` files (excluding node_modules and .next) returned zero hits for "workspace", "studio", "crew map".
+- No backend models for `StudioConversation`, `StudioMessage`, `StudioArtifact`, `AgentActivity`, or any workspace data layer exist in `/backend/models/`.
+- No backend API routes for workspace/studio/backlog-staging endpoints exist in `/backend/api/`.
+- What does exist: a planning script at `/backend/scripts/codeboard/2026-05-07-workspace-master-push.py` that *pushed the CodeBoard tickets* for CB-2384 (the feature + its 8 EPICs), and a plan document referenced within it (`docs/plans/2026-05-07-ai-project-workspace-master-plan.md`). These are planning artifacts only — no implementation followed.
+- A separate script (`2026-05-09-bulletproof-autopilot-push.py`) explicitly calls CB-2384 a blocker: "Blocks CB-2384 confidence (workspace can't ship until autopilot is bulletproof)."
+
+**Plain-English explanation:** The Workspace/Studio/Crew Map feature exists only as CodeBoard tickets and a planning document — zero code has been written for any of its three views.
+
+---
+
+### CB-2121 — Backend Auth Layer + Project Scoping on All /api/* Endpoints
+
+**Verdict: PARTIAL — selective InternalAuthDep coverage on high-risk endpoints; per-issue projectId scoping is inconsistent; no caller-identity/role auth exists anywhere**
+
+**Evidence:**
+
+**What IS implemented:**
+
+- `InternalAuthDep` (`/backend/app/security.py`): A shared-secret header check (`X-Internal-Token`) — applied when `INTERNAL_API_TOKEN` is configured in env. Constant-time comparison via SHA-256 digest.
+- Applied to the **full AutoPilot queue** in `execution.py` (CB-2766/CB-2802): all queue management endpoints (pause, resume, abort, skip, events, metrics, recovery-status, clear-recovery, reset-failed-tasks, switch-model, active, wait-for-reset, task reset) — ~14 endpoints.
+- Applied to **all search endpoints** (CB-2732): all 6 routes in `search.py`.
+- Applied to **all project listing/detail endpoints** (CB-2666): 3 routes in `projects.py`.
+- `projectId` scoping via required query param on all 6 routes in `documentation.py` (CB-2117).
+- A `validate_origin` HTTP middleware that rejects browser-originating requests from non-whitelisted origins for all methods.
+
+**What is NOT implemented:**
+
+- **Issues router** (`issues.py`): The core CRUD endpoints — `GET /issues/{issue_id}`, `PATCH /issues/{issue_id}`, `DELETE /issues/{issue_id}`, `POST /issues/{issue_id}/comments`, `GET /issues/{issue_id}/activities`, `POST /issues/batch/status` — have **no** `InternalAuthDep` and **no** projectId scoping. `GET /issues/{issue_id}` fetches any issue by bare ID with zero project check.
+- **AI router** (`ai.py`): No `InternalAuthDep` on any of its 9 routes — including the expensive `POST /{project_id}/breakdown` and `POST /{project_id}/generate-qa` (AI provider calls).
+- **QA router** (`qa.py`): No `InternalAuthDep` on any of its ~20 routes, including the streaming QA execution endpoints.
+- **Git router** (`git.py`), **pipeline router** (`pipeline.py`), **groups router** (`groups.py`), **park router** (`park.py`), **doc_settings router** (`doc_settings.py`): No `InternalAuthDep`.
+- **No caller-identity/role system exists**: `InternalAuthDep` is a single shared secret (machine-to-machine), not per-user identity. There is no user authentication, no role-based access control, and no per-request caller identity check anywhere in the codebase — which is the core of what CB-2121 originally claimed to add.
+- Several execution endpoints are also unguarded: `POST /execute/issue/{issue_id}` (starts AI run), `GET /execute/sessions`, `POST /execute/sessions/stop-all` have no `InternalAuthDep`.
+
+**Plain-English explanation:** A machine-level token gate was added to the most sensitive AutoPilot, search, and project-listing endpoints, and some documentation endpoints require a projectId to prevent cross-project data access — but the core issue CRUD, the AI endpoints, and QA endpoints are still completely open with no identity check, and no per-user authentication exists anywhere.</result>
+<usage><total_tokens>84289</total_tokens><tool_uses>51</tool_uses><duration_ms>366386</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-19 11:05:15
+
+<task-notification>
+<task-id>a9a1b0c49ef67235f</task-id>
+<tool-use-id>toolu_01DjC3iKXPpkamYQ8zn3HDdj</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a9a1b0c49ef67235f.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify infra features vs code" completed</summary>
+<result>Now I have all the evidence I need. Let me compile the findings.
+
+---
+
+## Audit Results
+
+---
+
+### CB-1271 — Port Validation &amp; Registry System
+
+**Verdict: DONE**
+
+Every layer of the described system is present and wired together:
+
+- **`/Volumes/Seagate/Claude/_shared/validate-ports.sh`** — the shared validation script exists with full `get_registered_ports()`, `check_port_owner()`, and `validate_project_ports()` functions, including `--json` and `--check-only` flags and sqlite3 integration.
+- **`/Volumes/Seagate/Claude/ports.db`** (symlink → `ProjectsManagerProduction/ports.db`) — the central SQLite registry exists with tables `ports`, `projects`, `port_ranges`, `port_collisions`, `active_ports`. ProjectsManagerWebV2Production is registered with all three ports (3601, 8401, 8402).
+- **`launch.sh` lines 28–36** — sources `validate-ports.sh` and calls `validate_project_ports` before starting any service; gracefully degrades to a warning if the script is missing.
+- **`frontend/lib/shell.ts`** — `validateProjectPorts()` function calls the shell script via `spawnCommand` with `--check-only --json`, parses the JSON output, and `launchProject()` gates on it (returns exit code 2 on conflict). `isPortInUse()` and `getProjectStatus()` are also present.
+- **`frontend/app/ports/page.tsx`** — the `/ports` page exists as a full port allocation dashboard with per-project status, filtering, and 10s polling.
+
+One-line explanation: Every piece described in the ticket — the central SQLite registry, the shared shell script, the `launch.sh` integration, and the TypeScript layer — is fully implemented and wired up.
+
+---
+
+### CB-1406 — Service Watchdog
+
+**Verdict: DONE**
+
+The auto-restart watchdog loop is fully implemented across shell scripts, a frontend React component, and backend API routes:
+
+- **`watchdog.sh`** — full frontend watchdog: polls port 3601 every 15s, detects crashes, auto-restarts `npm run dev`, circuit breaker of 10 restarts/hour, uses absolute `SCRIPT_PATH` (the relative-path bug from CB-1734 is already fixed here). Delegates to `backend-watchdog.sh start` automatically.
+- **`backend-watchdog.sh`** — full backend watchdog: polls `/health` HTTP endpoint every 15s, 3-failure grace period before acting, graceful SIGTERM → SIGKILL teardown, circuit breaker with `.alert` file marker.
+- **`frontend/components/service-monitor.tsx`** — `ServiceMonitor` component polls `/api/projects/status` every 15s, debounces (requires 2 consecutive down readings), calls `autoRestartProject()` via `POST /api/projects/[id]/launch`, circuit breaker (max 3 attempts per 5-minute window), `watchdogEnabled` per-project toggle, Docker-pause awareness, manual-stop grace period, all persisted in localStorage across page refreshes. Logs events via `POST /api/watchdog/events`.
+- **`frontend/app/api/watchdog/route.ts`** — `GET/PATCH /api/watchdog` for listing per-project watchdog status and toggling `watchdogEnabled`.
+- **`frontend/app/api/projects/[id]/services/[serviceId]/route.ts`** — `POST` handler for manual start/stop/restart of individual services.
+- **`logs/watchdog.log`, `logs/backend-watchdog.log`, `logs/watchdog.pid`** — all exist, confirming the watchdog has been running.
+- **`tests/watchdog/`** — 4 test scripts present.
+
+One-line explanation: The full auto-restart system is built — both shell-level watchdogs for crash recovery and a browser-side React watchdog that auto-relaunches projects via the launch API.
+
+---
+
+### CB-1734 — Stack Stabilization &amp; Security Hardening
+
+**Verdict: PARTIAL**
+
+CB-1854 ("PMWV2 Stability Fix", status `COMPLETED_WAITING_QA`) has already addressed the async/infrastructure layer of the bugs. Several CB-1734 items are demonstrably fixed, but the remaining non-overlapping items still appear open.
+
+**What CB-1854 fixed (confirmed in code):**
+- Async event-loop blocking: `rag_service.py` uses `asyncio.to_thread()` for all blocking ChromaDB calls, with a threading lock (`threading.Lock`, not asyncio) to prevent deadlock across the boundary.
+- ChromaDB timeout: configurable HTTP timeout with explicit fallback to `PersistentClient` logged at startup.
+- Watchdog killing alive-but-slow backend: `backend-watchdog.sh` uses HTTP `/health` as primary gate and requires 3 consecutive HTTP failures before acting.
+- `--reload` / `DEBUG=true` in prod: `config.py` defaults `DEBUG = False`, `launch.sh` starts uvicorn without `--reload`, docs URL disabled unless `settings.is_development`.
+
+**What CB-1734 additionally requires (confirmed fixed in code, likely via direct CLI work):**
+- Broken `nohup "$0"` relative path in watchdog: fixed — `watchdog.sh` uses `SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" &amp;&amp; pwd)/$(basename "${BASH_SOURCE[0]}")"` (absolute path).
+- Claude CLI subprocesses surviving Stop: fixed — `terminal_service.py` line 344 assigns `session.process = process` immediately after spawn, and stop_execution uses `os.killpg` with SIGTERM → SIGKILL.
+- SQLite `database is locked`: fixed — `database.py` sets `busy_timeout=30000`, `journal_mode=WAL`, `synchronous=NORMAL`.
+- Atomic issue key generation: fixed — `issues.py` `get_next_issue_key()` uses SQL-level `UPDATE ... RETURNING`.
+- Session output data race: fixed — `terminal_service.py` has `_output_lock: threading.Lock` wrapping all output reads/writes.
+- Unbounded session dicts (memory leak): fixed — `evict_stale_sessions()` background task in `main.py` evicts sessions older than 1 hour every 5 minutes.
+
+**What is NOT confirmed fixed (still genuinely open for CB-1734):**
+- QASequence UNIQUE race: The `issues.py` QA code reserves a block atomically, but no explicit retry logic for the UNIQUE constraint on `QASequence` is visible (only mentioned in description).
+- AgentProfile list-serialization crash: No defensive coercion or explicit fix visible in `agent_registry.py`.
+- SSE + polling fight: SSE is implemented but there is no explicit "disable polling once SSE is active" guard visible; both SSE and the 2s polling interval run concurrently.
+- The 12+ remaining lifecycle bugs listed in the description were not individually verified.
+- No soak test results are attached; the feature-level acceptance criteria (1h with 100 concurrent ops, 8h autopilot RSS check, etc.) have no evidence of having been run.
+
+One-line explanation: About 70% of CB-1734's stabilization work was silently shipped via CB-1854 and direct CLI commits — the critical watchdog fix, subprocess kill, SQLite contention, and async blocking are all done — but the QASequence race, AgentProfile serialization crash, SSE/polling conflict, and the full acceptance criteria soak tests are not confirmed complete.</result>
+<usage><total_tokens>92247</total_tokens><tool_uses>54</tool_uses><duration_ms>671812</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-19 11:18:39
+
+<task-notification>
+<task-id>a77b1c5598c6b1cf1</task-id>
+<tool-use-id>toolu_01RiChe3HgaqjhzKbsWAp5zj</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a77b1c5598c6b1cf1.output</output-file>
+<status>completed</status>
+<summary>Agent "Verify AutoPilot features vs code" completed</summary>
+<result>Now I have a comprehensive picture. Let me compile the final audit.
+
+---
+
+## Audit Results
+
+---
+
+### CB-1667 — Backend-Driven AutoPilot Queue
+
+**VERDICT: DONE**
+
+**Evidence:**
+- `backend/services/autopilot_queue_service.py` exists (~3,000+ lines) and runs the full sequential queue loop server-side via `run_queue()` as an `asyncio.Task`. The service is a singleton (`autopilot_queue_service`).
+- SSE streaming is live at `GET /execute/queue/{queue_id}/stream` (`backend/api/execution.py` line 1744) and a global events stream at `GET /execute/queue/events` (line 1157).
+- `frontend/contexts/AutoPilotContext.tsx` is explicitly a thin viewer — its docstring says "The execution loop lives entirely on the backend." It only calls `POST /api/codeboard/execute/queue`, connects to `EventSource` for SSE, and sends control commands. There is no execution loop in the frontend context.
+- On mount, the context calls `GET /execute/queue/active` to reconnect to any already-running queue, with SSE fallback to polling every 2s if the SSE connection drops.
+
+**One-liner:** The queue loop runs on the backend and survives tab close; the frontend is a pure viewer that watches via SSE — exactly as specified.
+
+---
+
+### CB-2746 — Bulletproof AutoPilot
+
+**VERDICT: DONE (with minor open edge not yet in the "survive OS reboot" claim)**
+
+**Evidence:**
+
+Crash recovery on startup: `rehydrate_from_db()` is called from the FastAPI lifespan hook in `backend/app/main.py` (lines 292–304). It re-classifies all `RUNNING` DB records — distinguishing `crash_zombie` (subprocess still alive) from `crash_recovery` (PID dead) — and transitions the queue to `paused/crash_recovery`. User must manually resume. This is tested in `test_autopilot_persistence.py` (`test_rehydrate_recovers_running_queue`).
+
+Write-through persistence: `AutoPilotQueueRecord`, `AutoPilotTaskRecord`, and `AutoPilotEvent` tables exist in `backend/models/autopilot.py`. Fields include `state`, `stateReason`, `lastCheckpointAt`, `recoveryGeneration`, `autoResumeAttempts`, `subprocessPid`, `lastProgressAt`. The `checkpoint()` helper (`utils/autopilot_repository.py`) writes `lastCheckpointAt` on every progress tick (CB-2758).
+
+Token exhaustion auto-pause: `detect_exhaustion_from_session()` in `utils/exhaustion_detector.py` categorises failures; on match the queue transitions to `WAITING_RESET` with a computed `reset_time`. `_schedule_auto_resume()` arms an asyncio timer.
+
+Circuit breaker: `_AUTO_RESUME_MAX_ATTEMPTS = 3` (line 2944). After 3 consecutive auto-resumes without a successful task completion the queue downgrades to `paused/manual_circuit_breaker`. The counter (`autoResumeAttempts`) is persisted to DB (CB-2794) so it survives backend restarts. Tested in `test_cb2793_qa_fixes.py` and `test_cb2752_chaos_suite.py` (25+ chaos tests across 6 failure categories).
+
+State machine enforcement: `is_transition_allowed()` + `IllegalStateTransitionError` in `models/autopilot.py` and `utils/autopilot_repository.py`; DB write precedes in-memory state flip (`transition_state` in CB-2757). Illegal pairs are rejected without mutating memory.
+
+**What is still open / not covered:** The "survive OS reboot" claim requires that the subprocess holding the active `claude` CLI session be re-launched after reboot. Current recovery marks the task as `failed(crash_recovery)` and requires a manual user resume — it does not auto-relaunch the subprocess. This is by design (crash_recovery requires explicit user action), but it means the queue "survives" in the sense of not disappearing, not in the sense of transparent self-completion post-reboot. This gap is documented in `backend/docs/AUTOPILOT_RUNBOOK.md`.
+
+**One-liner:** Every described persistence mechanism (DB tables, crash rehydration, token-exhaustion auto-pause, circuit breaker) exists in real code; the queue never disappears, but the running subprocess is not transparently re-launched after a hard kill — the user still has to press Resume.
+
+---
+
+### CB-1955 — Issue Correlation &amp; Grouping
+
+**VERDICT: PARTIAL**
+
+**Evidence — what's DONE:**
+
+*IssueLink / typed relations (part a):*
+- `backend/models/issue.py` line 159: `IssueLink` table with `linkType` column covering all 7 types (BLOCKS, IS_BLOCKED_BY, RELATES_TO, DUPLICATES, IS_DUPLICATED_BY, CAUSED_BY, CAUSES).
+- `backend/api/relations.py`: full CRUD — `POST /issues/{id}/relations`, `GET /issues/{id}/relations`, `POST /issues/{id}/relations/bulk`, `DELETE /issues/{id}/relations/{id}`. Also enforces same-project rule, auto-creates companion inverse row, and detects cycles.
+- Frontend hooks: `useIssueRelations`, `useCreateRelation`, `useCreateRelationsBulk`, `useDeleteRelation` in `frontend/hooks/useIssueRelations.ts` — fully implemented.
+- Frontend components: `LinkedIssuesPanel.tsx` (display) and `AddRelationModal.tsx` (create/bulk-add) — fully implemented with type-ordered rendering, direction arrows, status pills, bulk-skip reporting.
+- **But:** `LinkedIssuesPanel` and `AddRelationModal` are **not imported or rendered anywhere in any app page or other component**. They exist as finished components with no wiring into the actual issue detail pages (`/codeboard/issues/[id]/page.tsx` has zero relation-panel imports).
+
+*Issue Groups (part b):*
+- `backend/models/grouping.py`: `IssueGroup` and `IssueGroupMember` ORM models — fully implemented with aggregate status helper `compute_group_status` in `backend/utils/db_queries.py`.
+- `backend/api/groups.py`: full CRUD plus member management (`POST /projects/{id}/groups`, `GET /projects/{id}/groups`, `GET /groups/{id}`, `PATCH /groups/{id}`, `DELETE /groups/{id}`, `POST /groups/{id}/members`, `DELETE /groups/{id}/members`, `PATCH /groups/{id}/members/reorder`). Aggregate status embedded in `IssueGroupDetailResponse`.
+- Frontend: `CreateGroupModal.tsx`, `GroupMemberDraggableTable.tsx` (drag-to-reorder), `frontend/hooks/useGroups.ts`, and a dedicated route `frontend/app/codeboard/groups/[id]/page.tsx` — all fully implemented. `CreateGroupModal` is wired into the main kanban board page (KB action "Group selected").
+
+**What's missing:**
+- `LinkedIssuesPanel` and `AddRelationModal` are built but **never mounted** on any issue detail page. The issue detail page at `/codeboard/issues/[id]/page.tsx` (776 lines) has no import or `&lt;LinkedIssuesPanel&gt;` / `&lt;AddRelationModal&gt;` tag whatsoever. A user viewing an issue cannot see its typed relations.
+- No "Groups sidebar" or list view in the main codeboard that shows all groups for a project — the only group entry point is via the create modal; the group detail page at `/codeboard/groups/[id]` can only be navigated to directly by URL or internal link.
+
+**One-liner:** Backend is fully wired for both relations and groups (models, API, DB), and all frontend components/hooks are built and functional — but the typed-relations panel is never actually shown on an issue detail page, so a user can't see relations in the UI today.
+
+---
+
+### CB-1690 — Test: AutoPilot Queue Lifecycle (create/run/complete)
+
+**VERDICT: PARTIAL**
+
+**Evidence:**
+Tests exist that cover individual lifecycle pieces but not a single end-to-end create→run→complete flow:
+- `test_autopilot_persistence.py`: `test_create_queue_in_memory_tasks_have_populated_keys`, `test_create_queue_save_round_trip_preserves_keys`, `test_rehydrate_recovers_running_queue` — tests `create_queue()` and persistence round-trips.
+- `test_cb2752_chaos_suite.py`: 25+ chaos tests covering various run/recovery paths.
+- `test_cb2745_db_only_queue_endpoints.py`: tests pause, resume, abort against DB-only queues.
+- `test_auto_resume_scheduler.py`: tests resume, abort, timer lifecycle.
+
+**Missing:** No dedicated test file named for CB-1690 and no single test that calls `create_queue` → starts `run_queue` → all tasks reach `completed` status via actual `terminal_service` calls (all tests mock `terminal_service`). The "happy path: create a queue with 2 tasks, both complete, queue finishes as COMPLETED" is not tested end-to-end. Tests are heavily unit-level, not lifecycle-integration tests.
+
+**One-liner:** Queue creation and individual state transitions are tested in isolation, but there is no end-to-end test that walks the full create → run → complete lifecycle against a real execution path.
+
+---
+
+### CB-1691 — Test: AutoPilot Control Commands (pause/resume/skip/abort)
+
+**VERDICT: DONE**
+
+**Evidence:**
+- `test_cb2745_db_only_queue_endpoints.py`: tests `pause_queue`, `resume_queue`, and `abort_queue` explicitly on DB-only queues (simulating the scenario where a queue is persisted but not in-memory).
+- `test_cb2766_endpoint_auth.py`: tests all control endpoints (`/pause`, `/resume`, `/skip`, `/abort`, `/wait-for-reset`, `/clear-recovery`, `/reset-failed-tasks`) for both 401 rejection without token and non-401 acceptance with valid token.
+- `test_auto_resume_scheduler.py`: tests `resume_queue` cancels pending timer, `abort_queue` cancels timer, `resume_queue` returns false for non-paused queue.
+- `test_cb2757_state_machine_enforcement.py`: tests `abort_queue` emits STATE_TRANSITION event, `pause_queue` emits state transition event.
+- `test_resume_contract.py`: tests structured 404/409 responses on invalid resume, `reset_failed_tasks` endpoint.
+- `test_cb2793_qa_fixes.py`: tests circuit-breaker behavior at exactly max attempts.
+
+**One-liner:** Pause, resume, skip, and abort are all tested — both the service-layer behavior and the HTTP endpoint auth gates.
+
+---
+
+### CB-1693 — Security Review of Queue API Endpoints
+
+**VERDICT: PARTIAL**
+
+**Evidence — what exists:**
+- `test_cb2766_endpoint_auth.py` (the most relevant file): verifies that 11 state-changing AutoPilot endpoints return HTTP 401 without a valid `X-Internal-Token` header and return non-401 with the token. This covers `InternalAuthDep` gating for resume, pause, abort, skip, wait-for-reset, clear-recovery, recovery-status, metrics, persistence-flag, task-reset, and reset-failed-tasks.
+- `test_security.py`: general CORS config, rate limiting, error-message non-leakage, SQL injection via ORM, response headers — but this is generic and predates the queue API. It does not test queue endpoints specifically.
+- `test_cb2784_embed_all_redaction.py` and `test_cb2787_stats_redaction.py`: test that secrets/tokens are redacted from SSE payloads and stats.
+
+**Missing:** There is no dedicated security test file covering:
+- Rate limiting specifically on queue endpoints (the test for rate-limiting in `test_security.py` targets generic endpoints).
+- SSRF or path traversal via `project_path` in queue creation.
+- Cross-project access control — the `POST /execute/queue` endpoint does not appear to have tests verifying that a user can't submit a queue for a project they don't own (the `relations` cross-project test exists but no equivalent for `execution/queue`).
+- The SSE stream `GET /queue/{id}/stream` — CB-2802 added a `project_id` required param to prevent cross-project SSE subscriptions, but there is no test specifically verifying that param is enforced.
+
+**One-liner:** Auth-token gating on all control endpoints is tested, and secret-redaction in outputs is tested, but there's no test for rate limiting on queue endpoints or for the cross-project access control on the SSE stream and queue creation endpoints.</result>
+<usage><total_tokens>91217</total_tokens><tool_uses>97</tool_uses><duration_ms>1488068</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:18:54
+
+usages to work on the studio now. What do you suggest to do? I want to finish the credits. I have lots of credits until tomorrow. I wanna use them as much as I can. And I think of running it through the Project manager. The question is if I can run development on the project manager from the project manager because if it will restart or need some... change some code, it can break in the mail. So do you suggest to run it from here or from the code board manager directly?
+
+---
+
+## 2026-05-20 09:21:36
+
+I need to go home, and I'm leaving you here, Johnny, as in charge. Do you know your rules? Do you know your instruction? Do you have your bible? You need to run on this thing. Top to bottom, don't tell me at the end that you did only thirty percent, and it's pending microbial. You have microbial to start it and to finish it. All for phases. I wanna come back and see that everything was done, or you can see me on your credits and you're waiting for a reset. But don't wait for approval. I wanna come and see a new design of new studio in the project manager. Don't forget that everything you build need to be designed and ready for multi tenant and cloud deployment. At the end, maybe I wanna upload and create it as a service. There was also a plan for that somewhere. So if you need to do some modifications on the planning investigation, initiate some agents to look at it and think about it and look on the project, read some books, do it now before I'm going.
+
+---
+
+## 2026-05-20 09:26:05
+
+<task-notification>
+<task-id>ac8310b89b4181623</task-id>
+<tool-use-id>toolu_014ZFt6rX4UdNokJV1on7L5G</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/ac8310b89b4181623.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio research books" completed</summary>
+<result>---
+
+## Reading List
+
+### For the task: AI Project Workspace ("Studio") — multi-tenant SaaS, AI agent platform, chat UX, graph visualisation
+
+**Coverage note:** Your four domains split into two hits and two misses against available inventory. Books 1–3 cover AI agent platforms (domain 2) and chat-based product UX (domain 3). Domains 1 (multi-tenant SaaS) and 4 (React graph visualisation) have no matching books — see the gap signals below.
+
+1. **"Building Your Agent Team: A Practitioner's Guide to Multi-Agent AI Systems"** (id: cmnudfue5003rmy0zlxt7ioa1, library)
+   Pages: all (15 pages — full book)
+   Why: Directly addresses sub-agent spawning architecture, inter-agent communication, memory systems, and cloud deployment of agent runtimes — the core of the Studio's AI execution layer.
+
+2. **"Building Effective Agents"** (id: cmljg1ebo000pmn0zgxkxg3vk, library)
+   Pages: all (17 pages — full book)
+   Why: Anthropic's canonical reference for LLM agent workflows, tool integration, and streaming patterns — essential for designing the chat agent with live artifact preview.
+
+3. **"Awesome Design.md — A Curated Collection of Design Resources in Markdown"** (id: cmnm3t8zu00w2oc0zznp2v0n1, library)
+   Pages: pp. 1–20 (AI &amp; ML category: Claude, Linear, Notion, Figma entries)
+   Why: Captures the exact design language of Claude.ai, Linear, and Notion — the three closest reference products for the chat+artifact split-view and staging Backlog board you're building.
+
+4. **"UI/UX Design Principles for AI Agents"** (id: cmmfdl2z503qep10zhi9dp1m4, library)
+   Pages: Ch. 3 (Component Patterns), Ch. 5 (Navigation), Ch. 7 (Cognitive Load) — approx. pp. 3–7, 13–15
+   Why: Provides concrete rules for multi-tab persistent sessions, activity feeds, and live agent status surfaces — directly applicable to the Studio's chat UX and Crew Map overlay.
+
+5. **"Lenny's Podcast — Complete Transcripts"** (id: cmmvrdl6l000apb0ztiwc6mb9, library)
+   Pages: Filter for episodes featuring founders/PMs from Linear, Notion, Cursor, Vercel (search index within the 290 pages)
+   Why: Contains practitioner-level discussions on chat-based product design decisions, multi-tenant SaaS pricing and economics, and AI-assisted feature planning — directly relevant to Studio UX and SaaS go-to-market design.
+
+### Marketplace Actions
+- Attempted to subscribe to "Anthropic Engineering Playbook: Agents, Harnesses &amp; Infrastructure" (id: cmopl6y8h0n91k30zbd25pvvn) — library at item limit, subscription skipped.
+
+---
+
+### No relevant books found — Domain 1: Multi-tenant SaaS Architecture
+
+**Suggested book**: "Building Multi-Tenant SaaS Architectures" by Tod Golding
+Why: O'Reilly 2024 book by the AWS global SaaS technical lead — covers tenancy models (pooled vs. siloed), per-tenant auth, data isolation patterns, noisy-neighbor mitigation, and migration paths from single-tenant systems.
+
+&lt;gap_signal&gt;
+  &lt;intent&gt;multi-tenant SaaS architecture: tenancy models, data isolation, per-tenant auth, and migrating single-tenant systems&lt;/intent&gt;
+  &lt;category&gt;programming&lt;/category&gt;
+  &lt;subcategory&gt;multi-tenant SaaS architecture&lt;/subcategory&gt;
+  &lt;suggested_title&gt;Building Multi-Tenant SaaS Architectures&lt;/suggested_title&gt;
+  &lt;suggested_author&gt;Tod Golding&lt;/suggested_author&gt;
+&lt;/gap_signal&gt;
+
+---
+
+### No relevant books found — Domain 4: React Graph Visualisation
+
+&lt;gap_signal&gt;
+  &lt;intent&gt;graph visualization in React: network graphs, layout algorithms, performance for large node counts&lt;/intent&gt;
+  &lt;category&gt;programming&lt;/category&gt;
+  &lt;subcategory&gt;React graph visualization&lt;/subcategory&gt;
+&lt;/gap_signal&gt;
+
+---
+
+**Practical note for your reader agents on the two gaps:**
+
+For domain 1 (multi-tenant SaaS), Tod Golding's O'Reilly book is the clearest canonical reference available — it is available at [O'Reilly](https://www.oreilly.com/library/view/building-multi-tenant-saas/9781098140632/) and [Amazon](https://www.amazon.com/Building-Multi-Tenant-SaaS-Architectures-Principles/dp/1098140648). Adding it to your library would give reader agents the tenancy model and data isolation depth this feature design requires.
+
+For domain 4 (React graph viz / Crew Map), no dedicated book exists in print — the field is documentation-first. The Vercel Frontend Engineering Guidelines (id: cml7xk722002foc0zffpwbp9v, library, 4 pages) has React performance composition patterns that are tangentially useful for heavy canvas rendering, but it is not graph-specific enough to include in the primary list.
+
+Sources:
+- [Building Multi-Tenant SaaS Architectures — O'Reilly](https://www.oreilly.com/library/view/building-multi-tenant-saas/9781098140632/)
+- [Building Multi-Tenant SaaS Architectures — Amazon](https://www.amazon.com/Building-Multi-Tenant-SaaS-Architectures-Principles/dp/1098140648)
+- [React Graph Visualization Libraries — Cambridge Intelligence](https://cambridge-intelligence.com/blog/react-graph-visualization-library/)
+- [Reagraph — WebGL Network Graphs for React](https://reagraph.dev/)</result>
+<usage><total_tokens>33720</total_tokens><tool_uses>9</tool_uses><duration_ms>79825</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:28:35
+
+<task-notification>
+<task-id>a614c22e5a7cf4890</task-id>
+<tool-use-id>toolu_017eB7VnpLtD7zLKLn8QCN2t</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a614c22e5a7cf4890.output</output-file>
+<status>completed</status>
+<summary>Agent "Read agent platform books" completed</summary>
+<result>Here is the full research synthesis.
+
+---
+
+## Sources Consulted
+
+- **Building Effective Agents** (id: `cmljg1ebo000pmn0zgxkxg3vk`, all 17 pages) — Anthropic's primary architectural reference by Erik Schluntz and Barry Zhang. Directly covers workflow patterns, orchestrator-workers, tool design, and the cost/complexity tradeoffs that govern all the design questions posed.
+- **Building Your Agent Team: A Practitioner's Guide to Multi-Agent AI Systems** (id: `cmnudfue5003rmy0zlxt7ioa1`) — Confirmed in library; **Pro-restricted** — only the 2-page preview (cover + table of contents) was available. Content from this book is limited to what that preview revealed: the book's scope covers TypeScript/Docker-based multi-agent architecture with Discord as communication layer, memory/dream systems, security/container isolation, and cloud deployment. Full chapters 3–12 were inaccessible.
+
+---
+
+## Core Findings
+
+### 1. Architecture Decision: Workflow vs. Agent for Studio Chat
+
+The single most important decision is where Studio sits on the autonomy spectrum. The books draw a hard line:
+
+&gt; "Workflows are systems where LLMs and tools are orchestrated through predefined code paths... Agents, on the other hand, are systems where LLMs dynamically direct their own processes and tool usage." — *Building Effective Agents*, p. 3
+
+**Recommendation for Studio:** Studio itself should be a **hybrid**. The top-level chat loop is a full agent (dynamic, user-driven conversation), but the sub-agent spawning (researcher → designer → breakdown-writer) should be an **orchestrator-workers workflow** — not fully autonomous agents — because the sub-tasks are known in advance (research the repo, design the hierarchy, write the breakdown). That predictability lets you use prompt chaining with gates rather than open-ended autonomy, which dramatically reduces cost and failure modes.
+
+The books are explicit about when to escalate to agents:
+
+&gt; "Agents are appropriate when the task is open-ended with unpredictable steps, the number and nature of subtasks cannot be known in advance." — *Building Effective Agents*, p. 4
+
+The feature-breakdown pipeline has a known, fixed structure: ask → research → structure → push. That's a workflow, not an agent, for the sub-agent layer.
+
+---
+
+### 2. Claude API vs. CLI Subprocess for Studio
+
+The book strongly steers toward direct API use for anything production-grade:
+
+&gt; "The recommendation is that developers start by using LLM APIs directly. Many patterns can be implemented in a few lines of code... As you move to production, do not hesitate to reduce abstraction layers and build with basic components." — *Building Effective Agents*, p. 5
+
+**Implication for Studio:** The existing ProjectsManagerWebV2 pattern of spawning Claude Code CLI as a subprocess (via `terminal_service.py`) is suitable for the autonomous issue-execution AutoPilot pipeline, but Studio's chat agent should use **the Anthropic Claude API directly** (`/v1/messages` with streaming). Reasons: (a) you control the conversation loop explicitly, (b) you can inject tool results at precise points, (c) you can attach per-tenant metadata to every call for cost attribution, (d) you avoid the TTY/subprocess complexity that makes streaming and reconnection fragile.
+
+---
+
+### 3. Orchestrator-Workers Pattern for Sub-Agent Spawning
+
+The pattern that maps most directly to Studio's researcher/designer/breakdown-writer triad:
+
+&gt; "In the orchestrator-workers workflow, a central LLM dynamically breaks down tasks, delegates them to worker LLMs, and synthesizes their results... [T]he key difference is flexibility. In parallelization, subtasks are pre-defined. In the orchestrator-workers pattern, subtasks are determined dynamically by the orchestrator based on the specific input." — *Building Effective Agents*, p. 10
+
+**Concrete Studio mapping:**
+
+| Role | Pattern element | Notes |
+|---|---|---|
+| Studio chat LLM | Orchestrator | Holds conversation history, decides when to spawn |
+| Researcher sub-agent | Worker 1 | Calls `search_codeboard`, `read_repo`, `query_rag` tools |
+| Designer sub-agent | Worker 2 | Calls `structure_hierarchy` tool, produces draft Feature→Epic→Story plan |
+| Breakdown-writer sub-agent | Worker 3 | Calls `push_to_codeboard`, `hand_to_autopilot` tools |
+| Evaluator | Optional Worker 4 | Runs evaluator-optimizer loop on the draft plan before pushing |
+
+The books explicitly describe this exact combination:
+
+&gt; "An orchestrator-workers system might use evaluator-optimizer loops within each worker." — *Building Effective Agents*, p. 13
+
+**When to spawn sub-agents vs. keep in one LLM call:** Sub-agent spawning adds latency and cost. Spawn only when the sub-task (a) requires a different toolset that you don't want polluting the chat context, (b) benefits from a dedicated, shorter context window (researcher doesn't need the full conversation history), or (c) can run in parallel with another sub-agent (researcher and designer can run concurrently once the user's intent is clear). The book's sectioning pattern is the warrant:
+
+&gt; "Sectioning breaks a task into independent subtasks that are run in parallel... tends to perform better than having the same LLM call handle both." — *Building Effective Agents*, p. 9
+
+---
+
+### 4. Streaming + Reconnection
+
+The book treats transparency as a first-class principle directly tied to streaming:
+
+&gt; "Prioritize transparency by explicitly showing the agent's planning steps. When an agent's reasoning is visible, it becomes easier to debug when things go wrong, more trustworthy for end users, simpler to identify and fix systematic issues." — *Building Effective Agents*, p. 17
+
+This implies streaming every intermediate step to the UI, not just the final answer. For reconnection durability:
+
+- **Pattern:** Use **Server-Sent Events (SSE)** from your FastAPI backend to the Next.js frontend. Each event carries a `sequence_id`. On reconnect, the client sends `Last-Event-ID`; the server replays buffered events from that point.
+- **Persistence hook:** Every streamed chunk that represents a completed agent step (not a partial token stream) should be written to the database immediately. On reconnect, the backend can rehydrate from DB rather than from in-memory buffers. This mirrors the AutoPilot crash-recovery pattern already in this codebase (`rehydrate_from_db()` in `autopilot_queue_service.py`).
+- **Pitfall:** The book warns that in multi-step agents, "mistakes early in the process can cascade" (*Building Effective Agents*, p. 12). For streaming, the equivalent pitfall is sending partial sub-agent output before gates pass. Implement a **gate check** after each sub-agent completes before streaming its output to the UI as "done."
+
+---
+
+### 5. Tool-Calling Contracts
+
+The books dedicate an entire chapter to this and it is the most practically dense section:
+
+&gt; "There are often several ways to specify the same action... some formats are much more difficult for an LLM to write than others." — *Building Effective Agents*, p. 16
+
+&gt; "Give the model enough tokens to think before it writes itself into a corner. Do not require the model to commit to structural decisions before it has had a chance to reason about the content." — *Building Effective Agents*, p. 16
+
+**Concrete tool-design rules for Studio's five tools:**
+
+1. **`search_codeboard(query, project_id)`** — Use natural-language `query`, not a structured filter object. Returning structured filter requires the model to commit to field names before thinking. Return `{results: [{key, title, type, status, summary}]}` — never full issue bodies in the tool response (token overhead).
+
+2. **`read_repo(path_or_glob)`** — Always require **absolute paths** (the SWE-bench lesson): "The model would make mistakes with tools using relative filepaths... The fix was to change the tool to always require absolute filepaths, and the model used this method flawlessly." — *Building Effective Agents*, p. 16. For Studio, the equivalent is: never accept a relative path from `read_repo`, resolve it server-side.
+
+3. **`query_rag(question)`** — Accept a natural-language question, not a vector query. The model generates better queries when it formulates them as questions.
+
+4. **`push_to_codeboard(plan: HierarchyNode[])`** — This is the highest-stakes tool. Apply **poka-yoke**: the schema should make invalid states impossible. Require `parent_key` on every non-root node; the API should reject orphans. Include an example in the tool description.
+
+5. **`hand_to_autopilot(feature_key)`** — Should be a one-shot "trigger" with a single confirmed key, not a config object, to minimize the chance of mis-parameterization at the handoff boundary.
+
+&gt; "A good tool definition often includes example usage, edge cases, input format requirements, and clear boundaries from other tools." — *Building Effective Agents*, p. 16
+
+---
+
+### 6. Conversation Persistence Shape (Multi-Tenant, Cloud-Deployable)
+
+The book's memory chapter (from the "Agent Team" preview TOC) lists four memory types: short-term (in-context), episodic, semantic, and procedural. For Studio's multi-tenant requirement, map these to a concrete DB schema:
+
+```
+StudioSession
+  id: cuid
+  tenant_id: string          # cost attribution + isolation
+  project_id: string
+  status: ACTIVE | PAUSED | COMPLETED | FAILED
+  created_at, updated_at
+
+StudioMessage
+  id: cuid
+  session_id: FK → StudioSession
+  role: USER | ASSISTANT | TOOL_RESULT | SUB_AGENT
+  content: text              # full content, never truncated
+  tool_call_id: string?      # links tool calls to results
+  sequence_num: int          # for SSE replay ordering
+  token_count: int           # for cost attribution
+  model: string              # e.g. claude-sonnet-4-6
+  created_at
+
+StudioSubAgentRun
+  id: cuid
+  session_id: FK → StudioSession
+  agent_role: RESEARCHER | DESIGNER | BREAKDOWN_WRITER
+  status: PENDING | RUNNING | DONE | FAILED
+  input_snapshot: json       # what was passed to this sub-agent
+  output_snapshot: json      # what it returned
+  tokens_input, tokens_output, cost_usd   # per-run cost
+  started_at, completed_at
+```
+
+**Why `sequence_num` matters:** On backend restart, you reconstruct the SSE replay stream by ordering `StudioMessage` by `sequence_num` and re-emitting from the client's `Last-Event-ID`. This gives you both crash recovery and audit trail.
+
+**Isolation principle:** Each sub-agent receives only the `input_snapshot` relevant to its role — not the full conversation history. This is the book's principle:
+
+&gt; "Be selective about what information to persist... Consider what information needs to pass between steps." — *Building Effective Agents*, pp. 6–7
+
+---
+
+### 7. Failure Recovery
+
+The book's risk section for autonomous agents identifies the core failure modes:
+
+&gt; "Higher costs: Multiple LLM calls and tool invocations add up. Compounding errors: Mistakes early in the process can cascade. Unpredictable behavior: The model may take unexpected paths." — *Building Effective Agents*, p. 12
+
+**Mitigations the book prescribes:**
+- "Extensive testing in sandboxed environments"
+- "Appropriate guardrails and stopping conditions"
+- "Human oversight at critical checkpoints"
+- "Maximum iteration limits to maintain control"
+
+**Applied to Studio:**
+- Sub-agent runs should have a **max_turns cap** (e.g., 5 tool calls per sub-agent). Any sub-agent that exhausts its cap without producing a valid output should fail gracefully and surface to the user for manual continuation — not silently retry.
+- The **evaluator-optimizer loop** for the breakdown plan should cap at 2–3 iterations. Define "satisfactory" as: all required hierarchy levels present, all TASKs have an assignee, no orphaned EPICs.
+- Store `failed` sub-agent runs in `StudioSubAgentRun` with full `input_snapshot` so recovery is possible: a user can resume from the last successful checkpoint without re-running prior sub-agents.
+
+The evaluator-optimizer pattern is particularly apt for the breakdown step:
+
+&gt; "This workflow is particularly effective when there are clear evaluation criteria and iterative refinement provides measurable value." — *Building Effective Agents*, p. 11
+
+For Studio, "clear evaluation criteria" = the CodeBoard hierarchy schema validation (required fields, valid parent links, valid assignee values).
+
+---
+
+### 8. Cost Controls and Prompt Caching Strategy
+
+The book frames cost as a design-time constraint:
+
+&gt; "Agentic systems often trade latency and cost for better task performance. You should carefully consider when this tradeoff makes sense... Each additional LLM call adds to your API costs." — *Building Effective Agents*, p. 4
+
+**Model routing for cost control** is directly supported by the book's routing pattern:
+
+&gt; "Easy or common questions are routed to smaller, cost-efficient models like Claude Haiku 4.5. Hard or unusual questions are routed to more capable models like Claude Sonnet 4.5. This optimizes for both cost efficiency and performance quality." — *Building Effective Agents*, p. 8
+
+**Applied to Studio:**
+
+| Sub-agent | Recommended model | Rationale |
+|---|---|---|
+| Chat orchestrator (conversation) | claude-sonnet-4-6 | Needs reasoning for dynamic conversation |
+| Researcher | claude-haiku-4-5 | Search query formulation is routine |
+| Designer (hierarchy structuring) | claude-sonnet-4-6 | Requires deeper reasoning over repo context |
+| Breakdown-writer | claude-haiku-4-5 | Templated output once structure is decided |
+| Evaluator | claude-haiku-4-5 | Schema validation is mechanical |
+
+**Prompt caching:** The `COMPANY.md` / system prompt pattern from the Agent Team TOC maps directly to Anthropic's cache-control headers. Structure your sub-agent system prompts in two tiers: (a) a stable "company context + tool definitions" prefix that qualifies for prompt caching (changes infrequently, place at the top of the context), and (b) a dynamic session-specific suffix that doesn't. Cache the first tier aggressively — it's likely 2,000–5,000 tokens per call, and caching it saves ~90% on input token cost for those tokens across all sub-agent calls in a session.
+
+**Per-tenant cost attribution:** Record `tokens_input`, `tokens_output`, `model`, and `cost_usd` on every `StudioSubAgentRun` and `StudioMessage` row. Roll up to `StudioSession.total_cost_usd`. This gives you the per-tenant billing signal without needing a separate telemetry pipeline.
+
+---
+
+## Additional Insights
+
+**The "add complexity only when it demonstrably improves outcomes" test** is the most important gate for Studio's rollout:
+
+&gt; "The key to success, as with any LLM features, is measuring performance and iterating on implementations. You should consider adding complexity only when it demonstrably improves outcomes." — *Building Effective Agents*, p. 13
+
+A practical implication: launch Studio's V1 as a **single orchestrator with tools** (no sub-agent spawning). Add the researcher, designer, and breakdown-writer as distinct sub-agents only after measuring whether the single-orchestrator approach produces consistently poor hierarchies. Sub-agent spawning adds latency, cost, and failure surface — only pay that cost if the quality delta is measurable.
+
+**The ACI investment principle** is a strong argument for spending more time on tool schema design than on the orchestrator prompt:
+
+&gt; "Think about how much effort goes into human-computer interfaces (HCI), and plan to invest just as much effort in creating good agent-computer interfaces (ACI)." — *Building Effective Agents*, p. 16
+
+The implication for the `push_to_codeboard` tool in particular: the schema you expose to the model is more important than any instruction in the system prompt. Poka-yoke it: enforce hierarchy rules at the tool input level so the model cannot push an invalid plan.
+
+---
+
+## Pro-Restricted Notice
+
+**Building Your Agent Team: A Practitioner's Guide to Multi-Agent AI Systems** (`cmnudfue5003rmy0zlxt7ioa1`) is a Pro-only book. Only the 2-page preview (cover and table of contents) was available. Chapters covering agent architecture deep-dive (Ch. 4), inter-agent communication (Ch. 8), security/container isolation (Ch. 10), cloud deployment and cost optimization (Ch. 11), and memory/knowledge systems (Chs. 6–7) were inaccessible. Those chapters are directly relevant to this design question.
+
+Upgrade to CandleKeep Pro for full access: https://getcandlekeep.com/billing
+
+---
+
+## Citation Summary
+
+- **Books read:** Building Effective Agents (all 17 pages, complete); Building Your Agent Team (2/15 preview pages, Pro-restricted)
+- **Key takeaways:** Orchestrator-workers is the right pattern for Studio's sub-agent triad · Tool schema design (ACI) matters more than system prompt length · Model routing (Haiku for mechanical sub-agents, Sonnet for reasoning) is the primary cost lever · Each sub-agent should receive only its `input_snapshot`, not the full conversation · Evaluator-optimizer loop on the breakdown plan should cap at 2–3 iterations with schema-level validation as the gate · Persist `sequence_num` on every message for SSE replay/reconnection
+- **Impact:** The books establish that the sub-agent spawning layer for Studio should be a structured workflow (known subtasks, fixed sequence) rather than fully autonomous agents — this is a non-obvious architectural choice that directly contradicts the impulse to give each sub-agent open-ended autonomy. The cost and failure-cascade risks of unconstrained autonomy are explicit.
+- **Worth remembering:** "The model would make mistakes with tools using relative filepaths after the agent had moved out of the root directory. The fix was to change the tool to always require absolute filepaths, and the model used this method flawlessly." — *Building Effective Agents*, p. 16. The broader principle: redesign the tool so the wrong choice is structurally impossible, rather than adding instructions telling the model to behave correctly. For Studio, this means the `push_to_codeboard` tool should reject orphaned nodes at the API boundary, not rely on the model to produce valid parent links through prompt instruction.</result>
+<usage><total_tokens>36030</total_tokens><tool_uses>8</tool_uses><duration_ms>127138</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:29:13
+
+<task-notification>
+<task-id>aaea13fadbb269913</task-id>
+<tool-use-id>toolu_01XmLpQ2AgJgREL9eF2NQ3Tr</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/aaea13fadbb269913.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio frontend architecture" completed</summary>
+<result>The architecture document is written. Here is the full design summary.
+
+---
+
+## Studio Frontend Architecture — Design Summary
+
+### 1. Route Structure
+
+Four routes, one shared layout:
+
+```
+/workspace                              → redirect to last workspace
+/workspace/[id]/studio                  → StudioPage  (?conv=&amp;tabs=)
+/workspace/[id]/backlog                 → BacklogPage (?status=&amp;priority=&amp;tag=&amp;sort=)
+/workspace/[id]/crew-map                → CrewMapPage (?project=&amp;feature=&amp;agent=)
+```
+
+`workspace/[id]/layout.tsx` is a **Client Component** that resolves the workspace, injects `TenantContext`, and renders `WorkspaceTopBar` (switcher + Studio/Backlog/Map tabs) above all three views. The sidebar gets one new entry — "Studio" at `/workspace` — which redirects to the last-visited workspace. `AutoPilotFloatingBar` is untouched; it already lives in `providers.tsx` at z-70.
+
+**Tenant isolation:** every API call goes through `workspaceFetch()`, which injects `X-Workspace-Id: &lt;id&gt;`. All React Query keys are prefixed `['workspace', workspaceId, ...]`. Switching workspace invalidates nothing from the previous one.
+
+---
+
+### 2. Component Trees (hard components per view)
+
+**Studio — 5 hard components:**
+
+| Component | Why hard |
+|---|---|
+| `StreamingTextContent` | `useRef` token buffer, 50ms flush interval, `content-visibility: auto`, `aria-live="polite"` |
+| `AgentInvocationCard` | Collapsible, SSE-driven `inTool` badge, chain-depth display |
+| `PreviewPane` | CSS transition 250ms enter / 150ms exit, keyboard-operable resize handle (`role="separator"`), focus management |
+| `MermaidPreview` | Dynamic import, Mermaid v10 async API, error boundary required |
+| `ConversationTabBar` | Multi-tab state model, `startTransition` on switch, right-click context menu, URL sync |
+
+`Chat.Provider` wraps each conversation's subtree; `Chat.MessageList`, `Chat.AgentStatus`, `Chat.Input`, `Chat.Actions` consume it via context — this is the Compound Component + Context pattern from CandleKeep v1.1.
+
+**Backlog — 5 hard components:**
+
+| Component | Why hard |
+|---|---|
+| `BacklogList` | dnd-kit drag-reorder, optimistic mutation on drop, sub-400ms Doherty rule |
+| `SchedulePicker` | One-shot/recurring/unscheduled radio, cron expression parser, live human preview |
+| `SendToCodeBoardModal` | Blueprint state machine UI — validate, show AI hierarchy, user edits, then promote |
+| `BacklogCard` | Drag handle, multi-action row, `font-feature-settings: "tnum"` for timestamps |
+| `CronInput` | Expression validation, real-time "next firing" without layout thrash |
+
+**Crew Map — 5 hard components:**
+
+| Component | Why hard |
+|---|---|
+| `ReactFlowCanvas` | 1000-node performance (viewport culling + on-demand subgraph), SSE via `useReducer`, viewport persistence |
+| `SkillNode` | 2Hz CSS keyframe pulse, `prefers-reduced-motion` fallback |
+| `ActiveEdge` | SVG `stroke-dashoffset` animation — GPU-only, not `width` |
+| `NodeDetailPanel` | 250ms/150ms CSS transition, focus management, three deep-link types |
+| `CrewMapFilterBar` | Derived `visibleNodes`/`visibleEdges`, URL-synced, reset-view |
+
+---
+
+### 3. State Management
+
+| State | Home | Why |
+|---|---|---|
+| Server data (conversations, backlog, graph) | React Query | Cache, dedup, background refetch, tenant-scoped keys |
+| Open tabs, active tab, panel split ratio, chat drafts | Zustand `useStudioStore` | Survives unmount/remount; drafts are session-only; panel ratio persisted to `localStorage` |
+| Streaming token buffer | `useRef` (never `useState`) | Avoids re-render per token |
+| Agent activity (SSE events) | `useReducer` inside `Chat.Provider` | Event-sourced, predictable transitions |
+| Backlog / Crew Map filters | URL search params | Shareable, bookmarkable, back/forward |
+| Graph viewport position | `useRef` + `localStorage` | Too large for URL; per-project key |
+| Workspace identity | React Context (`TenantContext`) | Stable for entire workspace session |
+
+---
+
+### 4. Streaming UX
+
+**Chat tokens:** `EventSource` → `tokenBufferRef.current += delta.text` → 50ms `setInterval` flush to `useState`. One render per 50ms maximum, no matter how fast the model streams.
+
+**SSE reconnect:** `onerror` → exponential backoff: 1s → 2s → 4s → 8s → 16s → cap 30s. `onopen` resets backoff to 1s. Auth 401 → no retry, show "Session expired" toast. Max 8 concurrent EventSources enforced client-side (oldest idle tab's connection closes when a 9th tab opens).
+
+**Agent activity:** SSE `tool_start`/`tool_end` events drive `agentStatusReducer` — idle → thinking → tool-use → done. This is the `inTool` boolean pattern from the CandleKeep streaming docs.
+
+**Backlog live sync:** React Query 10-second polling for the list. A short-lived SSE channel opens only while the "Send to CodeBoard" modal is open (promote pipeline progress events).
+
+---
+
+### 5. Crew Map Graph Library
+
+**Chosen: React Flow v12 (`@xyflow/react`)**
+
+React-native (nodes/edges are React components), MIT license, ~80kb gz, built-in zoom/pan/minimap/controls, viewport persistence via `onNodesChange`.
+
+**1000-node performance strategy:**
+- Layer 1: React Flow's built-in viewport culling renders only visible nodes (~150–300 at typical zoom)
+- Layer 2: On-demand subgraph loading — default load shows project + feature nodes only; agent/skill nodes load when a feature is expanded
+- Layer 3 (Phase 2 only): `d3-force` layout in Web Worker via `comlink` if layout computation stalls main thread
+
+Target: initial render &lt; 200ms, feature expand &lt; 100ms, pan/zoom &lt; 50ms per frame.
+
+---
+
+### 6. Multi-Tab Studio Sessions
+
+Tabs are hidden (`className="hidden"`), not unmounted. This keeps each tab's `EventSource` alive and streaming state intact across tab switches — the same model browsers use for hidden tabs.
+
+**URL encodes:** `?conv=&lt;activeId&gt;&amp;tabs=&lt;id1&gt;,&lt;id2&gt;,&lt;id3&gt;`. Hard-refresh restores the exact tab configuration.
+
+**Hibernate:** After 30 minutes idle, the backend closes the Claude subprocess. The frontend detects the SSE close event and shows a "Hibernated" badge. On tab click → `POST /api/studio/sessions/&lt;id&gt;/resume` → backend re-spawns, replays last 5 messages, SSE reconnects.
+
+**Max 8 tabs** enforced client-side (matches SSE channel limit).
+
+---
+
+### 7. Design System Extensions
+
+**10 new UI primitives** needed in `components/ui/`:
+
+`ChatBubble`, `ArtifactPreviewTabs` (extends `ui/tabs`), `AgentStatusRow`, `PriorityBadge` (Linear-style, `border-radius: 2px`), `FilterPill` (`border-radius: 9999px`, clearable), `DragHandle`, `ResizablePanels`, `GraphMiniMapOverlay`, `ScheduleIndicator` (tnum font), `CronInput`.
+
+All existing primitives (`modal`, `button`, `skeleton`, `toast`, `error-boundary`, `tabs`) reused as-is.
+
+**Animation rules baked into globals.css:**
+- Enter: 250ms `transform` + `opacity`, ease-out (CSS `transition`, interruptible)
+- Exit: 150ms (60% of enter)
+- Agent pulse: CSS `@keyframes` at 2Hz (looping one-shot only)
+- GPU-only: `transform`, `opacity`, `filter` — never `width`, `left`, `margin`
+- `prefers-reduced-motion`: all pulses → static opacity 0.7, all transitions → none
+
+---
+
+### 8. Day-One MVP Slice
+
+Ships first (weeks 2–3 of the 12-week plan):
+
+- **Studio:** tab strip, chat pane with token streaming, agent status panel, Send + Pause + Save actions
+- **Backlog:** list view, filter bar, edit modal (no scheduler), CRUD hooks
+- **Bridge:** "Send to Backlog" from Studio, "Open in Studio" from Backlog
+
+**Not in MVP:** PreviewPane, Crew Map, drag-reorder, cron scheduler, "Send to CodeBoard + AutoPilot", hibernation/resume, animation polish.
+
+**~22 new component files, 4 hooks, 2 Zustand stores, 1 context, 1 API client utility.** Zero changes to existing CodeBoard components.
+
+---
+
+The full document is at `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-frontend-architecture.md`.</result>
+<usage><total_tokens>83964</total_tokens><tool_uses>14</tool_uses><duration_ms>279105</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:29:36
+
+<task-notification>
+<task-id>acdbc1930d7ee4252</task-id>
+<tool-use-id>toolu_0187SkCNbRDN5SrDWqtXJvRH</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/acdbc1930d7ee4252.output</output-file>
+<status>completed</status>
+<summary>Agent "Read plans + audit 276 tasks" completed</summary>
+<result>Now I have everything needed for the comprehensive report. Let me compile it.
+
+---
+
+# Section A — Plan Summary + Multi-Tenant / Cloud / SaaS Gap Analysis
+
+## A.1 What the Two Plan Documents Propose
+
+### Master Plan (`2026-05-07-ai-project-workspace-master-plan.md` — 56 KB)
+**Status:** PROPOSED v2.0 — explicitly supersedes v1.1. **This is the authoritative plan.**
+
+**Architecture:** A new layer above CodeBoard at `/app/workspace/*` with three views:
+- **Studio** — chat-based feature planning with multi-tab conversations, live agent activity panel, split-view artifact renderer, and a "Send to Backlog" button
+- **Backlog** — pre-CodeBoard staging board for feature requests with priority/scheduler/status lifecycle (`DRAFT → REVIEWING → APPROVED → SCHEDULED → PROMOTED → SHIPPED → ARCHIVED`)
+- **Crew Map** — `react-flow` Obsidian-style graph showing project → feature → orchestrator → skill relationships with live SSE updates
+
+**Scope:** 8 EPICs, 41 stories, 159 tasks, 25 subtasks. ~54 working days (~12 weeks including soak).
+
+**Key data models:** `StudioConversation`, `StudioMessage`, `StudioArtifact`, `StudioAgentActivity`, `StudioInterAgentMessage`, `AgentTemplate`, `AgentInstance`, `FeatureRequest`, `FeatureRequestComment`, `FeatureRequestActivity`, `CrewAssignment`, `CrewSkillUsage`.
+
+**Backend services:** `studio_orchestrator.py`, `agent_dispatcher.py`, `artifact_renderer.py`, `feature_scheduler.py`, `promote_pipeline.py`, `crew_map_service.py`.
+
+**Notable production patterns baked in:** Visibility Principle (every dispatch DB-persisted before chat), template/instance agent separation, GroupQueue mutex (one invocation per agent at a time), 4 typed inter-agent verbs (notify/request/delegate/broadcast) with max chain depth 3, Blueprint hybrid state machine for promote pipeline, CSS transitions over keyframes, Doherty 400ms threshold, compound component pattern, `useRef` token buffer.
+
+**Rollout:** 12-week phased calendar with `WORKSPACE_ENABLED` feature flag.
+
+### v1.1 Feature Plan (`2026-05-07-feature-studio-and-backlog-board.md` — 36 KB)
+**Status:** PROPOSED v1.1 — explicitly superseded by the master plan. **Treat as historical/reference only.**
+
+**Scope:** Two separate features (F1 = Studio, F2 = Backlog Board) estimated at ~4.5 weeks, ~46 stories, ~135 tasks.
+
+**Key differences from master plan:**
+- Recommended **F2 first** (Backlog Board), then F1 (Studio) — the master plan unified them and changed sequencing to E1 Foundation first.
+- Did not include Crew Map (added in v2.0 as E4).
+- Route was `/app/studio/` and `/app/feature-backlog/` — master plan unified under `/app/workspace/`.
+- Effort significantly lower (~4.5 weeks vs ~12 weeks) partly because Crew Map adds ~8 days and the regression matrix expanded from 5 to 44 QA tasks.
+
+**Where they agree:** Identical data models (FeatureRequest/Comment/Activity), identical status flow, identical component names (StudioTopBar, ConversationTabs, PreviewPane, AgentCrewPanel), identical animation timings (250ms enter / 150ms exit), identical CandleKeep-derived patterns.
+
+**The only live disagreement (minor):** v1.1 names the route `/app/studio/page.tsx` and `/app/feature-backlog/page.tsx`; master plan routes to `/app/workspace/studio/`, `/app/workspace/backlog/`, `/app/workspace/crew-map/`. Since master plan supersedes, the workspace-unified routing is canonical.
+
+---
+
+## A.2 Multi-Tenant + Cloud + SaaS Gaps
+
+**Current state of the codebase:** No multi-tenant infrastructure exists. The Prisma schema has no `User`, `Organization`, or `Workspace` model. The backend has no auth middleware (the `/backend/middleware/__init__.py` is the only middleware file). The `Project` model has no `ownerEmail`, `orgId`, or `tenantId`. The SQLite backend stores `assignee` and `reporter` as plain strings. CB-2121 ("Add backend auth layer + project scoping") is unbuilt and unbroken-down.
+
+**Both plan documents are 100% silent on multi-tenancy and cloud deployment.** Every table, service, API endpoint, and UI component is designed single-tenant (single Eli + single machine). The plans do not mention authentication, user sessions, workspace isolation, data partitioning, or cloud deployment in any chapter.
+
+The specific gaps for an autonomous build with the two NON-NEGOTIABLE constraints:
+
+### Gap 1 — No authentication layer (CRITICAL)
+Neither plan includes a user auth system. Every API endpoint is open. The Backlog's `ownerEmail` field is a plain string column with no enforcement. The Studio's `StudioConversation` has a `projectId` but no `userId`/`workspaceId`. The Crew Map has no visibility scoping.
+- **What's needed:** An auth epic — JWT or session-based auth, login/register, middleware to set `request.state.user`, user model in both Prisma and SQLAlchemy.
+- **CB-2121 is the existing placeholder** (unbroken-down, BACKLOG) — it must be executed before or alongside E1, not after E8.
+
+### Gap 2 — No workspace / tenant isolation model (CRITICAL)
+All data tables use `projectId` for scoping, but `Project` has no `workspaceId`/`tenantId`/`orgId`. In a multi-tenant deployment, Tenant A cannot see Tenant B's Studio conversations, Backlog entries, or Crew Map nodes. None of the 14 data models in the master plan (Chapter 5 data layer) have a workspace/tenant foreign key.
+- **What's needed:** A `Workspace` model (or `Organization`/`Tenant`), all new tables scoped to it, and row-level filtering in all queries. The `FeatureRequest`, `StudioConversation`, `CrewAssignment` etc. all need `workspaceId` columns.
+
+### Gap 3 — SQLite as the production database (CRITICAL for cloud)
+Both plans and the docker-compose assume SQLite (`sqlite+aiosqlite:///./data/codeboard.db`). SQLite cannot support multi-tenant cloud deployment (no concurrent writes, no connection pooling, single file). The `DATABASE_URL` is embedded in `docker-compose.yml` rather than injected as an env secret.
+- **What's needed:** PostgreSQL (or at minimum a `DATABASE_URL` that can be swapped to Postgres without code changes). The SQLAlchemy models appear broadly compatible (no SQLite-specific types used), but the migration scripts and Alembic config would need rework. The Prisma frontend side also uses `provider = "sqlite"`.
+
+### Gap 4 — No per-tenant secret / API-key management (HIGH)
+Studio spawns Claude Code CLI subprocesses. In a multi-tenant deployment, each tenant would need their own Claude API key or a shared-key pool with per-tenant billing attribution. The `terminal_service.py` spawns subprocesses without any tenant context injection. No plan exists for per-tenant credential storage or secret rotation.
+
+### Gap 5 — No rate limiting or per-tenant quota (HIGH)
+The scheduler fires for any `FeatureRequest` with `scheduledFor &lt;= now()` globally. In a multi-tenant deployment, one tenant's recurring schedules could saturate the Claude subprocess pool. The SSE multiplexer caps at 8 streams per the risk register (Master Plan, Chapter 8) but this is a global cap with no per-tenant allocation.
+- **What's needed:** Per-workspace SSE limits, scheduler quota enforcement, and Claude subprocess pool partitioning.
+
+### Gap 6 — No SaaS onboarding / workspace creation UX (HIGH)
+Both plans assume Eli is the only user. There is no plan for workspace creation, inviting collaborators, managing workspace members, or setting workspace-level defaults (default agent, default theme, etc.). The Settings page in E8.S3 controls only the `WORKSPACE_ENABLED` feature flag toggle — not workspace management.
+
+### Gap 7 — No cloud storage abstraction for artifacts (MEDIUM)
+`StudioArtifact` stores `payload` in the SQLite/Postgres DB. For cloud deployment, large artifacts (mermaid diagrams, generated code) should go to object storage (S3/R2) with the DB holding only a reference URL. No plan for this exists.
+
+### Gap 8 — No horizontal scalability for SSE/WebSocket layer (MEDIUM)
+The SSE multiplexer in `services/studio_orchestrator.py` is in-process (asyncio). In a cloud deployment with multiple backend instances, SSE channels are not shared across instances — a client connected to pod A won't receive events from a session running on pod B. The existing AutoPilot has the same limitation. No Redis pub/sub or message broker is mentioned anywhere in either plan.
+
+### Gap 9 — E7 security tasks are incomplete for multi-tenant (MEDIUM)
+E7.S2 security-auditor tasks (CB-2572–2577) check subprocess isolation, iframe sandbox, SSE limits, and promote pipeline safety. They do **not** cover: IDOR between workspaces, JWT token validation, cross-tenant data leakage in the Crew Map graph API, or tenant-scoped Backlog API access control. These are the most critical attack surfaces in a multi-tenant deployment.
+
+### Gap 10 — No marketplace / "service upload" concept exists (LOW-MEDIUM)
+Neither plan mentions a marketplace or service-upload feature. No file, script, or CodeBoard issue references this. If the SaaS vision includes an agent/skill marketplace where tenants can install community skills, this is entirely unplanned.
+
+---
+
+# Section B — 276-Task Quality Assessment
+
+## B.1 Structural Fidelity to the Plan
+
+The board hierarchy is a **precise mechanical copy of the master plan**. Every issue key follows the `[Ex.Sy.Tz]` naming convention from Chapter 4 (the agile plan). The count breakdown:
+
+| Type | Plan | Board | Delta |
+|------|------|-------|-------|
+| FEATURE | 1 | 1 | 0 |
+| EPIC | 8 | 8 | 0 |
+| STORY | 41 | 41 | 0 |
+| TASK | 159 | 202 | +43 |
+| SUBTASK | 25 | 25 | 0 |
+
+The +43 task delta is entirely explained by **E7.S6 Regression Matrix expansion**: the master plan defined 5 regression tasks (E7.S6.T1–T5); the board contains 44 labeled `[QA] F-*`, `[QA] B-*`, `[QA] C-*`, `[QA] A-*`, `[QA] P-*`, `[QA] S-*`, `[QA] I-*` covering Studio, Backlog, Crew Map, Accessibility, Performance, Security, and Integration scenarios. This expansion is deliberate and high-quality — these are concrete, verifiable test cases, not padding.
+
+All 276 issues are `BACKLOG` status, reporter `AI`, with no description field empty. No duplicates found.
+
+## B.2 EPIC / Theme Groupings
+
+| Epic | CB Key | Tasks | Theme | Assessment |
+|------|--------|-------|-------|------------|
+| E1 Foundation | CB-2385 | 17 | Data models + shared services | Solid foundation work. All 5 stories map to concrete DB tables and services. T1 is the largest unit (5 SQLAlchemy models) — borderline "too big" but acceptable. |
+| E2 Studio | CB-2414 | 38 | Chat UI + multi-tab + streaming | 38 tasks across 8 stories is the highest-risk epic. E2.S3 (Chat pane, 7 tasks) and E2.S6 (Preview pane, 7 tasks) are properly decomposed. Hibernation/resume (E2.S8) is the highest-risk story (subprocess lifecycle). |
+| E3 Backlog | CB-2465 | 20 | Staging board before CodeBoard | Well-scoped. Edit modal (E3.S3, 6 tasks + 3 subtasks) has the right granularity for the scheduler complexity. |
+| E4 Crew Map | CB-2494 | 22 | react-flow agent graph | Technically risky (react-flow + Next.js 16 compatibility, force-layout perf) but well-decomposed. 5 subtasks for the node renderers are cleanly atomic. |
+| E5 Promote Pipeline | CB-2527 | 12 | Backlog → CodeBoard → AutoPilot | The 7-state Blueprint state machine (CB-2530–CB-2536 subtasks) is properly granular and each subtask is independently testable. |
+| E6 Scheduler | CB-2551 | 10 | cron + one-shot triggers | Compact and appropriate for scope. 10 tasks is correct — this is a focused service. |
+| E7 Audits + Tests + QA | CB-2565 | 67 | Testing, security, regression | The 44 QA tasks in E7.S6 dominate. Categorized by: F (Studio flows, 10), B (Backlog flows, 10), C (Crew Map, 6), A (Accessibility, 4), P (Performance, 4), S (Security, 5), I (Integration/resilience, 5). All are concrete, verifiable pass/fail tests. |
+| E8 Rollout + Soak | CB-2639 | 16 | Migration, docs, feature flag, soak | Appropriate for a greenfield feature. The 7-day soak (CB-2654) is listed as a single task — correct, it's a wait not work unit. |
+
+## B.3 Coherence and Actionability Assessment
+
+**Coherent and actionable:** Yes. The tasks are not auto-generated bloat. Each task title contains enough context to act on without reading a separate spec. Examples of well-formed tasks:
+- CB-2387: `[E1.S1.T1] SQLAlchemy: StudioConversation/Message/Artifact/AgentActivity/InterAgentMessage` — 5 named models, clear deliverable
+- CB-2529: `[E5.S1.T1] services/promote_pipeline.py — Blueprint state machine` — names the file and architectural pattern
+- CB-2573: `[E7.S2.T1] Subprocess isolation (Studio Claude spawns)` — concrete security check
+- CB-2607: `[QA] B-3: One-shot schedule (+60s) fires correctly` — deterministic test with timing
+
+**Assignee distribution is sensible:** `react-specialist` (88) owns Studio/Backlog/CrewMap frontend; `python-pro` (74) owns backend services and data models; `debugger` (52) owns the E7 test/regression work; `security-auditor` (9) owns E7.S2.
+
+**Priority calibration is reasonable:** CRITICAL (51 tasks) clusters around pipeline orchestration, data models, and core API work. LOW (23 tasks) covers docs, migration notes, and soak monitoring. No obvious miscalibration.
+
+## B.4 Distinct Themes — 8
+
+1. **Data Foundation** (E1) — ORM, Prisma, migrations, seeding
+2. **Studio Chat UX** (E2) — multi-tab conversation UI, streaming, artifact preview, hibernation
+3. **Feature Staging Board** (E3) — Backlog CRUD, priority/schedule management
+4. **Agent Graph Visualization** (E4) — react-flow Crew Map with live SSE
+5. **Promotion Pipeline** (E5) — Backlog-to-CodeBoard-to-AutoPilot state machine
+6. **Scheduling Engine** (E6) — cron/one-shot background worker
+7. **Quality Assurance** (E7) — code review, security audit, unit/integration/e2e tests, 44-case regression matrix
+8. **Rollout Operations** (E8) — migration, docs, feature flag, production soak
+
+## B.5 Obsolete or Duplicate Tasks
+
+None found. No duplicate titles exist in the 276 items. All tasks reference specific deliverables that don't exist yet in the codebase (confirmed: none of the files named in the tasks — `services/studio_orchestrator.py`, `services/promote_pipeline.py`, `api/studio.py`, `api/feature_backlog.py`, `/app/workspace/` — exist).
+
+## B.6 Real Executable Units vs. Tracking Placeholders
+
+The 276 tasks split into approximately:
+- **~200 directly executable** — have a specific file path, component name, or service to create/implement
+- **~23 code-review/audit tasks** (E7.S1–S2) — these are process gates, not implementation units, but are legitimate checkpoints
+- **~44 QA regression tasks** (E7.S6) — these are executable as test scripts/Chrome QA passes
+- **~7 documentation tasks** (E8.S2) — these are real deliverables (runbook, API reference, user guide)
+- **~2 soak/monitoring tasks** (E8.S4.T1, E8.S4.T2) — time-bound wait periods, not traditional work units
+
+The only tasks I'd flag as potentially too coarse for single-agent execution:
+- **CB-2387** (`[E1.S1.T1]` — 5 SQLAlchemy models in one task): acceptable for a single Python session but should be treated as a ~L effort unit
+- **CB-2416** (`[E2.S1.T1]` — Studio page shell): fine as-is
+- **CB-2593** (`[E7.S5.T4]` — full Playwright e2e: Studio → Backlog → CodeBoard → AutoPilot): this is marked L effort and is genuinely large — could be split
+
+## B.7 Plan Coverage Assessment
+
+The 276-task board covers the master plan completely. Every story in Chapters 5–6 of the master plan has a corresponding STORY issue. The single expansion beyond the plan (44 QA regression cases vs. 5) is a quality improvement, not scope creep — the QA tests are specific and correct.
+
+**What the board does NOT cover** (because the plan doesn't either, per Section A):
+- Multi-tenant/workspace isolation tasks
+- Auth epic (CB-2121 work)
+- Database portability (SQLite → Postgres)
+- Per-tenant rate limiting / quota
+- SaaS onboarding flow
+- Cloud storage for artifacts
+- Horizontal SSE scaling
+
+---
+
+## Key File References
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-07-ai-project-workspace-master-plan.md` — authoritative plan (supersedes v1.1). Chapters 4–6 are the full agile hierarchy. Chapter 8 is the risk register (does not mention multi-tenant risks).
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-07-feature-studio-and-backlog-board.md` — superseded v1.1. Chapter 11 (CandleKeep Findings) contains the design decisions table that explains all the UI/animation choices.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/2026-05-19-codeboard-backlog-audit.md` — confirms CB-2384 has 276 tasks and is the largest unbuilt thing. Also identifies CB-2121 (auth) as unbuilt and notes it as "the proper fix for the IDOR weakness."
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/prisma/schema.prisma` — no User/Workspace/Tenant model exists. SQLite provider.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docker-compose.yml` — SQLite `DATABASE_URL` hardcoded in the compose file rather than externalized.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/middleware/__init__.py` — the only middleware file; no auth middleware exists.</result>
+<usage><total_tokens>73185</total_tokens><tool_uses>30</tool_uses><duration_ms>373334</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:30:04
+
+<task-notification>
+<task-id>acc2e649494420325</task-id>
+<tool-use-id>toolu_01ASrqDWvhNx7h6Ge1kSweiT</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/acc2e649494420325.output</output-file>
+<status>completed</status>
+<summary>Agent "Read Studio UX design books" completed</summary>
+<result>The session auto-completed. Here is the full synthesis.
+
+---
+
+## Sources Consulted
+
+- **Awesome Design.md** (id: cmnm3t8zu00w2oc0zznp2v0n1) — Pages 7 (Claude/Anthropic), 13 (Cursor), 17 (Figma), 24 (Linear), 31 (Notion). Selected because these five products are the closest analogues to the three Studio sub-views: Claude for chat+artifact, Cursor for AI agent activity, Linear for board UX, Figma/Notion for multi-surface layout and navigation conventions.
+- **UI/UX Design Principles for AI Agents** (id: cmmfdl2z503qep10zhi9dp1m4) — Preview pages 1-2 (How to Use + Decision Matrix). Chapters 7, 9, and additional chapters are pro-restricted; the decision matrix on p. 2 contains distilled rule thresholds applicable to all sub-views.
+
+---
+
+## Core Findings
+
+### 1. Chat + Artifact Split-View (Studio Sub-View A)
+
+**Layout blueprint — Claude as the canonical reference.**
+
+Claude's design establishes the clearest precedent for a warm, focused chat+artifact canvas. The core layout principle is what the Claude design system calls "Content Island Approach": alternating light/dark sections that create distinct "rooms" for each information mode (*Awesome Design.md*, p. 7). Apply this to the Studio split: the chat panel should live on a warm near-neutral surface (`#f5f4ed` parchment-class), and the artifact panel (the live preview) should break into a darker, more app-like surface (`#30302e` dark charcoal). The contrast acts as a visual mode separator without a hard divider line.
+
+For the resizable split itself, Cursor's layout guidance is the better technical model: it uses a `#f2f1ed` warm-cream background with an `oklab`-space border at 10% opacity as the panel divider — a line that "feel[s] organic rather than mechanical" (*Awesome Design.md*, p. 13). In CSS terms, use `border-right: 1px solid rgba(38,37,30,0.1)` (the rgba fallback for oklab) on the chat panel. Avoid hard `#cccccc` borders — they read as chrome, not content separation.
+
+**Artifact preview panel — the canvas metaphor.**
+
+Notion's treatment of embedded content is the reference here. Its design uses a "whisper border" — `1px solid rgba(0,0,0,0.1)` — around all product screenshots and embedded work, with a `12px 12px 0px 0px` top-radius when content bleeds to a bottom edge (*Awesome Design.md*, p. 31). This same treatment should wrap the artifact preview iframe/canvas: a whisper-bordered container, not a viewport-modal-style hard frame. The shadow stack for the artifact panel should be Notion's 4-layer soft stack (max opacity 0.04) rather than a generic `box-shadow: 0 2px 8px rgba(0,0,0,0.2)`.
+
+**The artifact toolbar (tab strip above the preview):**
+
+Figma's horizontal "Product Tab Bar" is the strongest reference — pill-shaped tabs at 50px radius, where the active tab is the only state with a filled background, and inactive tabs are transparent with full-black text (*Awesome Design.md*, p. 17). The dashed focus outline (`dashed 2px`) from Figma's system is also worth adopting on keyboard-focus for the artifact tabs — it signals "this is a tool surface."
+
+**Component spec for a React engineer:**
+
+```
+// ArtifactPanel.tsx
+&lt;div className="artifact-panel border border-[rgba(0,0,0,0.08)] rounded-xl shadow-[0px_4px_18px_rgba(0,0,0,0.04),0px_2px_7.8px_rgba(0,0,0,0.027)]"&gt;
+  &lt;TabBar tabs={["Preview","Code","Diff"]} pill radius="9999px" active-bg="#0075de" inactive-bg="transparent" /&gt;
+  &lt;iframe className="w-full h-full rounded-b-xl" /&gt;
+&lt;/div&gt;
+```
+
+---
+
+### 2. Live Agent-Activity Feed (Studio Sub-View A, right panel)
+
+**Cursor's AI Timeline is the only design-documented precedent for this exact component.**
+
+Cursor uses a vertical timeline of AI operation types: Thinking (`#dfa88f` warm peach), Grep (`#9fc9a2` sage green), Read (`#9fbbe0` soft blue), Edit (`#c0a8dd` soft lavender). Each step is connected by a vertical line at `rgba(38,37,30,0.1)` opacity. The label is 14px system-ui, the description is 16px CursorGothic, and the connecting line is rendered in the near-invisible warm-brown tint (*Awesome Design.md*, p. 13).
+
+For a multi-agent context (multiple Claude Code sessions running in parallel), this pattern needs an identity layer. The recommendation is to assign each agent a persistent color from Cursor's semantic palette — not arbitrary hues but the same four: Thinking/Grep/Read/Edit map conceptually to Planning/Searching/Reading/Writing in your execution pipeline. The agent's "current operation type" selects the color, not the agent identity. This uses color as task-type signal rather than agent-identity signal, which reduces the cognitive cost of reading the feed when multiple agents are active simultaneously.
+
+**Status pill conventions from Linear:**
+
+Linear's status system is the strongest reference for operation-state pills: the green success pill uses `#10b981` with `#f7f8f8` text, 10px Inter weight 510, and a 50% radius (circle dot) for the tiniest version, or `9999px` radius for pill labels (*Awesome Design.md*, p. 24). Apply this directly: a running agent shows a green dot + "Running" pill; a paused agent shows a neutral gray pill; a failed agent shows the warm crimson from Cursor's error color (`#cf2d56`).
+
+**Cognitive load rule from the UI/UX book:**
+
+The Decision Matrix (p. 2) specifies: "Working memory: 4 ± 1 items — max visible groups." (*UI/UX Design Principles for AI Agents*, p. 2). When more than five agent sessions are active, the feed should collapse older completed sessions into a "N completed" summary row. The active + blocked sessions must be the only fully expanded items. Showing all sessions at once violates the 4±1 chunking limit.
+
+**The "Active Waits" principle for streaming text:**
+
+The book's Measurement Reference notes: "&lt; 400ms interactive, spinner at 400ms, progress at 1s+" (*UI/UX Design Principles for AI Agents*, p. 2). AI streaming text arrives continuously, so the relevant threshold is different: show a pulsing cursor or typing indicator immediately (&lt; 100ms), never a spinner. The spinner signals "unknown duration"; a streaming cursor signals "words are arriving." For tool-use operations longer than 1 second (file reads, shell commands), a linear indeterminate progress bar is correct. Pulsing dots are not — they imply streaming text, not tool execution.
+
+---
+
+### 3. Multi-Tab Persistent Chat Sessions
+
+**Linear's command palette and Notion's navigation are the joint reference.**
+
+Linear's "Search: command palette trigger (/ or Cmd+K)" (*Awesome Design.md*, p. 24) establishes the keyboard-first mental model for switching between sessions. The chat tab strip should support `Cmd+[number]` tab switching and `Cmd+T` for new session — this matches Linear's shortcut-dense pattern and Cursor's IDE heritage.
+
+For tab persistence, Notion's "deep linking" principle (from the Decision Matrix: "Don't Leave at the Front Door") applies directly (*UI/UX Design Principles for AI Agents*, p. 2). Each chat session must have a unique URL that reopens to the exact conversation state, not to the session list. This is a common failure mode in AI chat products.
+
+**Visual tab design — Linear's model:**
+
+Linear uses Inter Variable weight 510 at 13-14px for navigation links, with active state shifting text to `#f7f8f8` (from `#d0d6e0` in inactive) (*Awesome Design.md*, p. 24). The tab bar for multi-session should follow this pattern: inactive tabs at muted text weight, active tab at near-white with a 1px bottom accent line in indigo. The tab background should stay near-transparent (`rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)`) rather than filling with a solid color — the translucent approach prevents the tab strip from competing with the chat content below it.
+
+**Tab overflow:** More than 7 tabs should collapse rightmost tabs into a dropdown (the same "5-7 max" rule from the Decision Matrix's nav-items entry). A "new session" button should remain pinned at the far right of the tab strip.
+
+---
+
+### 4. Backlog Board (Studio Sub-View B)
+
+**Linear is the primary reference for this sub-view.**
+
+Linear's board is the most copied design in developer tooling. Its core visual conventions, fully documented:
+- Background: `#0f1011` panel dark, content on `#191a1b` elevated surface (*Awesome Design.md*, p. 24)
+- Cards: `rgba(255,255,255,0.02)` background, `1px solid rgba(255,255,255,0.08)` border, 8px radius
+- Status pills: `9999px` radius with transparent bg and `1px solid rgb(35,37,42)` border
+- Inter Variable weight 510 for all card titles; 400 for descriptions
+
+**Drag-orderable cards — the specific Visual Hierarchy rule:**
+
+From the UI/UX book Decision Matrix: "Make elements feel clickable — Affordances &amp; Signifiers: Every interactive element needs a visible signifier" (*UI/UX Design Principles for AI Agents*, p. 2). Draggable cards require a drag handle signifier. The Linear pattern is a `⠿` (six-dot) handle that appears on hover at the card's left edge, using Linear's quaternary text color (`#62666d`). It is hidden at rest, visible on hover — this respects Trigger Discoverability level 3 ("hidden conventional": users who know can access it, newcomers aren't confused by it).
+
+**"Send to CodeBoard + AutoPilot" action:**
+
+This is a primary CTA on each card. Apply the Decision Matrix's button hierarchy rule: "Solid/filled button with brand color" (*UI/UX Design Principles for AI Agents*, p. 2). In Linear's system this becomes: `#5e6ad2` (brand indigo) background, `#ffffff` text, 6px radius, 8px 16px padding — the only filled-color element on the otherwise achromatic card. This makes the action visually singular and immediately scannable.
+
+For the empty state of the Backlog board (no items staged yet), the book's rule is: "Don't Overlook Empty States" (*UI/UX Design Principles for AI Agents*, p. 2 cross-reference via Decision Matrix). Notion's empty state pattern is a simple, centered illustration + short instructional text in muted color. In a dark Linear-style surface, this should be an SVG icon (monochrome, matching the surface tone) with 16px body text in `#8a8f98` (Linear tertiary) and a single primary CTA button to start a chat session that feeds into the backlog.
+
+---
+
+### 5. Crew Map — Graph View (Studio Sub-View C)
+
+**Obsidian-style graph: no direct design system entry, but Figma's "duality" principle and Linear's surface model are the best anchors.**
+
+Figma's page design principle is instructive here: "the interface chrome is strictly black-and-white, while the hero section explodes with vibrant multi-color content" (*Awesome Design.md*, p. 17). Apply this to the Crew Map: the graph canvas should be a dark near-black surface (`#08090a`, same as Linear's marketing black) with chromatic node types for issues (use Cursor's semantic palette — peach for planning, sage for search, blue for read, lavender for edit). The node labels follow Linear's 11px weight 510 "Micro" scale. The edge lines follow Linear's subtlest border: `rgba(255,255,255,0.05)`.
+
+**Graph navigation UX:**
+
+The UI/UX book's Decision Matrix has a key applicable rule: "Browsing vs Searching vs Discovery — Three layouts for three behaviors" (*UI/UX Design Principles for AI Agents*, p. 2). A graph view is a "discovery" layout. The toolbar must therefore contain: (a) a search input that highlights matching nodes (not filters them — preserving context), (b) a "focus mode" that dims everything except the selected node and its first-degree neighbors, and (c) a minimap for global orientation when the graph is large.
+
+**Node component spec:**
+
+- Shape: circle, 50% radius, 32–48px depending on issue priority (larger = higher priority — this implements Fitts's Law minimum touch target from the Decision Matrix)
+- Status color as fill: matching the status-pill convention (green for active/in-progress, indigo for in-review, gray for backlog)
+- Label: 11px Inter weight 510, centered below node, 2px letter-spacing (positive, for readability at tiny size — matches Linear's "Micro" label spec)
+- Edge: `1px solid rgba(255,255,255,0.08)` — Linear's standard transparent-white border applied to lines
+- Selected state: node border shifts to `#7170ff` (Linear accent violet) with a 2px ring
+
+**The Zeigarnik Effect for issue progress:**
+
+The Decision Matrix entry for "Show progress — Zeigarnik Effect: Progress bar, 10-20% pre-filled start" (*UI/UX Design Principles for AI Agents*, p. 2) applies to issue nodes. Each node should show a thin arc or partial-fill indicator of sub-task completion percentage around its circumference. This converts the graph from a structural overview into a live progress display without adding text labels.
+
+---
+
+## Additional Insights
+
+### Dark vs Warm: Which surface tone for the Studio?
+
+The Studio sits at the intersection of Claude (warm parchment), Linear (cold dark), and Cursor (warm dark/cream). The recommendation is a **warm dark** palette that bridges them — specifically Cursor's `#26251e` near-black (warm near-black with yellow undertone) as the primary Studio surface, not Linear's cool `#08090a`. This matches the existing project's Claude Code heritage and avoids the visual dissonance of a cold dark tool inside a warm-branded platform.
+
+For the chat panel specifically, pull the Claude parchment surface (`#f5f4ed`) to maintain visual continuity with the model that the user is conversing with. The artifact panel switches to warm dark. This creates a Claude-warm / editor-dark split that mirrors Cursor's own dual-tone system.
+
+### Status Pill Standardization Across All Three Sub-Views
+
+Every status pill across the Studio, Backlog, and Crew Map should use the same specification. The convergence point from all five design systems is:
+- Shape: `9999px` radius (all five use full-pill for status)
+- Font: 12px, weight 500-510, slight positive letter-spacing (0.125px per Notion, to compensate for small size)
+- Color: semantic fill — green (`#10b981`) for active, indigo (`#5e6ad2`) for in-progress/review, warm red (`#cf2d56`) for failed/blocked, neutral gray (`rgba(255,255,255,0.05)` border only) for inactive
+
+Using different pill shapes for status in different sub-views violates the book's "Jakob's Law" principle (from the Decision Matrix: "Navigation must match what users already expect" — same applies to repeated components across surfaces).
+
+### Empty States for AI Surfaces
+
+Claude's design is instructive here: it uses "organic, hand-drawn-feeling vector illustrations in terracotta, black, and muted green" as empty-state content rather than geometric icons or generic SVGs (*Awesome Design.md*, p. 7). For the Studio chat empty state specifically, the empty state should show a minimal conversational prompt example and a visual hint of the three-panel layout (thumbnail wireframe), not a generic "Start a conversation" button on a blank canvas. Notion uses "Feature Cards with Illustrations" for empty/onboarding contexts — a 12px radius card with an illustration header and 22px weight-700 title (*Awesome Design.md*, p. 31).
+
+---
+
+## Pro-Restricted Notice
+
+- **UI/UX Design Principles for AI Agents** (id: cmmfdl2z503qep10zhi9dp1m4): Only the first 2 of 15 pages were accessible. Chapters 7 (Component Patterns), 9 (Cognitive Load &amp; Attention), 8 (Navigation &amp; Information Architecture), 10 (Behavioral Triggers), and 15 (Anti-Pattern Catalog) could not be read. The findings above draw on the distilled rule set in the preview Chapter 2 decision matrix, which captures the key thresholds from those chapters.
+
+Upgrade to CandleKeep Pro for full access: https://getcandlekeep.com/billing
+
+---
+
+## Citation Summary
+
+**Books read:** Awesome Design.md — A Curated Collection of Design Resources in Markdown (pp. 7, 13, 17, 24, 31) · UI/UX Design Principles for AI Agents (pp. 1-2, preview only)
+
+**Key takeaways:** Claude warm-parchment / Cursor warm-dark split for chat+artifact · Cursor AI Timeline as the only design-documented agent-activity feed pattern · Linear's luminance-stacking model for dark board surfaces · Figma's chrome-monochrome + content-chromatic duality for graph view · UI/UX book 4±1 working memory limit for multi-agent session collapse
+
+**Impact:** These design systems go significantly further than general "dark mode" or "chat UI" guidance — they provide exact token values (specific hex codes, letter-spacing offsets, shadow opacity stacks) that are directly implementable in Tailwind or CSS variables without further design decisions. The Cursor AI Timeline in particular is a documented precedent for a component type (live agent operation feed with semantic color coding) that has no generic counterpart in any standard design library.
+
+**Worth remembering:** "On Linear's dark canvas, empty space isn't white — it's absence. The near-black background IS the whitespace, and content emerges from it." — *Awesome Design.md*, p. 24. This is counter-intuitive for engineers used to thinking of dark mode as an inversion of light mode: the darkness is not a background, it is the space itself, and every element must earn its luminance to justify its presence.</result>
+<usage><total_tokens>89905</total_tokens><tool_uses>16</tool_uses><duration_ms>185263</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:30:05
+
+<task-notification>
+<task-id>a7e4901e184a881f5</task-id>
+<tool-use-id>toolu_01FmnAJLugDrjay2vvPo3afK</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a7e4901e184a881f5.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio backend API contract" completed</summary>
+<result>The document is written. Here is the full design summary.
+
+---
+
+## Studio API Contract — Design Summary
+
+The contract is saved at `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-api-contract.md`.
+
+---
+
+### 1. Resource Model (7 new DB tables per surface)
+
+**Studio (5 tables):** `StudioSession` (conversation tab, 1:1 with subprocess), `StudioMessage` (persisted turns — never in-memory-only), `StudioArtifact` (versioned file outputs with ETag + SHA-256), `StudioAgentActivity` (the Visibility Principle anchor — every dispatch row must exist before chat narrates it), `StudioInterAgentMessage` (audit log of all 4 inter-agent verbs).
+
+Two shared tables: `AgentTemplate` (versioned, git-tracked; never per-session mutable) and `AgentInstance` (per-session accumulated memory — gitignored in prod). This is the template/instance split from the plan docs, now expressed as FK relationships.
+
+**Backlog (3 tables):** `BacklogItem` (main staging record with full lifecycle), `BacklogComment`, `BacklogActivity` (append-only audit, identical pattern to AutoPilot's `AutoPilotEvent`).
+
+**Crew Map (2 tables):** `CrewAssignment` (the graph edges), `CrewSkillUsage` (aggregated per-assignment invocation counts).
+
+---
+
+### 2. Multi-Tenant Enforcement
+
+Single dependency `get_tenant_scoped_resource(resource_id, tenant_id, ModelClass, db)` applied on every route that accepts a resource ID. It always returns 404 — never 403 — on cross-tenant access. Tenant ID is derived exclusively from the `X-Tenant-ID` trusted header (set by Next.js proxy), never from a request body or query param. In the current single-tenant deployment, `settings.DEFAULT_TENANT_ID` is returned as fallback, preserving the dev workflow.
+
+---
+
+### 3. Endpoint Catalog (41 new endpoints)
+
+**Studio (22 endpoints):**
+- Session CRUD: `POST /api/studio/projects/{project_id}/sessions`, `GET` list, `GET` single, `PATCH`, `DELETE`
+- Messages: `GET` list (cursor-based, not page-based — avoids races during streaming), `POST` (202 Accepted + streamUrl)
+- Artifacts: `GET` list, `GET` metadata, `GET /content` (conditional with ETag/304), `POST` upload
+- Agent activity: `GET` list (Visibility Principle audit surface)
+- Actions: `POST /send-to-backlog` (CONFIDENCE approval mode), `POST /hibernate`, `POST /resume`
+
+**Backlog (14 endpoints):**
+- BacklogItem CRUD with ETag conditional writes
+- Comments + Activity log
+- `POST /promote` — 202 Accepted, async Blueprint pipeline, returns `promoteJobId`
+- `GET /promote-jobs/{job_id}` — poll promote status
+- `POST /validate-schedule` — must respond &lt; 100ms (Doherty Threshold)
+
+**Crew Map (5 endpoints):**
+- `GET /projects/{id}/graph` — full react-flow-ready nodes+edges payload with ETag
+- `GET /features/{id}/graph` — sub-graph for one feature
+- `GET /assignments` + `GET /assignments/{id}` — raw edge data with skill usage
+- `GET /search` — fuzzy search across nodes
+
+---
+
+### 4. SSE Specification (3 channels, 30+ event types)
+
+**`/api/studio/sessions/{id}/events`:** 16 event types covering `token_delta`, `message_start/done`, `tool_start/done`, `agent_dispatch` (fires only AFTER DB row is persisted — Visibility Principle enforcement at the protocol level), `artifact_created/updated`, `session_paused/hibernated/error/done`, `ping`. Token accumulation on the client uses `useRef` + 50ms flush (ref-buffered streaming pattern).
+
+**`/api/backlog/items/{id}/events`:** 8 event types for promote pipeline progress — `promote_stage`, `promote_issue_created`, `promote_queued`, `promote_done/failed`, `status_changed`, `scheduled_fired`, `ping`.
+
+**`/api/crew-map/projects/{id}/events`:** 9 event types for live graph mutations — `node_added/updated/removed`, `edge_added/updated/removed`, `agent_active/idle`, `ping`. These are published by a project-level asyncio `Queue`; `studio_orchestrator.py` and `agent_dispatcher.py` write to it.
+
+All channels: max 8 concurrent connections per tenant, `Last-Event-ID` replay of last 100 events on reconnect, 30-second ping / 60-second reconnect deadline.
+
+---
+
+### 5. Integration Touchpoints
+
+**Promote → CodeBoard:** Calls `POST /api/projects/{id}/issues` in dependency order (FEATURE first, then EPICs, then recursively). Before creating, checks if a FEATURE issue with `labels` containing the `BacklogItem.id` already exists — this is the idempotency guard against partial-failure retries. On mid-tree failure, a compensating action cancels all created issues and appends a `ROLLBACK` activity row; `BacklogItem.status` reverts to `APPROVED` for clean retry.
+
+**Promote → AutoPilot:** Calls existing `POST /api/execute/queue` with the FEATURE issue ID. If the queue is `WAITING_RESET` or `PAUSED`, promote still succeeds (CodeBoard issues are live), but the queue append is skipped and recorded in `BacklogActivity` with `retryAfter`.
+
+**Chat agent → CodeBoard:** `studio_orchestrator.py` calls `rag_service.semantic_search()` directly (service-to-service, not HTTP round-trip) and distills results to a 1-2K token artifact before passing to Jonny's context window. No new HTTP endpoints are added for this — it reuses the existing `RAGService`.
+
+**Agent activity → Crew Map:** An `after_flush` hook on `StudioAgentActivity` publishes to the project event bus. `crew_map_service.py` translates into Crew Map SSE events, animating the graph edge when an agent is mid-task.
+
+---
+
+### 6. Versioning
+
+No `/v1/` prefix in Phase 1 — matches the existing codebase convention. Version prefix (`/api/v2/studio/`) is reserved for when a breaking change cannot be avoided. All deprecated fields get `Deprecation: true` + `Sunset: &lt;date&gt;` + `Link` headers; 60-day minimum sunset window. Non-breaking additions (new optional fields, new SSE event types, new query params with defaults) need no version bump.
+
+---
+
+### Key Design Decisions
+
+**Why cursor-based pagination for messages (not page-based):** Message lists are append-only during streaming. Page-based pagination races — a new message landing on page boundary shifts all subsequent pages. Cursor-based pagination (`before`/`after` message ID) is stable.
+
+**Why 202 Accepted for `POST /messages` and `POST /promote`:** Both are genuinely async. The actual AI response and the promote pipeline take 1-30 seconds. Returning 202 + a stream URL / job poll URL is the correct semantic — no hanging HTTP connection required.
+
+**Why `agent_dispatch` SSE event fires only after the DB row is persisted:** This is the Visibility Principle enforced at the wire protocol level. If the orchestrator crashes between writing the DB row and emitting the SSE event, the client will see the activity when it reconnects (via `Last-Event-ID` replay). If the SSE event were emitted before the DB write, a crash would leave the chat UI showing a dispatch that has no audit record — the exact hallucination risk identified in the plan docs.
+
+**Why 404 (not 403) on cross-tenant resource access:** Returning 403 reveals that the resource exists and belongs to a different tenant. A probing client can enumerate other tenants' resource IDs by comparing 403 vs 404 responses. Always returning 404 prevents this.</result>
+<usage><total_tokens>86009</total_tokens><tool_uses>14</tool_uses><duration_ms>343316</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:30:26
+
+<task-notification>
+<task-id>ad73e95112e8b9a52</task-id>
+<tool-use-id>toolu_01MMzsMTgpLK5q9c2PJB2W4j</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/ad73e95112e8b9a52.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio chat agent design (replacement)" completed</summary>
+<result>The design document is saved. Here is the full summary of what was designed:
+
+---
+
+## Studio Chat Agent — Architecture Design Summary
+
+### 1. Conversation Architecture: Anthropic Messages API (Direct)
+
+The recommendation is **Option B — Anthropic Messages API with streaming**, not the Claude Code CLI subprocess pattern described in the earlier Studio plan documents. The CLI subprocess pattern (`terminal_service.py`) is the right choice for code execution tasks but is architecturally wrong for multi-tenant chat planning:
+
+- PTY subprocesses are localhost-bound — they cannot survive replica restarts or run across multiple backend instances
+- The Messages API is cloud-native by design: any replica can continue any conversation because all state lives in Postgres
+- Native tool-use blocks eliminate the regex parsing fragility of `stream-json` output
+- Model routing, prompt caching, and cost attribution are first-class API features
+
+Sub-agents (researcher, designer, breakdown-writer, auditor) are **nested API calls within tool execution**, not separate subprocess sessions. The connection to AutoPilot happens at the end: `hand_to_autopilot` calls `create_queue()` on the existing service.
+
+---
+
+### 2. Persistence Model
+
+Ten Postgres tables covering:
+
+- `studio_sessions` — tenant-isolated conversation anchor with `planning_state` JSONB tracking the current phase (clarifying → drafting → reviewing → approved)
+- `studio_messages` — full Anthropic content block format in JSONB for lossless conversation replay
+- `studio_tool_calls` — persisted before execution (status='pending') so the Visibility Principle holds: no DB row means no dispatch happened
+- `studio_subagent_runs` — per-sub-agent invocation with input/output, tokens, and timing
+- `studio_artifacts` — versioned rendered outputs (markdown, mermaid, code, HTML, hierarchy_json)
+- `studio_hierarchy_drafts` — separate from artifacts; business entity with approval gate and promotion tracking
+- `studio_agent_activity` — audit log of every agent dispatch with verb taxonomy (notify/request/delegate/broadcast)
+- `tenant_token_usage` — daily aggregate for billing rollup
+- `agent_templates` / `agent_instances` — the template/instance separation from the master plan's iron laws
+
+`tenant_id` is denormalized into every table that will be queried per-tenant to enable both performance and row-level security without joins.
+
+---
+
+### 3. Sub-Agent Spawning
+
+Jonny gets a `spawn_subagent` tool. When called, the orchestrator executes a fresh, isolated Anthropic API call for the specified sub-agent type. The sub-agent receives only its task description and any specified artifact IDs — never the full conversation history.
+
+Four sub-agent types: **researcher** (searches CodeBoard + RAG + repo files), **designer** (produces architecture diagrams and data model sketches), **breakdown_writer** (generates the full hierarchy tree, uses Opus-4-5 on first draft), **auditor** (validates complex hierarchies). Maximum chain depth: 1. Sub-agents do not spawn sub-agents.
+
+The GroupQueue mutex is an `asyncio.Lock` keyed by `(session_id, agent_type)` in-memory for single-replica; upgrade path to Redis SETNX noted as a multi-replica prerequisite.
+
+---
+
+### 4. Streaming and Live Activity
+
+**SSE, not WebSockets.** Communication is server-to-client during a model turn; SSE's native `Last-Event-ID` reconnection and HTTP/2 multiplexing make it the correct choice. Nine event types on the channel: `token`, `tool_call_started`, `tool_call_completed`, `artifact_created`, `hierarchy_draft_ready`, `turn_complete`, `error`, and two more for sub-agent progress.
+
+Reconnection semantics: on reconnect, the SSE endpoint re-emits all events with `sequence &gt; last_event_id` from the database as a catch-up burst, then resumes live streaming. A browser tab can close and reopen mid-turn without losing events.
+
+Frontend uses the `useRef` token buffer pattern (50ms flush) to prevent re-render thrash during fast generation.
+
+---
+
+### 5. Tool Integration
+
+Nine tools with full input schemas defined:
+- `ask_clarifying_question` — max 4 calls before Jonny must start drafting
+- `spawn_subagent` — max 3 per turn; isolation enforced
+- `search_codeboard` — wraps the existing `/api/issues` search endpoint
+- `read_repo_file` — path-validated against project allowlist, 8K char cap
+- `query_rag` — wraps the existing ChromaDB RAG service
+- `create_artifact` — writes to `studio_artifacts` and triggers SSE `artifact_created` event
+- `push_hierarchy_draft` — saves a draft with JSON schema validation before user review
+- `push_breakdown_to_codeboard` — writes to CodeBoard only after explicit user approval; uses the existing promote pipeline with idempotency key
+- `hand_to_autopilot` — calls AutoPilot `create_queue()`; first 10 runs require explicit confirmation
+
+---
+
+### 6. Prompt Engineering
+
+The Jonny system prompt encodes:
+- **Hierarchy discipline**: enforced rules for FEATURE→EPIC→STORY→TASK→SUBTASK structure (unique titles, user-value story framing, implementation task framing)
+- **Clarification rules**: when to ask (domain collision, migration ambiguity) vs. when to start drafting (max 4 questions)
+- **Sub-agent dispatch triggers**: researcher before proposing schema, designer after researcher findings, breakdown_writer after designer output
+- **Approval gate**: explicit check — revision confirmations ("ok but change X") are not approval
+
+Extended thinking enabled only for features with &gt; 5 EPICs or ambiguous &lt; 20-word requests.
+
+---
+
+### 7. Cost Controls
+
+**Per-tenant token budget**: session-level cap (default 50K tokens) enforced before every API call. Per-tenant daily limit (default 500K input / 200K output) at the API middleware layer.
+
+**Model routing by task type**: Haiku-3-5 for early clarifications (fast, cheap), Sonnet-4-6 for researcher/designer/auditor sub-agents and Jonny revisions, Opus-4-5 for Jonny planning decisions and breakdown-writer first drafts. A Haiku pre-call (~250 tokens) classifies each turn as decision/revision/factual/approval to route model selection.
+
+**Prompt caching**: system prompt (~3K tokens) and few-shot examples (~800 tokens) marked `cache_control: ephemeral`. Cache TTL 5 minutes. Estimated 60–75% cache hit rate on long conversations → ~55–65% reduction in input token cost.
+
+---
+
+### 8. Failure Modes
+
+| Failure | Detection | Recovery |
+|---|---|---|
+| Session token budget exhausted | `tokens_used &gt; token_budget` before API call | State → `budget_exhausted`; SSE error; draft preserved; no auto-resume |
+| Anthropic rate limit / billing | 429/529 status | State → `api_rate_limited`; retry after N seconds if ≤ 300s; pause otherwise |
+| Sub-agent crash or timeout (30s) | `asyncio.wait_for` exception | Sub-agent `status = 'failed'`; Jonny retries once; degrades to its own knowledge on second failure |
+| CodeBoard push fails | Promote pipeline error | Idempotency key prevents duplicates; rollback removes orphans; draft remains promotable |
+| AutoPilot hand-off fails | Queue API error | Inform user with specific reason; CodeBoard issues already created; user retries manually |
+| Session hibernation version mismatch | Template ID mismatch on resume | New session created; last 5 messages + latest draft injected as starting context |
+
+The Visibility Principle is enforced structurally: `studio_agent_activity` row is the first database write in every dispatch path. If the DB write fails, the dispatch does not proceed.
+
+---
+
+The design document is at `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-chat-agent-design.md`.</result>
+<usage><total_tokens>67539</total_tokens><tool_uses>7</tool_uses><duration_ms>307712</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:30:49
+
+<task-notification>
+<task-id>aef586b4bae2b1042</task-id>
+<tool-use-id>toolu_01WLQ29PYDapKWu22mtgycD8</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/aef586b4bae2b1042.output</output-file>
+<status>completed</status>
+<summary>Agent "Cloud + multi-tenant architecture" completed</summary>
+<result>The document is written. Here is the full chat summary of every decision made and the reasoning.
+
+---
+
+## Architecture Summary: Studio Cloud + Multi-Tenant Design
+
+### What I read before designing
+
+The existing platform is a single-user, single-machine system: FastAPI on port 8401 with SQLAlchemy async against two SQLite files (`backend/data/codeboard.db` and `frontend/prisma/dev.db`), ChromaDB on port 8402, and Claude Code CLI subprocesses spawned by `terminal_service.py`. Auth is a single shared secret (`InternalAuthDep` / `X-Internal-Token`). CB-2121 (proper per-user auth) is an open ticket with zero implementation. The AutoPilot queue (CB-1951) already has write-through persistence and crash recovery, which is the only production-hardened stateful pattern in the codebase.
+
+---
+
+### Decision 1 — Tenancy Model: Shared DB with `tenant_id` + PostgreSQL RLS
+
+Chose **Option A** (shared database, `tenant_id` column on every table). Option B (schema-per-tenant) was rejected because it makes migrations and analytics painful and hits PostgreSQL connection limits at scale. Option C (database-per-tenant) was rejected because it requires managing N database instances and becomes expensive beyond a small number of tenants.
+
+The hard isolation mechanism is **PostgreSQL Row-Level Security**, not application-layer filtering. A `CREATE POLICY tenant_isolation` on every table reads `current_setting('app.current_tenant_id')`, which the FastAPI database dependency sets at transaction open with `SET LOCAL`. A bug in application code that forgets `WHERE tenant_id = ?` is caught by RLS before data crosses tenant lines. The FastAPI runtime database role must not be a PostgreSQL superuser, because superusers bypass RLS.
+
+**Migration from SQLite is a four-phase staircase** (dual-database period → PostgreSQL with single-tenant seed → RLS enabled → multi-tenant open). Phase 0 uses SQLite locally with `tenant_id` columns and a single hardcoded tenant. The SQLAlchemy models are already database-agnostic (`create_async_engine` accepts any URL); the only code change is swapping `DATABASE_URL`.
+
+---
+
+### Decision 2 — Identity and Auth: JWT at the FastAPI Dependency Layer, Not a Gateway
+
+The token carries `user_id`, `tenant_id`, `tenant_slug`, `role`, `email`. Short expiry (1 hour). Refresh token in an httpOnly, SameSite=Strict, Secure cookie. Access token in memory on the frontend, never in localStorage (XSS mitigation).
+
+Auth sits in a FastAPI dependency (`TenantDep`), not an API gateway. A gateway would be premature complexity. The dependency sets the RLS context variable on the database session, so the isolation guarantee is established before any query runs.
+
+**CB-2121 backward compatibility** is handled by a `MULTI_TENANT_MODE` env var. When false (default during migration), a synthetic `TenantContext` is injected using the existing `InternalAuthDep` path. Existing CodeBoard routes are untouched. When true, all routes require a real JWT. This flag allows the existing platform to keep running while the auth layer is built incrementally around it.
+
+Day-one auth method: **GitHub OAuth2**. Eli already uses GitHub. Fallback: magic link email via Resend or Postmark. OIDC (Google, Auth0) deferred to Phase 2 for enterprise tenants.
+
+---
+
+### Decision 3 — State Externalisation: Five Components to Move
+
+**Primary DB: SQLite → Supabase PostgreSQL.** One connection string swap. Supabase is chosen over Neon because it includes pgvector (replacing ChromaDB), PgBouncer connection pooling, and an Auth layer that can supplement or replace the custom JWT implementation in Phase 2.
+
+**In-memory session state: already partly externalized.** CB-1951's write-through persistence and `rehydrate_from_db()` pattern already handles process restarts. For multi-replica Phase 2, an Execution Worker service handles the subprocess; the API replicas become stateless request handlers. Studio conversation subprocess stickiness to one worker is maintained via a consistent-hash of `conversationId` stored in Redis.
+
+**ChromaDB → pgvector on the same Supabase instance.** pgvector is a PostgreSQL extension available in Supabase Pro at no additional cost. The existing `rag_service.py` abstraction layer (with its fallback pattern) absorbs the swap without touching call sites. The operational benefit of eliminating a third service outweighs the marginal performance difference at this scale.
+
+**Local filesystem artifacts → Cloudflare R2.** Text artifacts under 64KB stay as database columns (unchanged). Large artifacts and binary files go to R2 (S3-compatible, zero egress fees). Pre-signed URLs with 15-minute expiry serve downloads.
+
+**AutoPilot subprocess → Fly.io Machines API.** Each Claude Code CLI execution runs in its own ephemeral gVisor-isolated micro-VM. The Machine is created via a single HTTP call, runs the executor container, streams events back to the FastAPI backend via a private callback URL, then is destroyed. Cost: ~$0.01 per 30-minute execution. Studio conversation subprocesses use Fly's `suspend`/`resume` (sub-100ms) as the cloud equivalent of the local subprocess hibernation pattern.
+
+---
+
+### Decision 4 — Deployment Topology: Vercel + Fly.io + Supabase + Upstash + R2
+
+| Service | Provider | Why |
+|---|---|---|
+| Next.js frontend | Vercel | Native target for App Router + Turbopack; edge streaming for SSE proxy |
+| FastAPI backend | Fly.io | Dockerfile-native, private WireGuard network for Execution Worker callbacks, Machines API |
+| PostgreSQL + pgvector | Supabase Pro ($25/mo) | Managed, RLS UI, pgvector, PgBouncer, optional Realtime layer |
+| Execution Workers | Fly.io Machines API | Per-task ephemeral micro-VM, pay-per-second, gVisor isolation |
+| Redis | Upstash | Serverless, HTTP client, free tier; used for rate limiting, sticky routing, fan-out |
+| Object storage | Cloudflare R2 | S3-compatible, zero egress, $0.015/GB |
+
+Total monthly cost at idle/light load: ~$55. At 10 active tenants: ~$100-150. The `CORS_ORIGINS` list and `ALLOWED_ORIGINS` set in `main.py` must be updated to accept the Vercel deployment URL.
+
+---
+
+### Decision 5 — Cost and Scale Economics
+
+Infrastructure cost is nearly fixed: ~$1.64/tenant at 50 tenants. **The dominant cost is LLM tokens, not infrastructure.** An active tenant planning two features per week plus running 20 AutoPilot tasks costs approximately $5-7/month in tokens. Total all-in cost per active tenant: ~$7-9/month. Minimum viable SaaS price: $29/month. The parked CB-2381 AI Cost Optimization plan (token budgets, caching, context compression) becomes financially urgent above 100 active tenants.
+
+---
+
+### Decision 6 — Staircase: MVP Slice vs Full Target
+
+**Step 0 (today):** SQLite, local subprocess, InternalAuthDep. Studio/Backlog/Crew Map built and tested locally. `tenant_id` columns present but single hardcoded value.
+
+**Step 1 (cloud-ready single-tenant MVP, 2-3 weeks after Studio ships locally):** PostgreSQL swap, JWT auth on Studio routes only (CodeBoard routes keep InternalAuthDep), `tenant_id` on all new tables, Fly.io + Vercel deployment, pgvector replacing ChromaDB, R2 for large artifacts, Fly Machines for AutoPilot. One user (Eli) on cloud. No external users yet.
+
+**Step 2 (closed beta, 6-8 weeks after MVP):** Tenant + TenantMembership + User tables, RLS enforced, tenant provisioning API, invite tokens, token budget enforcement, Redis distributed locks, warm Machine pool for Studio.
+
+**Step 3 (public SaaS, 12-16 weeks after MVP):** Self-serve signup, Stripe billing, free tier enforcement, usage dashboard.
+
+---
+
+The document is at `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md`.</result>
+<usage><total_tokens>69303</total_tokens><tool_uses>13</tool_uses><duration_ms>425212</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:50:19
+
+<task-notification>
+<task-id>ab6429932310f8772</task-id>
+<tool-use-id>toolu_01TutZo1hizBAxbxphTXB6Sg</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/ab6429932310f8772.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio frontend foundation" completed</summary>
+<result>Zero errors from new files. Here is a complete inventory of what was created and changed.
+
+---
+
+## Files Created and Changed
+
+### New files (27 total)
+
+**Routes (App Router)**
+- `/frontend/app/workspace/page.tsx` — server component; `redirect('/workspace/default/studio')`
+- `/frontend/app/workspace/[id]/layout.tsx` — client; reads `useParams`, provides `TenantProvider`, renders `WorkspaceTopBar`
+- `/frontend/app/workspace/[id]/studio/page.tsx` — Studio view entry
+- `/frontend/app/workspace/[id]/backlog/page.tsx` — Backlog list entry
+- `/frontend/app/workspace/[id]/crew-map/page.tsx` — deferred placeholder (Phase D)
+
+**Infrastructure**
+- `/frontend/lib/workspaceFetch.ts` — `workspaceFetch&lt;T&gt;(path, workspaceId, tenantId?)` injects `X-Tenant-ID` + `X-Workspace-Id`; handles 204, parses errors, no localhost hardcodes
+- `/frontend/contexts/TenantContext.tsx` — `{ workspaceId, tenantId }` provider + `useTenant()` hook
+- `/frontend/stores/useStudioStore.ts` — Zustand store for `tabs`, `activeTabId`, `drafts`, `panelRatio`; persists only `panelRatio` to `localStorage` via `persist` middleware (key `studio-panel-v1`)
+
+**React Query hooks**
+- `/frontend/hooks/useStudio.ts` — `useStudioSessions`, `useStudioSession`, `useStudioMessages`, `useCreateStudioSession`, `useSendMessage`; keys prefixed `['workspace', workspaceId, 'studio', ...]`; 404 returns `[]` gracefully
+- `/frontend/hooks/useBacklog.ts` — `useBacklogItems`, `useCreateBacklogItem`, `useUpdateBacklogItem`; 10s polling; keys prefixed `['workspace', workspaceId, 'backlog', ...]`
+- `/frontend/hooks/useConversationStream.ts` — SSE hook; `useRef` token buffer + 50ms flush interval; exponential backoff 1s→30s cap; `Last-Event-ID` on reconnect; `agentStatusReducer`
+
+**Workspace components**
+- `/frontend/components/workspace/WorkspaceTopBar.tsx`
+- `/frontend/components/workspace/WorkspaceSwitcher.tsx` — `&lt;select&gt;` dropdown (Phase 1 stub, single workspace)
+- `/frontend/components/workspace/WorkspaceNavTabs.tsx` — Studio / Backlog / Crew Map tabs, active state from pathname
+
+**Studio components**
+- `/frontend/components/studio/StudioPage.tsx` — top-level layout; hidden-not-unmounted multi-tab pattern; `AgentActivityPanel` driven by active tab's SSE stream
+- `/frontend/components/studio/Chat.tsx` — Compound Component (`Chat.Provider`, `Chat.MessageList`, `Chat.Input`, `Chat.Actions`); `useChatContext` internal; draft via Zustand; streaming via `useConversationStream`
+- `/frontend/components/studio/ChatMessageList.tsx` — renders messages + streaming bubble with parchment bg + `aria-live="polite"`; auto-scrolls on new content
+- `/frontend/components/studio/ChatInput.tsx` — textarea (auto-grow up to 150px); Cmd/Ctrl+Enter submits; disabled during streaming
+- `/frontend/components/studio/ConversationTabBar.tsx` — tab strip from Zustand; max 8 tabs enforced in store; "+ New" button; live indicator dot
+- `/frontend/components/studio/AgentActivityPanel.tsx` — Cursor AI Timeline colors (peach/sage/blue/lavender); "No active agents" empty state; `animate-agent-pulse` CSS keyframe
+
+**Backlog components**
+- `/frontend/components/backlog/BacklogPage.tsx` — header + "+ New" button + filter bar + card list + edit modal; Suspense boundary for `useSearchParams`
+- `/frontend/components/backlog/BacklogCard.tsx` — Linear-style card (`rgba(255,255,255,0.02)` bg, `8px` radius, `rgba(255,255,255,0.08)` border); priority badge (`border-radius: 2px`); status pill (`border-radius: 9999px`); tags; relative timestamp
+- `/frontend/components/backlog/BacklogFilterBar.tsx` — filter pills (rounded-full); status + priority + search; URL-synced via `useSearchParams` + `router.replace`; `useBacklogFilters()` exported for reuse
+- `/frontend/components/backlog/BacklogEditModal.tsx` — create/edit modal; title + description + priority + status pill groups; no scheduler (deferred); error handling via React Query's global MutationCache
+
+**Test**
+- `/frontend/__tests__/StudioPage.test.tsx` — 5 smoke tests asserting chat shell renders without crashing when sessions list is empty
+
+### Modified files (2)
+
+- `/frontend/components/layout/sidebar.tsx` — added `MessagesSquare` icon import and `{ name: 'Studio', href: '/workspace', icon: MessagesSquare }` at the top of the navigation array; active-state pattern matches existing entries
+- `/frontend/app/globals.css` — appended Studio surface tokens: `--studio-chat-bg: #f5f4ed`, `--studio-artifact-bg: #26251e`, `--color-canvas`, `--color-card`, `--color-accent`, `--color-status-green`, `.font-studio`, `.animate-studio-reveal/dismiss`, `@keyframes agent-pulse`, `.animate-agent-pulse`, `@media prefers-reduced-motion` guard
+
+### Results
+
+**Test:** `5 passed` (0 failures, 25ms)
+
+**tsc:** Zero errors from any new file. Pre-existing errors in `tests/components/IssueDetailModal.test.tsx`, `__tests__/AutoPilotRecoveryBanner.test.tsx`, `__tests__/bug-detail-view.test.tsx`, and `app/api/docker/metrics/route.ts` are untouched; none introduced by this work.</result>
+<usage><total_tokens>112542</total_tokens><tool_uses>65</tool_uses><duration_ms>886843</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-20 09:50:57
+
+<task-notification>
+<task-id>a5c566d498b71a9f5</task-id>
+<tool-use-id>toolu_014G3yxgq16xaCKCFeuhKXxh</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a5c566d498b71a9f5.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio backend data layer" completed</summary>
+<result>Here is a full summary of what was delivered.
+
+---
+
+**Files changed (path + line count):**
+
+| File | Lines | Change type |
+|------|-------|-------------|
+| `backend/models/studio.py` | 411 | Created |
+| `backend/models/agent_runtime.py` | 160 | Created |
+| `backend/models/backlog.py` | 175 | Created |
+| `backend/models/crew_map.py` | 118 | Created |
+| `backend/models/schemas.py` | 2189 (+739 net added) | Appended |
+| `backend/models/__init__.py` | 403 (+150 net added) | Extended |
+| `backend/app/config.py` | 89 (+6 net added) | Extended |
+| `backend/api/deps.py` | 55 (+35 net added) | Extended |
+| `frontend/prisma/schema.prisma` | 1062 (+525 net added) | Extended |
+
+---
+
+**Test result:**
+
+```
+20 passed in 1.38s
+```
+
+All 20 existing `test_autopilot_persistence.py` tests pass.
+
+**DB push result:** `The database is already in sync with the Prisma schema.` — all 15 new tables were created by `init_db()` (running backend) before prisma push, and prisma confirmed full sync after the services were briefly paused.
+
+---
+
+**What was delivered:**
+
+**SQLAlchemy models (4 new files, 15 tables):**
+- `studio.py` — `StudioSession`, `StudioMessage` (UNIQUE sessionId+sequenceNum), `StudioToolCall`, `StudioSubAgentRun`, `StudioArtifact`, `StudioHierarchyDraft`, `StudioAgentActivity`
+- `agent_runtime.py` — `AgentTemplate` (UNIQUE key+version), `AgentInstance`, `TenantTokenUsage` (UNIQUE tenantId+date)
+- `backlog.py` — `BacklogItem`, `BacklogComment`, `BacklogActivity`
+- `crew_map.py` — `CrewAssignment`, `CrewSkillUsage`
+
+Every table has: `id` (cuid PK), `tenantId` (nullable String), `createdAt` (server_default), `updatedAt` (onupdate). Cascade deletes on session→messages/toolcalls/subagents/artifacts/drafts/activities, item→comments/activities, assignment→skillUsages. Indexes on `tenantId`, `projectId`, `sessionId`, plus composite query-pattern indexes.
+
+**Pydantic schemas (schemas.py):** 3-variant (Create/Update/Response) for all 15 models, 8 new Enums. Response classes use `field_serializer` for UTC-Z datetime serialization, matching existing pattern.
+
+**`backend/app/config.py`:** `DEFAULT_TENANT_ID: str = "default"` added to `Settings`.
+
+**`backend/api/deps.py`:** `get_tenant_id(x_tenant_id: str | None = Header(default=None)) -&gt; str` returns `x_tenant_id or settings.DEFAULT_TENANT_ID`. `TenantDep = Depends(get_tenant_id)` exported.
+
+**Prisma schema:** All 15 new tables mirrored. Also mirrored 9 previously-backend-only tables (`CommitLink`, `GitSyncState`, `IssueGroup`, `IssueGroupMember`, `DocSettings`, `PipelineExecution`, `PipelineStage`, `PipelineConfig`, `park_events`) to eliminate pre-existing schema drift that was causing prisma to want to drop them.</result>
+<usage><total_tokens>111478</total_tokens><tool_uses>62</tool_uses><duration_ms>958977</duration_ms></usage>
+</task-notification>
+
+---
+

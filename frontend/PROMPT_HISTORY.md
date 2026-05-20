@@ -1741,3 +1741,80 @@ jonny do it right, plan the fix and do it in a proffesional way, make sure to te
 
 ---
 
+## 2026-05-20 10:10:23
+
+Resume Studio (CB-2384) build: check agent results, synthesize master plan, push CodeBoard updates, start backend foundation.
+
+---
+
+## 2026-05-20 10:10:23
+
+Resume Studio build: check Phase 4 (backend data) + Phase 5 (frontend) results, dispatch Phase 4b (Studio API routes) + Phase 4c (Backlog/Crew API) + Phase 6 (chat agent runtime).
+
+---
+
+## 2026-05-20 10:25:36
+
+<task-notification>
+<task-id>abd4e8046d8236779</task-id>
+<tool-use-id>toolu_01U3RAoabaJXakQMsW3727kU</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/abd4e8046d8236779.output</output-file>
+<status>completed</status>
+<summary>Agent "Studio security-auditor fixes" completed</summary>
+<result>156/156 passing. Here is the complete summary of all changes made:
+
+---
+
+**Changes applied (file:line)**
+
+**CRIT-2 — Raw `str(exc)` SSE leakage:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_orchestrator.py:441-445` — `except Exception as exc` block now logs server-side and yields `"An internal error occurred"` instead of `str(exc)`.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/studio.py:510-512` — same pattern for the SSE generator exception handler.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_chat_agent.py:407-409` — `run_turn` generic exception handler fixed.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_chat_agent.py:710-715` — `_dispatch_tool` generic exception now returns fixed string instead of `str(exc)`.
+
+**HIGH-1 — `read_repo_file` symlink traversal:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_chat_agent.py:875-893` — `os.path.realpath(path)` call added after string checks; re-validates `real.startswith(project_root)`; opens `real` not `path`.
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/tests/test_studio_chat_agent.py:318-356` — new `test_read_repo_file_rejects_symlink_pointing_outside_root` test added.
+
+**HIGH-2 — CORS `allow_headers`:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/app/main.py:418-424` — added `X-Tenant-ID`, `X-Workspace-Id`, `X-Internal-Token`, `Last-Event-ID`, `If-Match`, `If-None-Match`, `ETag`.
+
+**HIGH-3 — `tenantId` removed from all `*Create` schemas:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/schemas.py` — `tenantId: Optional[str] = None` removed from `BacklogItemCreate`, `BacklogCommentCreate`, `BacklogActivityCreate`, `StudioSessionCreate`, `StudioMessageCreate`, `StudioToolCallCreate`, `StudioSubAgentRunCreate`, `StudioArtifactCreate`, `StudioHierarchyDraftCreate`, `StudioAgentActivityCreate`, `AgentTemplateCreate`, `AgentInstanceCreate`, `TenantTokenUsageCreate`, `CrewAssignmentCreate`, `CrewSkillUsageCreate`. Replaced with comments explaining server-side derivation.
+
+**HIGH-4 — Crew Map project existence validation:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/crew_map.py:54-79` — `_validate_project_exists()` helper added with CB-2121 deferral comment.
+- `get_project_graph` (~line 278), `get_feature_graph` (~line 340), `search_nodes` (~line 682) — each now calls `_validate_project_exists()` and raises 404 for non-existent projects.
+
+**MED-1 — `session.tokensUsed` writeback:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_chat_agent.py:567-578` — `session.tokensUsed += total_input_tokens + total_output_tokens` committed after `_upsert_tenant_token_usage`.
+
+**MED-5 — Rate limit on `POST /sessions/{id}/messages`:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/studio.py:334-350` — `_session_id_key()` key function + `@limiter.limit("10/minute", key_func=_session_id_key)` added. `from __future__ import annotations` removed from the file to fix Python 3.13 + `functools.wraps` + Pydantic forward-ref resolution issue that broke `/openapi.json`.
+
+**MED-6 — `tool_input` redacted before DB write:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/studio_orchestrator.py:479-493` — `redact_secrets(json.dumps(tool_input))` applied before storing in `StudioAgentActivity.payload`. `redact_secrets` imported from `utils.exhaustion_detector`.
+
+**LOW-6 — `BacklogItemUpdate` promote fields:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/schemas.py` — `promotedToFeatureId` and `promoteJobId` removed from `BacklogItemUpdate`.
+
+**INFO-6 — `tenantId` removed from all `*Response` schemas:**
+
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/schemas.py` — `tenantId: Optional[str] = None` removed from `StudioSessionResponse`, `StudioMessageResponse`, `StudioToolCallResponse`, `StudioSubAgentRunResponse`, `StudioArtifactResponse`, `StudioHierarchyDraftResponse`, `StudioAgentActivityResponse`, `AgentTemplateResponse`, `AgentInstanceResponse`, `TenantTokenUsageResponse`, `BacklogItemResponse`, `BacklogCommentResponse`, `BacklogActivityResponse`, `CrewAssignmentResponse`, `CrewSkillUsageResponse`.
+
+**Test result:** 156 passed, 0 failed. `from app.main import app` imports cleanly.</result>
+<usage><total_tokens>133209</total_tokens><tool_uses>174</tool_uses><duration_ms>922274</duration_ms></usage>
+</task-notification>
+
+---
+

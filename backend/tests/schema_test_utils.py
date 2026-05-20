@@ -18,12 +18,32 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from models.database import Base
-# Import all models so metadata is populated
+# Import ALL models so Base.metadata is fully populated before create_all.
+# All imported __tablename__ values must be listed in SQLALCHEMY_MANAGED_TABLES.
 from models.issue import Issue, Comment, Activity, IssueLink, IssueSequence, Project
 from models.grouping import IssueGroup, IssueGroupMember
 from models.qa import QATask, QATaskIssueLink, QASequence, QASettings
-from models.documentation import ExecutionSummary, FeatureDocumentation
+from models.documentation import ExecutionSummary, FeatureDocumentation, ImplementationNote
 from models.git import CommitLink, GitSyncState
+from models.doc_settings import DocSettings
+from models.agent_registry import AgentProfile
+from models.skill_registry import SkillProfile
+from models.pipeline import PipelineExecution, PipelineStage, PipelineConfig
+from models.park import ParkEvent
+from models.autopilot import AutoPilotQueueRecord, AutoPilotTaskRecord, AutoPilotEvent
+# Studio + Agent Runtime + Backlog + Crew (CB-2384)
+from models.studio import (
+    StudioSession,
+    StudioMessage,
+    StudioToolCall,
+    StudioSubAgentRun,
+    StudioArtifact,
+    StudioHierarchyDraft,
+    StudioAgentActivity,
+)
+from models.agent_runtime import AgentTemplate, AgentInstance, TenantTokenUsage
+from models.backlog import BacklogItem, BacklogComment, BacklogActivity
+from models.crew_map import CrewAssignment, CrewSkillUsage
 
 
 def create_test_engine() -> AsyncEngine:
@@ -263,8 +283,11 @@ ALL_TABLES = [
     "GitSyncState",
 ]
 
-# Tables managed by SQLAlchemy models (subset created by Base.metadata.create_all)
+# Tables managed by SQLAlchemy models (subset created by Base.metadata.create_all).
+# When new models are added, add their __tablename__ here so test_no_unexpected_tables
+# does not reject them.
 SQLALCHEMY_MANAGED_TABLES = [
+    # Core issue tracking
     "Project",
     "Issue",
     "Comment",
@@ -273,12 +296,50 @@ SQLALCHEMY_MANAGED_TABLES = [
     "IssueGroup",
     "IssueGroupMember",
     "IssueSequence",
+    # QA Board
     "QATask",
     "QATaskIssueLink",
     "QASequence",
     "QASettings",
+    # Documentation
     "ExecutionSummary",
     "FeatureDocumentation",
+    # Git integration
     "CommitLink",
     "GitSyncState",
+    # Studio (CB-2384)
+    "StudioSession",
+    "StudioMessage",
+    "StudioToolCall",
+    "StudioSubAgentRun",
+    "StudioArtifact",
+    "StudioHierarchyDraft",
+    "StudioAgentActivity",
+    # Agent Runtime (CB-2384)
+    "AgentTemplate",
+    "AgentInstance",
+    "TenantTokenUsage",
+    # Backlog (CB-2384)
+    "BacklogItem",
+    "BacklogComment",
+    "BacklogActivity",
+    # Crew Map (CB-2384)
+    "CrewAssignment",
+    "CrewSkillUsage",
+    # Documentation extras
+    "ImplementationNote",
+    "DocSettings",
+    # Agent + Skill Registries
+    "AgentProfile",
+    "SkillProfile",
+    # Pipeline
+    "PipelineExecution",
+    "PipelineStage",
+    "PipelineConfig",
+    # Park events
+    "park_events",
+    # AutoPilot Persistence (CB-1951)
+    "AutoPilotQueueRecord",
+    "AutoPilotTaskRecord",
+    "AutoPilotEvent",
 ]

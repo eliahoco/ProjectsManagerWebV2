@@ -414,6 +414,14 @@ app.add_middleware(
         "Authorization",
         "X-Requested-With",
         "X-CSRF-Token",
+        # HIGH-2: custom headers required by Studio surface.
+        "X-Tenant-ID",
+        "X-Workspace-Id",
+        "X-Internal-Token",
+        "Last-Event-ID",
+        "If-Match",
+        "If-None-Match",
+        "ETag",
     ],
     expose_headers=["X-Request-ID"],
     max_age=600,  # Cache preflight requests for 10 minutes

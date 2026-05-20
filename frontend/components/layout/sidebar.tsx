@@ -23,11 +23,13 @@ import {
   Kanban,
   ClipboardCheck,
   Container,
+  MessagesSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
 
 const navigation = [
+  { name: 'Studio', href: '/workspace', icon: MessagesSquare },
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'CodeBoard', href: '/codeboard', icon: Kanban },
   { name: 'QA Board', href: '/codeboard/qa', icon: ClipboardCheck },

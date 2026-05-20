@@ -1199,3 +1199,85 @@ input[type="range"]::-moz-range-thumb {
 input[type="range"]::-moz-range-thumb:hover {
   transform: scale(1.1);
 }
+
+/* ─── Studio surface tokens (CB-2384) ──────────────────────────────────────── */
+
+:root {
+  /* Chat panel — Claude warm parchment */
+  --studio-chat-bg: #f5f4ed;
+  /* Artifact panel — Cursor warm-dark */
+  --studio-artifact-bg: #26251e;
+  /* Canvas background (Crew Map chrome) */
+  --color-canvas: #08090a;
+  /* Panel background */
+  --color-panel: #0f1011;
+  /* Card surface */
+  --color-card: rgba(255, 255, 255, 0.02);
+  --color-card-border: rgba(255, 255, 255, 0.08);
+  /* Accent */
+  --color-accent: #7170ff;
+  /* Status */
+  --color-status-green: #27a644;
+  /* Text */
+  --color-text-active: #f7f8f8;
+  --color-text-muted: #8a8f98;
+}
+
+/* Inter Variable weight 510 — tab labels, priority pills, agent badges */
+.font-studio {
+  font-variation-settings: 'wght' 510;
+}
+
+/* GPU-only animation guard — Studio panel reveal/dismiss */
+.animate-studio-reveal {
+  transition: transform 250ms ease-out, opacity 250ms ease-out;
+}
+.animate-studio-dismiss {
+  transition: transform 150ms ease-in, opacity 150ms ease-in;
+}
+
+/* Active agent pulse — 2Hz CSS keyframe */
+@keyframes agent-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 4px var(--color-status-green);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 8px var(--color-status-green);
+  }
+}
+
+.animate-agent-pulse {
+  animation: agent-pulse 500ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-agent-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
+  .animate-studio-reveal,
+  .animate-studio-dismiss {
+    transition: none;
+  }
+}
+
+/* Focus-visible only — no mouse focus rings (Studio iron rule #4) */
+.studio-focus-visible:focus-visible {
+  outline: 2px solid #7170ff;
+  outline-offset: 2px;
+}
+
+/* Tabular numerals for timestamps */
+.tabular-nums {
+  font-feature-settings: "tnum";
+}
+
+/* At 200% zoom — Studio split pane collapses to single column */
+@media (max-width: 640px) {
+  .studio-split {
+    flex-direction: column;
+  }
+}
+
