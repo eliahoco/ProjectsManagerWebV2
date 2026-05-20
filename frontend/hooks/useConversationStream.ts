@@ -172,7 +172,11 @@ export function useConversationStream(
         setIsConnected(true);
       };
 
-      es.onmessage = (e: MessageEvent<string>) => {
+      // The backend uses NAMED SSE events (`event: token`, `event: message_complete`,
+      // etc.). Native EventSource only fires `onmessage` for the default (unnamed)
+      // event channel — named events MUST be subscribed via addEventListener.
+      // This single handler dispatches all known event types.
+      const handleFrame = (e: MessageEvent<string>) => {
         if (!isMountedRef.current) return;
 
         // Track Last-Event-ID for reconnect replay
@@ -223,18 +227,42 @@ export function useConversationStream(
           case 'message_complete':
           case 'message_replay':
           case 'turn_complete':
-            // Server finished writing the assistant message. Force a refetch
-            // of useStudioMessages so the new ASSISTANT bubble renders.
-            // The streaming-text buffer keeps the visible text in place
-            // until the refetched messages arrive and supersede it.
+            // Server finished writing the assistant message. Refetch
+            // useStudioMessages so the new ASSISTANT bubble renders.
             queryClient.invalidateQueries({
               queryKey: ['workspace', workspaceId, 'studio', 'sessions', sessionId, 'messages'],
             });
+            // Clear the streaming buffer — the persisted DB message replaces it.
+            // (If both stayed visible we'd render a duplicate Jonny bubble.)
+            tokenBufferRef.current = '';
+            setStreamedContent('');
             break;
           default:
             break;
         }
       };
+
+      // Subscribe to all named events that the backend emits + fallback for default channel.
+      const eventTypes = [
+        'token',
+        'tool_start',
+        'tool_end',
+        'tool_call_started',
+        'tool_call_completed',
+        'agent_status',
+        'subagent_started',
+        'subagent_completed',
+        'message_complete',
+        'message_replay',
+        'turn_complete',
+        'error',
+        'done',
+        'ping',
+      ];
+      for (const t of eventTypes) {
+        es.addEventListener(t, handleFrame as EventListener);
+      }
+      es.onmessage = handleFrame;
 
       es.onerror = () => {
         if (!isMountedRef.current) return;
