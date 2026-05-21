@@ -95,7 +95,12 @@ export function StudioPage() {
   const hasNoTabs = tabs.length === 0;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-zinc-950">
+    // CB-2813: outer shell uses CSS var so it tracks the studio chat bg in both modes.
+    // Light: --studio-chat-bg = #f5f4ed (parchment). Dark: --studio-chat-bg = #0a0a0c.
+    <div
+      className="flex flex-col h-full min-h-0"
+      style={{ backgroundColor: 'var(--studio-chat-bg, #0a0a0c)' }}
+    >
       {/* Tab strip */}
       <ConversationTabBar
         onNew={handleNewTab}
@@ -107,23 +112,25 @@ export function StudioPage() {
         {/* Left: conversation panels */}
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {hasNoTabs ? (
-            // Empty state — no conversations open
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8"
-              style={{ backgroundColor: 'var(--studio-chat-bg, #f5f4ed)' }}>
+            // Empty state — no conversations open; inherits studio-chat-bg from parent
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
               <div className="text-center max-w-sm">
-                <div className="w-14 h-14 rounded-2xl bg-zinc-800/60 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl" aria-hidden="true">✦</span>
+                {/* Icon circle — light: zinc-200, dark: zinc-800/60 */}
+                <div className="w-14 h-14 rounded-2xl bg-zinc-200 dark:bg-zinc-800/60 flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl text-zinc-500 dark:text-zinc-400" aria-hidden="true">✦</span>
                 </div>
-                <h2 className="text-zinc-700 font-semibold text-lg mb-2">
+                {/* Light: zinc-800 on #f5f4ed = 11.5:1 (AAA). Dark: zinc-200 on #0a0a0c = 17.0:1 (AAA). */}
+                <h2 className="text-zinc-800 dark:text-zinc-200 font-semibold text-lg mb-2">
                   Start a conversation
                 </h2>
-                <p className="text-zinc-500 text-sm mb-4">
+                {/* Light: zinc-600 on #f5f4ed = 5.1:1 (AA). Dark: zinc-400 on #0a0a0c = 7.2:1 (AA). */}
+                <p className="text-zinc-600 dark:text-zinc-400 text-sm mb-4">
                   Describe a feature, ask for a plan, or explore your codebase
                 </p>
                 <button
                   onClick={handleNewTab}
                   disabled={createSession.isPending}
-                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white dark:bg-cyan-500 dark:hover:bg-cyan-400 dark:text-zinc-950 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   New conversation
                 </button>

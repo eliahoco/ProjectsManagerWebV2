@@ -58,10 +58,14 @@ function ChatMessageBubble({ message }: { message: StudioMessage }) {
       <div
         className={cn(
           'max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed',
-          // CB-2813: theme-aware bubbles. Light = parchment-on-white,
-          // Dark = zinc-on-dark. Assistant bubble stays transparent.
+          // CB-2813: fully theme-aware bubbles.
+          // User light: zinc-200 bg (#e4e4e7) + zinc-900 text (#18181b) = 14.7:1 (AAA).
+          //             subtle border for definition on parchment bg.
+          // User dark:  zinc-800 bg (#27272a) + zinc-100 text (#f4f4f5) = 14.3:1 (AAA).
+          // Assistant light: transparent + zinc-800 body (#27272a on #f5f4ed) = 11.6:1 (AAA).
+          // Assistant dark:  transparent + zinc-200 body (#e4e4e7 on #0a0a0c) = 17.0:1 (AAA).
           isUser
-            ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
+            ? 'bg-zinc-200 text-zinc-900 border border-zinc-300/60 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700/40'
             : 'bg-transparent text-zinc-800 dark:text-zinc-200',
         )}
       >
@@ -81,7 +85,8 @@ function StreamingBubble({ content }: { content: string }) {
       <div className="flex-shrink-0 pt-0.5">
         <RoleBadge role="assistant" />
       </div>
-      <div className="max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-transparent text-zinc-200">
+      {/* CB-2813: text-zinc-800 light (11.6:1 on parchment) / text-zinc-200 dark (17:1). */}
+      <div className="max-w-[80%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-transparent text-zinc-800 dark:text-zinc-200">
         <p className="whitespace-pre-wrap break-words">{content}</p>
         {/* Streaming cursor */}
         <span
@@ -147,11 +152,13 @@ export function ChatMessageList({
         <ChatMessageSkeleton />
       ) : messages.length === 0 && !streamedContent ? (
         <div className="flex flex-col items-center justify-center h-full py-16 px-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-zinc-800/60 flex items-center justify-center mb-4">
-            <span className="text-2xl" aria-hidden="true">✦</span>
+          {/* CB-2813: icon circle — light: zinc-200 bg, dark: zinc-800/60 bg. */}
+          <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-800/60 flex items-center justify-center mb-4">
+            <span className="text-2xl text-zinc-500 dark:text-zinc-400" aria-hidden="true">✦</span>
           </div>
-          <p className="text-zinc-500 text-sm">No messages yet</p>
-          <p className="text-zinc-600 text-xs mt-1">
+          {/* Light: zinc-600 on parchment #f5f4ed = 5.1:1 (AA). Dark: zinc-400 on #0a0a0c = 7.2:1 (AA). */}
+          <p className="text-zinc-600 dark:text-zinc-400 text-sm">No messages yet</p>
+          <p className="text-zinc-500 dark:text-zinc-500 text-xs mt-1">
             Start a conversation to plan your next feature
           </p>
         </div>

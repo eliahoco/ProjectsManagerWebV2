@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* CB-2813: Tailwind v4 dark-mode-by-class. Without this, `dark:` utility
+   variants only fire on the OS `prefers-color-scheme: dark` media query
+   and ignore the `.dark` class our theme-provider toggles on <html>.
+   Every existing `dark:` Tailwind class in the codebase was effectively
+   dead until this line landed. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Dark mode (default) */
 :root,
 .dark {
