@@ -14,7 +14,8 @@
 import { useCallback } from 'react';
 import { X, Plus, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useStudioStore, type TabState } from '@/stores/useStudioStore';
+import { useStudioStore, EMPTY_TABS, type TabState } from '@/stores/useStudioStore';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface ConversationTabBarProps {
   onNew?: () => void;
@@ -81,13 +82,27 @@ export function ConversationTabBar({
   isCreating = false,
   className,
 }: ConversationTabBarProps) {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useStudioStore();
+  // Tabs are project-scoped (CB-2814 fix; master plan §E2.S2.T5).
+  const { projectId } = useTenant();
+  const tabs = useStudioStore((s) => s.tabsByProject[projectId] ?? EMPTY_TABS) as TabState[];
+  const activeTabId = useStudioStore((s) => s.activeTabIdByProject[projectId] ?? null);
+  const setActiveTab = useStudioStore((s) => s.setActiveTab);
+  const closeTab = useStudioStore((s) => s.closeTab);
 
   const handleClose = useCallback(
     (id: string) => {
-      closeTab(id);
+      if (!projectId) return;
+      closeTab(projectId, id);
     },
-    [closeTab],
+    [closeTab, projectId],
+  );
+
+  const handleActivate = useCallback(
+    (id: string) => {
+      if (!projectId) return;
+      setActiveTab(projectId, id);
+    },
+    [setActiveTab, projectId],
   );
 
   return (
@@ -105,7 +120,7 @@ export function ConversationTabBar({
           key={tab.id}
           tab={tab}
           isActive={tab.id === activeTabId}
-          onActivate={() => setActiveTab(tab.id)}
+          onActivate={() => handleActivate(tab.id)}
           onClose={() => handleClose(tab.id)}
         />
       ))}

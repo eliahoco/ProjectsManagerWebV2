@@ -184,6 +184,79 @@ All data fetching in `hooks/useCodeBoard.ts`:
 - **E2E**: Playwright (`npm run test:e2e`)
 - **Backend**: pytest + pytest-asyncio (`pytest`)
 
+## QA Pipeline (bindings for the `qa-regression` skill — Jonny Rule 30)
+
+The `qa-regression` skill sources project-specific commands from this section. When the skill runs against PMv2 work, it uses exactly these invocations.
+
+### Stage 2 — Automated layer commands
+
+| Layer | Command |
+|---|---|
+| Backend tests | `cd backend && HOST=127.0.0.1 DATABASE_URL="sqlite+aiosqlite:///./data/codeboard.db" venv/bin/python -m pytest -q --tb=short` |
+| Frontend tests | `cd frontend && npx vitest run` |
+| Type check | `cd frontend && npx tsc --noEmit` |
+| Backend lint | `cd backend && venv/bin/python -m ruff check .` (optional — surface findings, don't block on warnings) |
+
+A non-zero exit in any of the first three rows is a Stage 2 FAIL — qa-regression stops there.
+
+### Stage 3 — Manual layer (Chrome MCP) targets
+
+| Target | URL |
+|---|---|
+| Frontend | `http://localhost:3601` |
+| Backend health probe | `http://localhost:8401/health` |
+| Backend API (for synthetic state setup) | `http://localhost:8401/api/...` |
+| ChromaDB (RAG inspections) | `http://localhost:8402` |
+
+Theme toggle lives on the navbar — click to toggle `.dark` on `<html>`. WorkspaceSwitcher lives in the sidebar — open to swap project context. Any AC touching project-scoped state MUST be run in at least two distinct projects.
+
+### Stage 4 — Adjacent flows the regression matrix MUST sweep
+
+When a fix touches a shared module, include the relevant adjacent flows in the regression matrix:
+
+| Touched module / store | Sweep these adjacent flows |
+|---|---|
+| `useStudioStore` / Studio panel | Studio chat send, panel resize + reload, Studio empty state, theme toggle, project switch |
+| `useTenant` / project context | Sidebar nav, CodeBoard project list, WorkspaceSwitcher, AutoPilot queue scoping |
+| CodeBoard `useCodeBoard` hooks | Issue list, issue detail, status cascade, parent/child tree, search |
+| `terminal_service` / AI execution | `GlobalAgentStatusBar`, `FloatingAgentStatusBar`, AutoPilot queue, session cleanup on completion |
+| `autopilot_queue_service` | Queue start/pause/resume, crash recovery rehydrate, token-exhaustion auto-resume, audit log redaction |
+| Prisma schema / `frontend/prisma/dev.db` | Migration replay, fresh-DB init, AutoPilot rehydrate from a populated DB |
+| Backend SQLAlchemy / `backend/data/codeboard.db` | Issue CRUD, comment append, activity log, migration replay |
+
+### Stage 5 — Destructive cases mandatory in this project
+
+In addition to the three universal cases (corrupt persisted state, private window, network blip), PMv2 fixes touching the listed surfaces MUST add:
+
+| Surface | Required destructive case |
+|---|---|
+| AutoPilot queue | Crash mid-execution → rehydrate → confirm RUNNING tasks become failed(crash_recovery) and queue → paused(crash_recovery). |
+| Token-exhaustion auto-resume | Mock `is_token_exhaustion` true 3× → confirm circuit-breaker downgrades to `pauseReason='manual'`. |
+| AutoPilot audit log | Inject a log line containing `Bearer abc.def`, `sk-abc123`, `api_key=xyz` → assert all redacted before persistence. |
+| Studio persistence | Plant `stub-…` session IDs in `studio-state-v2` → reload → assert filtered out. |
+| Issue status cascade | Mark deepest leaf DONE → assert parent + grandparent only flip when all siblings DONE. |
+
+## Design-Intent Comments (Jonny Rule 31)
+
+Any code comment that justifies a behavior by appealing to design intent ("intentional", "by design", "deliberate", "on purpose", "as designed", or any synonym implying design authority) MUST cite the exact source — doc path + section or line. Examples that pass review:
+
+```ts
+// Intentional per docs/plans/2026-05-07-ai-project-workspace-master-plan.md §E2.S2.T5
+// Per backend/docs/AUTOPILOT_RUNBOOK.md "Auto-resume" section: 60s grace after reset_time.
+```
+
+Un-cited intent-claims are removed during code review (`code-reviewer` agent flags them as MEDIUM severity). Decision test: *"If a reviewer audited this claim against the source doc, would they find it written there?"* If not — delete the claim or write the doc first. Rule added 2026-05-22 after CB-2814: an un-cited "intentional per architecture doc" comment in `useStudioStore.ts` directly contradicted master plan §E2.S2.T5 and masked a real defect for weeks.
+
+Project doc index for citations:
+
+| Topic | Doc path |
+|---|---|
+| AI workspace / Studio master plan | `docs/plans/2026-05-07-ai-project-workspace-master-plan.md` |
+| AutoPilot operational behavior | `backend/docs/AUTOPILOT_RUNBOOK.md` |
+| AutoPilot migration notes | `backend/MIGRATION_NOTES.md` |
+| CodeBoard issue conventions | `/Volumes/Seagate/Claude/_shared/codeboard-instructions.md` |
+| Jonny bible | `/Users/elic/.claude/skills/jonny/SKILL.md` + `references/bible-extended.md` |
+
 ## Scripts
 - `launch.sh` — start all services
 - `stop.sh` — stop all services

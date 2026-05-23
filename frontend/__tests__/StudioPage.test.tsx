@@ -46,20 +46,35 @@ const mockOpenTab = vi.fn();
 const mockCloseTab = vi.fn();
 const mockSetActiveTab = vi.fn();
 const mockSetDraft = vi.fn();
+const mockBumpSendCounter = vi.fn();
+
+// Post-CB-2814 state shape: project-scoped tabs/activeTabId, flat
+// drafts/sendCounters/panelRatio. Consumers may call useStudioStore()
+// (whole state) or useStudioStore(selector) — the mock supports both.
+const mockStudioState = {
+  tabsByProject: {} as Record<string, unknown[]>,
+  activeTabIdByProject: {} as Record<string, string | null>,
+  drafts: {} as Record<string, string>,
+  sendCounters: {} as Record<string, number>,
+  panelRatio: 0.6,
+  openTab: mockOpenTab,
+  closeTab: mockCloseTab,
+  setActiveTab: mockSetActiveTab,
+  setDraft: mockSetDraft,
+  setPanelRatio: vi.fn(),
+  updateTab: vi.fn(),
+  bumpSendCounter: mockBumpSendCounter,
+  getTabs: (_pid: string) => [],
+  getActiveTabId: (_pid: string) => null,
+};
 
 vi.mock('@/stores/useStudioStore', () => ({
-  useStudioStore: () => ({
-    tabs: [],
-    activeTabId: null,
-    drafts: {},
-    panelRatio: 0.6,
-    openTab: mockOpenTab,
-    closeTab: mockCloseTab,
-    setActiveTab: mockSetActiveTab,
-    setDraft: mockSetDraft,
-    setPanelRatio: vi.fn(),
-    updateTab: vi.fn(),
-  }),
+  useStudioStore: <T,>(selector?: (s: typeof mockStudioState) => T): T | typeof mockStudioState =>
+    typeof selector === 'function' ? selector(mockStudioState) : mockStudioState,
+  isRealId: (id: string) => typeof id === 'string' && !id.startsWith('stub-'),
+  MAX_TABS: 8,
+  STUB_ID_PREFIX: 'stub-',
+  EMPTY_TABS: Object.freeze([]),
 }));
 
 // ─── Studio hooks mock ────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ import { useConversationStream } from '@/hooks/useConversationStream';
 import { useStudioStore } from '@/stores/useStudioStore';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
+import { CapabilityRibbon } from './CapabilityRibbon';
 import { cn } from '@/lib/utils';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -121,6 +122,17 @@ function Input({ className }: InputProps) {
     [sessionId, setDraft],
   );
 
+  // CB-2914 E5.2.1 — ribbon "insert token" handler. Appends `/skill ` or
+  // `@agent ` to the current draft (with a space if needed for clean tokens).
+  const handleRibbonInsert = useCallback(
+    (token: string) => {
+      if (!sessionId) return;
+      const sep = !draft || draft.endsWith(' ') || draft.endsWith('\n') ? '' : ' ';
+      setDraft(sessionId, `${draft}${sep}${token}`);
+    },
+    [sessionId, draft, setDraft],
+  );
+
   const handleSubmit = useCallback(
     (value: string) => {
       if (!sessionId) return;
@@ -140,13 +152,20 @@ function Input({ className }: InputProps) {
   );
 
   return (
-    <ChatInput
-      value={draft}
-      onChange={handleChange}
-      onSubmit={handleSubmit}
-      isStreaming={isStreaming || sendMessage.isPending}
-      className={className}
-    />
+    <div className={cn('flex flex-col', className)}>
+      {/* CB-2914 E5.2.1: capability ribbon above the textarea. */}
+      <CapabilityRibbon
+        sessionId={sessionId}
+        draft={draft}
+        onInsert={handleRibbonInsert}
+      />
+      <ChatInput
+        value={draft}
+        onChange={handleChange}
+        onSubmit={handleSubmit}
+        isStreaming={isStreaming || sendMessage.isPending}
+      />
+    </div>
   );
 }
 

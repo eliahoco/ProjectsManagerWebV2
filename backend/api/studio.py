@@ -723,3 +723,187 @@ async def list_agent_activity(
         tenant_id, session_id, db, limit=limit
     )
     return [StudioAgentActivityResponse.model_validate(a) for a in activities]
+
+
+# ---------------------------------------------------------------------------
+# Capability suggestions (CB-2914 E5.1)
+# ---------------------------------------------------------------------------
+
+
+class CapabilitySuggestionResponse(BaseModel):
+    """One ranked capability returned by GET /studio/capabilities/suggest."""
+
+    name: str
+    kind: str  # "agent" | "skill"
+    description: str
+    score: float
+    reasons: list[str]
+
+
+@router.get(
+    "/capabilities/suggest",
+    response_model=list[CapabilitySuggestionResponse],
+    summary="Rank agents+skills against a chat session's recent context",
+)
+@limiter.limit(
+    "60/minute",
+    key_func=lambda request: (
+        request.query_params.get("session_id") or request.client.host
+    ),
+)
+async def suggest_capabilities(
+    request: Request,
+    session_id: str = Query(..., description="Active Studio chat session id"),
+    message: str = Query("", max_length=4096, description="Latest user message (server falls back to last persisted user msg if empty). Capped at 4096 chars."),
+    top_n: int = Query(7, ge=1, le=20),
+    tenant_id: str = TenantDep,
+    db: AsyncSession = Depends(get_db),
+) -> list[CapabilitySuggestionResponse]:
+    """Return the top-N relevant capabilities for the current chat turn.
+
+    Security (CB-2914 sec-audit fixes):
+      - HIGH-1: tenant ownership check on session_id BEFORE history lookup.
+      - HIGH-2: 60/minute rate limit per session.
+      - HIGH-3: message capped at 4096 chars to bound ReDoS surface.
+    """
+    from services.capability_suggester import build_suggester_from_db
+    from sqlalchemy import desc as _desc
+    from sqlalchemy import select as _select
+    from models.studio import StudioMessage
+
+    # HIGH-1: enforce session ownership before any cross-tenant-leaking read.
+    session = await studio_orchestrator.get_session(tenant_id, session_id, db)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Defense-in-depth: tenant filter on the fallback message lookup.
+    if not message.strip():
+        result = await db.execute(
+            _select(StudioMessage.content)
+            .where(StudioMessage.sessionId == session_id)
+            .where(StudioMessage.tenantId == tenant_id)
+            .where(StudioMessage.role == "USER")
+            .order_by(_desc(StudioMessage.createdAt))
+            .limit(1)
+        )
+        row = result.first()
+        message = str(row[0]) if row and row[0] else ""
+
+    suggester = await build_suggester_from_db(db)
+    suggestions = await suggester.suggest(
+        message=message,
+        session_id=session_id,
+        db=db,
+        top_n=top_n,
+    )
+    return [
+        CapabilitySuggestionResponse(
+            name=s.name, kind=s.kind, description=s.description,
+            score=s.score, reasons=s.reasons,
+        )
+        for s in suggestions
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Investigation Engine endpoint (CB-2914 E1 + E2 + E7)
+# ---------------------------------------------------------------------------
+
+
+class InvestigationStartRequest(BaseModel):
+    description: str = Field(..., max_length=8192, description="Bug description / user message / failure summary")
+    evidence: dict = Field(default_factory=dict)
+
+
+@router.post(
+    "/sessions/{session_id}/investigate",
+    summary="Trigger an SIE investigation cycle on a Studio session",
+)
+@limiter.limit("10/minute", key_func=lambda request: request.path_params.get("session_id", request.client.host))
+async def trigger_investigation(
+    request: Request,
+    session_id: str,
+    body: InvestigationStartRequest,
+    tenant_id: str = TenantDep,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fire the SIE cycle on a Studio session.
+
+    Streams Server-Sent Events with this contract:
+      data: {"type": "layer_status", "layer": "code", "status": "running"}
+      data: {"type": "layer_status", "layer": "code", "status": "completed"}
+      data: {"type": "deliverable", "markdown": "..."}
+      data: {"type": "done", "duration_s": 12.3, "cost_usd": 0.0123, "succeeded": 3, "total": 3}
+
+    Security:
+      - Rate-limited 10/minute per session (real-money fan-out protection).
+      - Tenant ownership gate before invoking the engine.
+      - Engine itself enforces dispatcher allow-listed tools (no RCE).
+    """
+    from services.investigation_engine import (
+        InvestigationRequest,
+        TriggerSource,
+        get_investigation_engine,
+    )
+
+    session = await studio_orchestrator.get_session(tenant_id, session_id, db)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    inv_req = InvestigationRequest(
+        trigger_source=TriggerSource.STUDIO_CHAT_INTENT,
+        description=body.description,
+        project_id=session.projectId,
+        session_id=session_id,
+        tenant_id=tenant_id,
+        evidence=body.evidence,
+    )
+
+    engine = get_investigation_engine()
+
+    async def event_stream():
+        progress_queue: asyncio.Queue = asyncio.Queue()
+
+        async def on_progress(layer, status):
+            await progress_queue.put({
+                "type": "layer_status",
+                "layer": layer,
+                "status": status.value if hasattr(status, "value") else str(status),
+            })
+
+        async def run_engine():
+            try:
+                result = await engine.run(inv_req, on_progress=on_progress)
+                await progress_queue.put({
+                    "type": "deliverable",
+                    "markdown": result.deliverable_markdown,
+                })
+                await progress_queue.put({
+                    "type": "done",
+                    "duration_s": result.duration_s,
+                    "cost_usd": result.total_cost_usd,
+                    "succeeded": result.succeeded_layers,
+                    "total": len(result.layer_reports),
+                    "request_id": result.request.request_id,
+                })
+            except Exception as exc:
+                logger.exception("Investigation cycle raised")
+                await progress_queue.put({
+                    "type": "error",
+                    "error": "Investigation cycle failed",
+                })
+            finally:
+                await progress_queue.put(None)  # sentinel
+
+        engine_task = asyncio.create_task(run_engine())
+        try:
+            while True:
+                event = await progress_queue.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            if not engine_task.done():
+                engine_task.cancel()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

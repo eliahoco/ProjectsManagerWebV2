@@ -1920,3 +1920,303 @@ Resume Studio build: check Phase 4 (backend data) + Phase 5 (frontend) results, 
 
 ---
 
+## 2026-05-22 21:23:19
+
+jonny, you have full bible, make sure to follow the roles and add those if they are missing there, but you first muse deeply investigate the rort cause of the issue tthan plan how you are going to fix that, and build an agile plan that you make sure you coverd all the aspects keep the dataflow , not duplicating features or windoesws than you  show me, i approve and only then run and implement it
+
+---
+
+## 2026-05-22 21:35:31
+
+1. show me an orginized table i can't read it like tthat
+2. build the QA full regression agent of search something in github that has good reviews (stars) and modify it to work with jonny
+3.full agile plan -no shortcuts
+
+---
+
+## 2026-05-22 21:39:22
+
+one last thing before approving! make sure you update this skill and Jonnyes insrtactions if any in the studio project manager V2 web
+
+---
+
+## 2026-05-22 21:40:56
+
+inject to the codeboard, manage it and update every epic. tasks stories and subtasks whe  it's done!!
+
+---
+
+## 2026-05-22 22:19:17
+
+give me an executive summery on what you did in this session
+
+---
+
+## 2026-05-22 22:20:12
+
+Have you tested the QA regression skill at least on what you developed and on the fixed that you've done? I mean, if I open now the studio, what are the chances I'm gonna see some other more bugs
+
+---
+
+## 2026-05-22 22:22:03
+
+No. I want you to do that. You were supposed to do a full QA regression test. That's the whole idea of creating the scale. If you can't do that, it's a waste of time to create a scale. Right? So is the skills working? That will work. Should be perfect. Out of the box. And you shouldn't see any type of problems after you do that.
+
+---
+
+## 2026-05-22 22:53:28
+
+the studio looks good, but jonny is very limited, he need to be very flexeble wiht instractions and ruls
+for now jonny in the studio cant open a bug or report a bug
+
+---
+
+## 2026-05-22 22:55:03
+
+Jonny, why i need to repoeat it very time, call Jonny and make sure to follow the ruls
+
+---
+
+## 2026-05-22 23:02:56
+
+Jonny, you know how i like to see that planning (add it to the rules again if needed)
+alwasys tables, always agent assigned, always QA, always full regression test
+
+---
+
+## 2026-05-22 23:06:09
+
+go jonny, i'm going to the shower and thatn to sleep, take you time, upluad to the codeboard, and execute makein gsure to keep dataflow and that the status is modify accordegnly
+
+---
+
+## 2026-05-23 00:09:03
+
+<task-notification>
+<task-id>a7f81eb3ea0f67544</task-id>
+<tool-use-id>toolu_01J4FSXuEaYFwyoZbVXdLP5c</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a7f81eb3ea0f67544.output</output-file>
+<status>completed</status>
+<summary>Agent "Code review tonight's slice" completed</summary>
+<result>Review complete. Here is my findings report.
+
+---
+
+# Code Review — CB-2914 v3 First Slice
+
+**Scope:** E0 dispatcher + E5.1 endpoint + E5.2.1 ribbon
+**Verdict: PASS-WITH-NITS**
+
+The slice is implementable, testable, and behaves the way the live evidence shows. No CRITICAL, no HIGH. One MEDIUM (un-cited design-intent, Rule 31), the rest LOW/INFO.
+
+---
+
+## Findings
+
+### MEDIUM-1 — Mis-cited design-intent comment (Rule 31)
+**File:** `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/CapabilityRibbon.tsx` lines 19-21
+
+```tsx
+* Intentional per docs/plans/2026-05-07-ai-project-workspace-master-plan.md
+* §E2.S2 (Studio chat surface) — capability ribbon was deferred from Phase 1
+* tab persistence and lands here as Phase 2 UX expansion.
+```
+
+I verified the cited section. `§E2.S2` in `docs/plans/2026-05-07-ai-project-workspace-master-plan.md` is the **Conversation tabs story** (tab pills, live indicator dot, startTransition on tab switch, right-click menu, tab persistence). It says nothing about a capability ribbon, and the ribbon is not "deferred from" tab persistence — those are unrelated surfaces.
+
+This is exactly the failure mode Rule 31 (added 2026-05-22 after CB-2814) was designed to catch: an "Intentional per …" claim that doesn't survive a citation audit.
+
+**Fix:** either (a) delete the "Intentional per …" paragraph, (b) replace with a citation that actually exists (the v3 plan section that introduces E5.2.1), or (c) write the section first and then cite it. Per the project's CLAUDE.md, un-cited intent claims get removed during review.
+
+---
+
+### LOW-1 — `_run_claude` always swallows the *real* timeout return code as -1
+**File:** `backend/services/agent_dispatcher.py` line 200
+
+```py
+return "", f"timeout after {timeout:.1f}s", -1
+```
+
+Returning `-1` is fine (matched on at line 288), but `_run_claude` also returns `proc.returncode or 0` (line 205). If `claude` is killed by a real signal and returns a negative code (e.g. `-SIGKILL` = -9), `or 0` masks it as success. Likelihood is small (the timeout path already handles `proc.kill`), but consider preserving the actual return code rather than coercing falsy values to 0.
+
+---
+
+### LOW-2 — `_extract_triggers` keeps the literal capability name as a trigger; common-word names will false-positive
+**File:** `backend/services/capability_suggester.py` lines 144-145
+
+`seen = [name.lower()]` means a capability named e.g. `review`, `memory`, `verification` matches the substring search `\breview\b` against any message containing the word "review". The live evidence ("the upload route is broken and returns 500 errors") already produced `code-reviewer`, `verification` — which suggests the heuristic is doing useful work, but it also means a chat with the word "verification" in any context, however unrelated, will score the `verification` skill +3.
+
+The +2 stack-hint and the cap-at-one-trigger-hit at line 195 partially mitigate. Not blocking, but worth a follow-up: blacklist single-word triggers that are also stopwords, or require a 2-grain match (kind:name) for single-token names.
+
+---
+
+### LOW-3 — `_history_counts` is O(n_caps × n_turns) substring-scan on raw assistant text
+**File:** `backend/services/capability_suggester.py` lines 267-270
+
+For 31 agents + 63 skills × `history_turns=10` rows = 940 substring scans per suggest call. Fine today; if `history_turns` is bumped or capabilities double, the per-keystroke cost grows linearly. The hook's `staleTime: 5_000` saves you, but consider switching to a single regex alternation (`re.compile("|".join(map(re.escape, names)))`) compiled once per `CapabilitySuggester` instance.
+
+Also: this counts the capability name **anywhere in the raw text**, including if the user *typed* "code-reviewer" in a question — that's a false history hit. The function is documented as "capability invocations in recent turns" but it doesn't distinguish invocations from mentions. Tighten the contract or the query.
+
+---
+
+### LOW-4 — `build_suggester_from_db` rebuilds the registry on every request
+**File:** `backend/services/capability_suggester.py` line 279 + `backend/api/studio.py` line 779
+
+Every `/capabilities/suggest` call hits `agent_registry_service.get_all_agents(db)` + `skill_registry_service.get_all_skills(db)` and re-extracts triggers for 94 rows. On hot ribbon usage (every keystroke debounced at 5 s) this is one DB round-trip + 94 regex passes per request. Cache the built `CapabilitySuggester` at module scope with an invalidation hook on agent/skill registry mutations.
+
+---
+
+### LOW-5 — `invoke_many` "global timeout" path discards completed results
+**File:** `backend/services/agent_dispatcher.py` lines 353-361
+
+```py
+except asyncio.TimeoutError:
+    logger.warning("invoke_many global timeout %.1fs hit", global_timeout)
+    return [
+        DispatchResult(name=n, kind=k, ok=False, output="", error="global timeout")
+        for k, n, _ in invocations
+    ]
+```
+
+Comment at line 354 says "return whatever completed" but the code returns "global timeout" for **everything**, including invocations that already finished. For the SIE partial-result design, you want `asyncio.wait(..., return_when=FIRST_COMPLETED)` or to track results-so-far via a shared list. The dispatcher's docstring at line 330 explicitly promises "callers tolerate partial results" — this path violates that promise.
+
+---
+
+### LOW-6 — `shlex.quote(name.strip())` in `invoke_agent` is misleading
+**File:** `backend/services/agent_dispatcher.py` line 240
+
+`safe_name` is interpolated into a **natural-language prompt** passed to claude via `-p`, not into a shell. `shlex.quote` is shell-escaping; it doesn't sanitize the value for prompt-injection. The end-to-end risk is low (the CLI is argv-style, the prompt is text), but the variable name + comment suggest a security intent that the code doesn't actually deliver. Either:
+
+- Remove `shlex.quote` and just call `name.strip()` (it's not shell input), or
+- Add a regex allowlist that rejects newlines / backticks / `subagent_type=` collisions in `name`.
+
+The dispatcher is invoked from the suggester whose names come from a DB registry, so injection surface today is tiny — flagging for clarity, not for exploitability.
+
+---
+
+### INFO-1 — Test coverage thoughtfully excludes the subprocess
+The test file mocks `_run_claude` and validates wrapper behavior (parsing, composition, timeout, partial success, cost extraction). This is the right choice — no flaky CI dependency on a real `claude` binary. 16/16 passing is meaningful. The one gap: there's no test for the `--dangerously-skip-permissions` flag presence in the argv (in case a future refactor drops it silently). Consider a `test_run_claude_argv` test that captures `asyncio.create_subprocess_exec` args.
+
+---
+
+### INFO-2 — Frontend `useCapabilitySuggestions` swallows status 0 as "endpoint missing"
+**File:** `frontend/hooks/useCapabilitySuggestions.ts` line 67
+
+`status === 0` covers network failure (CORS/offline). Treating it identically to 404 (graceful empty list, no retry) is defensible for a non-critical ribbon, but if the backend genuinely goes down the user will see a permanent "type something…" with no signal. Consider distinguishing network errors with the `isError` path so the ribbon shows "ribbon unavailable" (which it already supports at line 116).
+
+---
+
+## Correctly-identified strengths
+
+1. **Subscription auth hygiene.** `env.pop("ANTHROPIC_API_KEY", None)` + `CLAUDECODE` + `CLAUDE_CODE_ENTRYPOINT` removal exactly matches `terminal_service.py` lines 820-823. Faithful pattern reuse.
+2. **No-shell argv invocation + `start_new_session=True`.** Process-group detachment means `proc.kill()` reaches grandchildren on timeout. This is the correct way to do this, and it's documented in the docstring.
+3. **Output cap (`_MAX_OUTPUT_CHARS = 64_000`) applied in three places** — stdout decode, stderr decode, and `_parse_claude_json_output`. Defense in depth against runaway memory.
+4. **NDJSON fallback parser at line 102.** Handles the streaming-shape claude CLI sometimes emits without crashing.
+5. **`useCapabilitySuggestions` query key** includes `workspaceId`, `sessionId`, `message`, `topN`. Cache invalidates cleanly across workspace switches — this is something CB-2018-class regressions get wrong.
+6. **CapabilityRibbon reserves space (`h-7`) even when empty.** Comment at lines 88-89 documents the intent: prevents textarea jumping when suggestions arrive. Good UX defensiveness.
+7. **`scored.sort(key=lambda s: (-s.score, s.name))`** gives a stable, deterministic order. Tie-breaking is explicit rather than dependent on dict iteration.
+8. **Test isolation.** Each test uses `AsyncMock(side_effect=...)` with a fresh `AgentDispatcher()` instance — no cross-test state.
+9. **Pinned-fallback at lines 228-235.** If nothing scores, the suggester degrades to the user's pinned list rather than returning empty. Good progressive enhancement.
+10. **Cost tracking from day one.** `_extract_cost` pulls from both top-level and `usage.cost_usd` (some CLI versions nest it). Plumbed all the way through `DispatchResult.cost_usd`. SIE budgeting depends on this.
+
+---
+
+## Recommended action before merge
+
+- **MEDIUM-1**: must fix (delete or re-cite the Rule 31 comment).
+- **LOW-5**: worth fixing because the dispatcher's own docstring claims a behavior the timeout path violates.
+- LOW-1 through LOW-6 and LOW-2: queue as follow-up tickets, not merge-blockers.
+
+Files reviewed:
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/agent_dispatcher.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/tests/test_agent_dispatcher.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/capability_suggester.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/studio.py` (lines 728-792, the appended endpoint)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/hooks/useCapabilitySuggestions.ts`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/CapabilityRibbon.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/Chat.tsx`</result>
+<usage><total_tokens>41429</total_tokens><tool_uses>14</tool_uses><duration_ms>101903</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-23 00:36:10
+
+it looks like its' not moving
+
+---
+
+## 2026-05-23 08:43:59
+
+i don't understand... why you are not continuing since yestorday?
+
+---
+
+## 2026-05-23 08:56:48
+
+the QA window return HTTP 404: <!DOCTYPE html><html lang="en" class="dark"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/chunks/%5Broot-
+
+---
+
+## 2026-05-23 09:41:28
+
+<task-notification>
+<task-id>bt3fgov9f</task-id>
+<tool-use-id>toolu_01PkdPseQSJMMWiJAnHdaqo4</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/bt3fgov9f.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait reload" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-05-23 09:43:22
+
+<task-notification>
+<task-id>b9xngackt</task-id>
+<tool-use-id>toolu_01ANuC2wGb4ujar5BEA2zU56</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/b9xngackt.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait full cycle" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-05-23 10:51:50
+
+We discussed earlier about a new, uh, menu on the left side that belongs only to the studio. So maybe one of them will be bug reporter, and it will be a chat.
+is this for now. It is nice that it's investigating, but I don't have any way of communicate. Or it's not a chat. And I don't know what happens in the end. Is it adding the bug to the code code? Why it's asking me to run it? What if the... one of the agents has questions Is it also using the Chrome Agent to check UI side? And the son's reporting the drug. Sometimes it's require more information. So -- For now, it's doing some kind of three layers, architectural code runtime. Not sure what is it... what it is. And I don't know what is the result in the end of the investigation. So it's like... we like house baked. We're not fully implementation of this bug reporter.
+
+---
+
+## 2026-05-23 10:55:05
+
+I think the bug report, it shouldn't be a different conversational chat. It should be in the same chat just like... maybe when you open the chat, it's asking you, like, three questions. Let's start with this. You wanna report a bug, discuss a new feature? continue working on an existing feature. And then when you choose it, instead of loading, Johnny... or just Johnny, it will load the relevant skills and agents. and the name of the tab should be the name of the project dash feature dash bug reporter or something else. And there should be an option to add more to the menu. Because I don't wanna go to the court and talk to you when I wanna add more. functions to the chat So it's not just there's three options.
+
+---
+
+## 2026-05-23 11:03:02
+
+combine it with the new studio including all the new features and keep dataflow and make it a full studio look on this pic again and on the planning you did before and let's plan it again [Image #2]
+
+---
+
+## 2026-05-23 11:06:51
+
+this looks like a mockup, this doesn't includes all the features and user storis behind each new feature and new window, we need a full arch discussion here to make sure we understnad what is standing behind each
+
+---
+
+## 2026-05-23 11:16:17
+
+side comment - new role for Jonny, when working on new feature alwasy ask if the user intreasted in mockup or full planning/arch/implementation
+You have a lot of questions here and I have a lot of things to say. So I need us to go one by one and discuss each one of them separately and ask one question at a time. It's nice that you wrote the whole plan, but there are a lot of unclear things here and things that I don't agree and things that need to be discussed and go deeper. And, um, do some research about them. So let's go one by one from everything you wrote here and discuss each one of them.
+
+---
+
+## 2026-05-23 11:17:08
+
+Above the side comment, the rule need to be applied also to the project manager, not just to here.
+
+---
+

@@ -15877,3 +15877,624 @@ dark mode and white mode are still not good. I needed to use the global prompt t
 
 ---
 
+## 2026-05-21 10:43:41
+
+I run across this, um, git project and wanted to know if it's interesting and if you think we can use that. Oh, we already have something else. So please take a look. Let me know what you think.- https://github.com/guycoful/validate-skill
+
+---
+
+## 2026-05-22 21:16:10
+
+ here is a bug report, jonny, please use the QA and regression skills and your skills to fix that
+  a conversation session is not being saved in the studio while refresing the page or moving to a different tab, it is just reseting the fronedn and there are no conversaions, it need to keep all the open tabs for all all of the jobs, so if i
+  decided to move to different project and open a tab it will be possible
+
+---
+
+## 2026-05-22 21:17:43
+
+please plan a full QA and user regression acceptence test proccess
+
+---
+
+## 2026-05-22 21:18:33
+
+after you fix the issue of course
+
+---
+
+## 2026-05-22 22:10:20
+
+<task-notification>
+<task-id>a77c4252b8b70479c</task-id>
+<tool-use-id>toolu_01BhcTUmonoa13Vc3roBAN1k</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a77c4252b8b70479c.output</output-file>
+<status>completed</status>
+<summary>Agent "Code review CB-2814 fix" completed</summary>
+<result>Those TS errors are unrelated to the CB-2814 files (none are from the 6 reviewed files). I have all the data I need to finalize the review.
+
+---
+
+# Code Review — CB-2814 (Studio tab persistence + per-project scoping)
+
+## Verdict: FAIL
+
+**Severity counts:** 1 HIGH, 0 MEDIUM, 4 LOW, 4 INFO
+
+There is one confirmed regression in the test suite that the implementer reasonably should have caught before handing off: the `StudioPage.test.tsx` mock is missing an export the consumers now require, causing 5 of the smoke tests to fail. This is exactly the kind of issue Stage-2 automation is supposed to gate — recommending FAIL only because it's empirically observable, not theoretical.
+
+---
+
+## HIGH — must fix before QA
+
+### H1 — StudioPage.test.tsx mock is missing the `EMPTY_TABS` export (5 tests fail)
+
+`/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/StudioPage.tsx:22` and `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/ConversationTabBar.tsx:17` both import `EMPTY_TABS` from `@/stores/useStudioStore`. The test mock at `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/__tests__/StudioPage.test.tsx:71-77` returns only `useStudioStore`, `isRealId`, `MAX_TABS`, `STUB_ID_PREFIX` — `EMPTY_TABS` is omitted.
+
+Empirical evidence from `npx vitest run`:
+
+```
+Error: [vitest] No "EMPTY_TABS" export is defined on the "@/stores/useStudioStore" mock.
+... at components/studio/StudioPage.tsx:79:68
+Tests  5 failed | 14 passed (19)
+```
+
+The 14 unit tests in `useStudioStore.test.ts` pass. All 5 failures are in `StudioPage.test.tsx`. Trivial fix: add `EMPTY_TABS: []` (or `Object.freeze([])`) to the mock factory return at line 76.
+
+This blocks the Stage 2 automated layer per the project's QA Pipeline binding ("non-zero exit … is a Stage 2 FAIL").
+
+---
+
+## LOW — fix if cheap, otherwise note
+
+### L1 — `setActiveTab` does not validate that the id exists in the tab list
+
+`useStudioStore.ts:233-238`. A consumer can write an arbitrary string (including a stub or a vanished id) into `activeTabIdByProject[pid]`. Partialize will sanitize it at persist time, but until the next persist the in-memory active id can be inconsistent with `tabsByProject[pid]`. Recommend either:
+- Filter inside the action (`if (!tabs.some(t =&gt; t.id === id)) return;`), or
+- Document this as deliberate (e.g. for the stub-then-replace flow used by `handleNewTab`).
+
+### L2 — Doc comment claims storage was "renamed from `studio-panel-v1`" but there is no migration path
+
+`useStudioStore.ts:11-13` says the key was renamed from `studio-panel-v1`, and the `migrate` function handles `version &lt; 2`. However, Zustand persist keys on the `name` field — it will only ever read `studio-state-v2`. Any user with `studio-panel-v1` in their localStorage will have their panelRatio silently discarded (the v1 record stays orphaned in storage). This is fine if `studio-panel-v1` was never shipped (the previous file in the codebase used the same name `studio-state-v2` already, per git history showing only CB-2384 / CB-2384-fix touched it), but the doc comment misrepresents the situation. Either:
+- Remove the "renamed from `studio-panel-v1`" line if v1 never shipped, or
+- Add an explicit one-time bridge that reads `studio-panel-v1`, migrates panelRatio into `studio-state-v2`, and deletes the old key.
+
+The test at `useStudioStore.test.ts:184-197` "v1 storage with only panelRatio migrates" actually seeds the **same key** (`studio-state-v2`) with `version: 1`, so it tests the version-based migrate path, not a key rename. Per Jonny Rule 31 the doc-comment claim should match reality.
+
+### L3 — `useStudioTabsHydration` deps comment is correct but the closure can starve on rapid project switches
+
+`useStudioTabsHydration.ts:53-57` deliberately excludes `tabsByProject` from deps to avoid an effect loop. That is correct. However, because the effect only re-runs when `projectId | sessions | isSuccess | closeTab` changes, if a new tab is added to `tabsByProject[projectId]` (e.g. via `openTab` mid-session) and that tab's id is not in `sessions` (e.g. local stub), the next sessions-query refetch will not re-evaluate the new tab — but it will eventually, on the next sessions invalidation. The current behavior is fine for the stated D4 defense (prune persisted tabs at hydration), but the comment should note that this hook is for **hydration-time reconciliation**, not for live diff-tracking. Otherwise a future reader expects it to react to every `openTab`.
+
+### L4 — `EMPTY_TABS` `readonly TabState[]` requires an `as TabState[]` cast at every consumer
+
+`StudioPage.tsx:79` and `ConversationTabBar.tsx:87` both write `... as TabState[]`. That works, but defeats the readonly intent and is repetitive. Cleaner: type the local as `readonly TabState[]` at the consumer, or expose a helper selector `selectTabs(projectId)` that returns `TabState[]` and frozen-empties internally. Not blocking — just a smell.
+
+---
+
+## INFO — observations only
+
+### I1 — `Chat.tsx:113` calls `useStudioStore()` without a selector
+
+This subscribes the `Input` component to the entire store, so it re-renders on every `panelRatio` change, every tab open/close, every other session's draft edit, etc. Pre-existing (not introduced by CB-2814) but worth flagging because the surface area of the store grew under this fix. A `useShallow` or per-field selector would fix it.
+
+### I2 — `openTab` activates an existing tab silently
+
+`useStudioStore.ts:184-189`. When the user opens an already-open tab, the store sets it active but the action returns no signal to the caller. Fine for current consumers; would matter if anyone needed to differentiate "opened new" vs "re-activated".
+
+### I3 — `closeTab`'s "nearest remaining tab" picks the tab at the same numerical index in the post-close array
+
+`useStudioStore.ts:213-215`. Closing tab at index 1 of `[s1, s2, s3]` produces `next = [s1, s3]`, and `next[1] = s3`. So the user sees focus jump forward to s3, not backward to s1. That's the current behavior and the test at line 99-106 codifies it. Just noting the implicit UX choice — many IDEs jump back instead of forward.
+
+### I4 — `merge` runs `sanitizePersisted(persisted, 2)` regardless of stored version
+
+`useStudioStore.ts:131-133`. If a v1 payload survives migration (it shouldn't, but defensively) and then `merge` runs with version=2 hard-coded, the v1-specific defaulting at line 154-157 is bypassed. In practice `migrate` is called before `merge` in Zustand persist v4+, so by the time `merge` sees the payload it has already been upgraded. Not a bug — just observing the redundancy/order coupling.
+
+---
+
+## Strengths the implementer got right — preserve these
+
+1. **Stable `EMPTY_TABS` frozen reference** (`useStudioStore.ts:50-54`) with a comment explaining why returning a fresh `[]` from a selector would loop. This is the exact React 18 footgun zustand selectors have, and it's caught explicitly.
+2. **Stub-ID defense is layered correctly**: filtered at `partialize` (write side, `useStudioStore.ts:96-108`), skipped during hydration diff (`useStudioTabsHydration.ts:46-48`), and asserted by tests `AC4` (lines 157-179 of the test file). Three independent defenses match the "stub IDs would persist as garbage" bug.
+3. **`sanitizePersisted` is well-factored** — single source of truth used by both `migrate` and `merge`, with `safeNumber` / `safeRecord` helpers that fall back to defaults on type mismatch. The malformed-storage test at lines 199-209 exercises this directly.
+4. **Active-tab fallback when partialize prunes a stub-active**: `useStudioStore.ts:106-112` falls back to `cleanTabs[pid]?.[0]?.id ?? null` rather than leaving a dangling pointer. Tested at line 171-179.
+5. **`closeTab` cleans up `drafts` + `sendCounters`** for the closed session (`useStudioStore.ts:218-222`). Prevents memory growth over long sessions; tested at lines 108-118.
+6. **Doc-comment citations comply with Jonny Rule 31** — every "intentional" claim cites `docs/plans/2026-05-07-ai-project-workspace-master-plan.md §E2.S2.T5` and the section actually exists at line 464 of that doc. Verified.
+7. **TypeScript is clean** — `tsc --noEmit` reports zero errors in any of the 5 changed source files (the pre-existing TS errors elsewhere in the repo are unrelated).
+8. **`MAX_TABS` enforced per project, not globally** — the test at line 81-93 codifies that project B's counter is independent. This is the correct semantics for the per-project scope.
+9. **`useStudioTabsHydration` waits for `isSuccess`** rather than firing on partial data (`useStudioTabsHydration.ts:39`). Prevents pruning every persisted tab during the initial empty-data window before the sessions query resolves.
+10. **14/14 unit tests pass** in `useStudioStore.test.ts`. Coverage hits all named ACs (2, 3, 4, 5, 7, 8, 9, 11), reconciliation edge cases, and migration corruption paths.
+
+---
+
+## What to do next
+
+1. Fix H1 — add `EMPTY_TABS` to the StudioPage test mock factory (one line at `__tests__/StudioPage.test.tsx:77`).
+2. Re-run `cd frontend &amp;&amp; npx vitest run __tests__/useStudioStore.test.ts __tests__/StudioPage.test.tsx` to confirm 19/19 pass.
+3. Optionally address L1-L4 if cheap; otherwise note them and proceed to Stage 3 (manual Chrome MCP regression sweep per the QA pipeline binding for `useStudioStore` adjacent flows: Studio chat send, panel resize + reload, Studio empty state, theme toggle, project switch).
+
+Relevant absolute file paths for follow-up:
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/__tests__/StudioPage.test.tsx` (H1 fix here)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/stores/useStudioStore.ts` (L2 doc-comment fix, L1 optional)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/hooks/useStudioTabsHydration.ts` (L3 comment polish)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/StudioPage.tsx` (L4 cast cleanup, optional)
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/studio/ConversationTabBar.tsx` (L4 cast cleanup, optional)</result>
+<usage><total_tokens>64554</total_tokens><tool_uses>28</tool_uses><duration_ms>570751</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-23 12:26:51
+
+<task-notification>
+<task-id>bdlpefcnj</task-id>
+<tool-use-id>toolu_018Z2YMPh7MWKBhzgSweSFCU</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/bdlpefcnj.output</output-file>
+<status>completed</status>
+<summary>Background command "Find prior comparison doc" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+## 2026-05-23 12:36:47
+
+fifteen, you just wrote here the tables are kind of Chinese for me, and I don't speak Chinese. On simple executive summary conclusions If you want to divide it by subject, that's fine. But very, very precise, result on itch and You're sending it to write meant, and I don't have access to this document. If you're keeping it in the temp folder, it's irrelevant. You need to keep it in the Claude space folders. Open a folder for AI lift. and project manager integration. Give it a name. I don't know. And put the documentation over there. I'll read it from there. I wanna compare and see on everything. And that should be written in a understanding. executive summary language. that I'll be able to take a decision.
+
+---
+
+## 2026-05-23 12:38:33
+
+<task-notification>
+<task-id>a9226e60bfd08d601</task-id>
+<tool-use-id>toolu_019nmmDhqCei1U536k9EmxdZ</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a9226e60bfd08d601.output</output-file>
+<status>completed</status>
+<summary>Agent "Architecture comparison AIDP vs PMv2" completed</summary>
+<result>I have enough data. Now let me produce the comprehensive comparison.
+
+---
+
+# Architecture Comparison: AIDP vs PMv2
+
+**Comparison Date:** 2026-05-23
+**Sources cited:** AIDP `/Volumes/Seagate/Claude/AIDevPlatformProduction/`, PMv2 `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/`
+
+---
+
+## 1. Stack
+
+| Layer | AIDP | PMv2 |
+|---|---|---|
+| Frontend framework | Next.js 15 + React 19 (`apps/web/package.json:45-47`) | Next.js 16.1.2 + React 19.2.3 (`frontend/package.json:30-32`) |
+| Bundler | webpack (default) | Turbopack (`CLAUDE.md` line 17) |
+| State (client) | Zustand with persist (`apps/web/src/stores/*.ts` — 7 stores: dashboard, sidebar, workspace, claude-code, model, planning) | Zustand (`frontend/package.json:37`) + React Query for server state |
+| Server-state | None first-class; manual fetches | React Query (`@tanstack/react-query`) primary pattern, hooks in `frontend/hooks/useCodeBoard.ts` |
+| UI primitives | Shadcn + 17 Radix packages (`apps/web/package.json:18-36`) | Hand-built `components/ui/` (no Radix dep visible in `frontend/package.json`) |
+| Dashboard grid | `react-grid-layout` 2.1.1 (`apps/web/package.json:49`) — Grafana-style draggable widgets | None |
+| Graph viz | `reactflow` 11.11 (`apps/web/package.json:52`) | Planned (`docs/plans/2026-05-20-studio-master-synthesis.md` "React Flow v12 for Crew Map") — not yet installed |
+| Terminal | `@xterm/xterm` 6.0 + xterm addons (`apps/web/package.json:38-40`) | None — terminal is server-side subprocess (`backend/services/terminal_service.py`) |
+| Backend | Python FastAPI, **microservices** — 16 service dirs under `services/` (user, project, qa, git, agent-orchestrator, deploy, docs, mentor, notification, analytics, builder, database, realtime, secret, template, api-gateway) | Python FastAPI, **monolith** — single `backend/` with `api/` routers (`backend/api/`: 21 routers including `issues.py`, `studio.py`, `backlog.py`, `crew_map.py`, `execution.py`, `autopilot`) |
+| ORM | SQLAlchemy 2.0 async per service (e.g. `services/project-service/app/models/project.py`) | SQLAlchemy 2.0 async (`backend/models/`) + Prisma for the frontend mirror (`frontend/prisma/schema.prisma`) |
+| Database | PostgreSQL (`services/user-service/app/db/`, `aidevplatform-postgres:5437` per `docs/CURRENT_STATE.md:42`) + Redis + (planned MongoDB/Meilisearch per `docs/ARCHITECTURE.md:46-48`) | SQLite — two files: `backend/data/codeboard.db` (SQLAlchemy/aiosqlite) and `frontend/prisma/dev.db` (Prisma) (`CLAUDE.md` lines around DB) |
+| Vector DB | None implemented in code | ChromaDB on port 8402 + pgvector fallback (`backend/services/rag_service.py`, 1383 LOC) |
+| Auth | JWT + refresh-token rotation + Redis token blacklist + CSRF middleware + rate-limit middleware + audit log + OAuth providers (GitHub, etc.) (`services/user-service/app/main.py:14-30, 87-122`); `RefreshToken`, `OAuthConnection`, `AuditLog` models exist | Single shared secret `INTERNAL_API_TOKEN` via `app.security.require_local_or_token` + origin allowlist; no user identity yet (`backend/app/main.py:398-403`); `TenantDep` returns `settings.DEFAULT_TENANT_ID` placeholder (`backend/api/deps.py:31-55`) |
+| Monorepo | Turborepo + pnpm workspaces (`turbo.json`, `pnpm-workspace.yaml`, `package.json:11`) — `apps/{web,cli,desktop}` + `services/*` + `packages/{shared,ui-components,sdk,agent-protocol,db-adapters,git-integrations}` + `agents/*` | Single repo, no monorepo tooling (`frontend/`, `backend/` siblings) |
+| Container | Docker Compose for infra + per-service Dockerfiles (`infrastructure/docker/`) + Kubernetes manifests + Terraform (`infrastructure/`) | Docker Compose for 3 services (`docker-compose.yml`) — Colima runtime per `CLAUDE.md` |
+| Desktop | Tauri (`apps/desktop/`) scaffolded | None |
+| CLI | Scaffolded (`apps/cli/`) | None — there are shell scripts (`launch.sh`, `stop.sh`) |
+| Realtime | WebSocket (`services/agent-orchestrator/app/realtime/`) — pubsub, connection_manager, claude_code_ws, events | SSE-first (designed in `docs/plans/2026-05-20-studio-api-contract.md` "3 SSE channels"); ad-hoc polling today via React Query (`frontend/hooks/useCodeBoard.ts` `useExecutionSessions` polls 2s) |
+
+---
+
+## 2. Multi-Tenant Readiness
+
+### Hard finding: PMv2 is structurally **further along** than AIDP on tenant isolation.
+
+| Aspect | AIDP | PMv2 |
+|---|---|---|
+| `Organization` / `Tenant` table | YES — `services/user-service/app/models/organization.py:57` (`Organization`, `OrganizationInvitation`, `OrganizationAPIKey`, `OrganizationAuditLog`, `DashboardLayout` with `organization_id`, `OrganizationRole`, `OrganizationPlan`, `SSOProvider`) | NO physical Tenant table yet, but `tenantId` column already on new tables (see below) |
+| `tenant_id` / `org_id` on tenant-partitioned data tables | **NO.** `services/project-service/app/models/project.py:47` has only `owner_id`, no `org_id` (verified by grep — no hits for `tenant_id`/`organization_id` in `services/project-service`). | **YES on all new tables.** `frontend/prisma/schema.prisma` lines 561, 584, 593, 612, 618, 636, 642, 664, 671, 688, 695, 708, 715, 728, 739, 752, 759, 770 — Studio/Backlog/CrewMap tables all carry nullable `tenantId String?` + indexed |
+| Tenant-scoping dependency | NO `tenant_id` is enforced server-side — user-service's `OrganizationRole` is just an RBAC enum, never wired as a query filter | YES — `backend/api/deps.py:31-55` `TenantDep`; `backend/api/backlog.py:95-148` actively filters by `tenantId` and returns 404 on cross-tenant access (`_get_tenant_item`) |
+| Auth ready for SaaS | JWT + refresh rotation + CSRF + audit log all functional (`services/user-service/app/api/auth.py`, `services/user-service/tests/test_auth.py`, `test_security.py`, `test_oauth.py`) — **best-in-class for a green-field SaaS** | Single shared secret only; `MULTI_TENANT_MODE` flag and JWT auth designed in `docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md §2` but **not implemented** |
+| Cloud deployment target | Kubernetes manifests + Terraform (`infrastructure/kubernetes/`, `infrastructure/terraform/`) — heavy-weight | Vercel + Fly.io + Supabase + Upstash + R2 spec'd (`docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md §4`) — ~$55/mo idle, not deployed |
+| RLS / Postgres safety net | Could be added cheaply since user-service is already on PostgreSQL, but absent in code | Designed (`docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md` lines 85-101 with example `CREATE POLICY`), blocked by SQLite |
+| Per-tenant cost attribution | None (token usage not modeled) | `TenantTokenUsage` table in `frontend/prisma/schema.prisma` model list (line ~33 of model list grep) + designed in master synthesis line 122 |
+
+**Summary:** AIDP has the **auth scaffolding** for SaaS (JWT, OAuth, CSRF, audit). PMv2 has the **data-layer scaffolding** (`tenant_id` on every new table, `TenantDep`, 404-not-403 contract). Neither is deployable today; the gap from PMv2 to SaaS is "swap SQLite for Postgres + wire JWT" (one infra epic — E0 per the synthesis doc). The gap from AIDP to SaaS is "add `org_id` to every tenant-owned table and refactor every query/router" (an invasive cross-cutting refactor across 16 services) — even though AIDP looks more mature on paper.
+
+---
+
+## 3. Feature Surface
+
+### Features AIDP has that PMv2 does NOT
+
+| Feature | AIDP location | Notes |
+|---|---|---|
+| Drag-and-drop dashboard widgets | `apps/web/src/components/dashboard/widgets/` — 10 widgets (active-project, agent-status, deployment-status, project-list, quick-actions, recent-commits, stats-card, team-activity, token-usage, welcome) + `react-grid-layout` + `add-widget-dialog.tsx` | The "Builder visual surface" Eli loves |
+| Visual Builder | `apps/web/src/app/(dashboard)/builder/` — `page.tsx` + subpages `ai/`, `assets/`, `components/`, `export/`, `themes/` (`docs/FEATURES.md:212-234`) | Drag-and-drop UI design tool; not yet wired to a live preview engine |
+| 7-step Project Wizard | `apps/web/src/components/project-wizard/steps/` — `project-info`, `tech-stack`, `ai-config`, `team-access`, `storage-location`, `review` + `wizard-navigation.tsx` (`docs/FEATURES.md:62-106`) | Eli prefers this guided creation flow |
+| Workspace tab system | `apps/web/src/stores/workspace-store.ts` — `WorkspaceStore { tabs, activeTabId, openTab, closeTab }` (`docs/ARCHITECTURE.md:120-130`) | Multi-project tab navigation |
+| Org / Team / Member pages | `apps/web/src/app/(dashboard)/org/{settings,billing,teams,members}/page.tsx` + backend in `services/user-service/app/api/organizations.py` + `teams.py` + `collaboration.py` | Full SaaS UX shell |
+| Models hub | `apps/web/src/app/(dashboard)/models/` + `model-store.ts` | AI provider/model picker UI |
+| Notifications | `apps/web/src/app/(dashboard)/notifications/` + `services/user-service/app/api/notifications.py` + `Notification` model | First-class notifications |
+| Enterprise / Analytics surfaces | `apps/web/src/app/(dashboard)/enterprise/`, `analytics/` | Scaffolded pages (mostly mock data per `docs/CURRENT_STATE.md:170-184`) |
+| Per-service Prometheus instrumentation | `prometheus_fastapi_instrumentator` in `services/*/app/main.py` | PMv2 has no metrics surface |
+| Microservice separation | 16 distinct FastAPI apps (`services/*/app/main.py`) | PMv2 is one monolith |
+| Tauri desktop scaffold | `apps/desktop/` | — |
+
+### Features PMv2 has that AIDP does NOT
+
+| Feature | PMv2 location | Notes |
+|---|---|---|
+| CodeBoard issue tracking | `frontend/app/codeboard/`, `frontend/components/codeboard/` (40+ components — `ActivityLog`, `AIBreakdownModal`, `AutoPilotConfigModal`, `EpicSwimlanesBoard`, `IssueDetail`, `ExecuteButton`, `ExecutionModal`, `FeatureExecutionPanel`, etc.) + `backend/api/issues.py` + `backend/models/issue.py` | A complete Jira-ish issue tracker; AIDP has no equivalent |
+| Studio chat agent (CB-2384) | `frontend/components/studio/` (Chat, ChatInput, ChatMessageList, AgentActivityPanel, CapabilityRibbon, InvestigationCyclePanel, ResizableSplit, ConversationTabBar) + `backend/services/studio_chat_agent.py` (1579 LOC) + `studio_orchestrator.py` (858 LOC) + `backend/api/studio.py` + 7 Studio Prisma models | Anthropic Messages API direct (no CLI subprocess), 9 tools, Haiku/Sonnet/Opus model routing per `docs/plans/2026-05-20-studio-master-synthesis.md` lines 56-62 |
+| AutoPilot queue | `backend/services/autopilot_queue_service.py` (3286 LOC — single largest service) + `autopilot_service.py` (329) + `frontend/components/codeboard/AutoPilot*` (4 components) + 3 Prisma models (`AutoPilotQueueRecord`, `AutoPilotTaskRecord`, `AutoPilotEvent`) + `backend/docs/AUTOPILOT_RUNBOOK.md` | Crash-recovery, token-exhaustion auto-resume, circuit breaker — production-hardened (per `CLAUDE.md` "AutoPilot Queue (CB-1951)" section); AIDP has nothing comparable |
+| Claude Code CLI execution | `backend/services/terminal_service.py` (995 LOC) — spawns `claude -p ... --output-format stream-json`, parses progress, tracks `TerminalSession` | AIDP has `services/agent-orchestrator/claude_code_server.py` + a `claude-code` frontend module (`apps/web/src/components/claude-code/`) but it's WebSocket-based and much thinner |
+| Studio Investigation Engine (SIE / CB-2914) | `backend/services/investigation_engine.py` (471 LOC) + `frontend/components/studio/InvestigationCyclePanel.tsx` + CLI mirror per `~/.claude/skills/investigation/` reference | Parallel layer-investigator dispatch + synthesizer; AIDP has no equivalent |
+| Backlog (review room) | `frontend/components/backlog/` (BacklogCard, BacklogEditModal, BacklogFilterBar, BacklogPage) + `backend/api/backlog.py` + `backend/services/backlog_promoter.py` + `BacklogItem`/`BacklogComment`/`BacklogActivity` Prisma models | Designed in `docs/plans/2026-05-07-ai-project-workspace-master-plan.md` chapter 3 |
+| Crew Map | `backend/api/crew_map.py` + `backend/models/crew_map.py` + `CrewAssignment`/`CrewSkillUsage` Prisma models + planned graph view | Backend tables landed (per master synthesis line 39), frontend stub only |
+| QA Board / Test management | `frontend/app/qa/...` (under codeboard), `backend/api/qa.py`, `backend/services/qa_service.py` (1314 LOC), `backend/models/qa.py` — full QATask/QASequence/QASettings | AIDP has `services/qa-service/` with test_suites/test_cases/test_runs/test_generation but no UI wired |
+| Documentation RAG generator | `backend/services/documentation_generator.py` (1754 LOC) + `rag_service.py` (1383 LOC) + ChromaDB + `ExecutionSummary`/`FeatureDocumentation` models + `backend/docs/DOC_PIPELINE_RUNBOOK.md` | Indexes execution summaries into vector DB; AIDP has no RAG implementation in code |
+| Agent registry + skills + capabilities | `backend/services/agent_registry_service.py` (443), `skill_registry_service.py` (352), `capability_suggester.py` (321), `agent_dispatcher.py` (472), `AgentProfile`/`SkillProfile` Prisma models | First-class agent metadata layer |
+| Pipeline executor | `backend/services/pipeline_executor.py` (988 LOC) + `pipeline.py` API + `PipelineExecution`/`PipelineStage`/`PipelineConfig` models | Multi-stage execution pipelines |
+| Git commit linking + sync | `backend/services/commit_link_service.py` (335), `commit_sync_service.py` (350), `git_service.py` (394), `CommitLink`/`GitSyncState` models, `backend/api/git_webhook.py` | Webhook-driven commit→issue linking |
+| Verification service | `backend/services/verification_service.py` (910 LOC) | Full-story verification (browser → API → data) — also exists as `vercel:verification` skill |
+| Park.sh / project lifecycle scripts | `park.sh`, `launch.sh`, `stop.sh`, `frontend/lib/shell.ts`, `backend/api/park.py` | Programmatic project start/stop from UI |
+| Multi-project port management | `frontend/app/ports/`, `Port`/`PortRange`/`Session` Prisma models | Tracks ports across all managed projects |
+
+---
+
+## 4. Code Quality + Maintainability
+
+| Dimension | AIDP | PMv2 |
+|---|---|---|
+| Total backend LOC | ~49,000 lines Python (with services counted but venvs excluded — gross figure includes all services) | ~86,000 lines Python |
+| Total frontend LOC | ~98,000 lines TS/TSX | ~85,000 lines TS/TSX |
+| Backend tests (file count × LOC) | user/project/qa services tests: **6,944 LOC** across ~16 files (`services/user-service/tests/` has 10 files: auth, security, security_utils, smoke, users, organizations, teams, oauth, integration_auth_flow, integration_org_flow; `qa-service/tests/`: 4 files) | **33,919 LOC** across 79 files in `backend/tests/` |
+| Frontend tests | 4 files: `apps/web/e2e/{auth,dashboard}.spec.ts`, `apps/web/src/__tests__/{setup-smoke,middleware}.test.ts` | **15,599 LOC** across 33 `.test.*` + 12 `.spec.*` files in `frontend/tests/` |
+| Test coverage on auth | High — 10 dedicated test files including integration flows | Low — no auth to test yet |
+| Test coverage on business logic | Thin outside of auth (qa-service has 4 files; project-service has none visible) | Heavy — `test_agent_dispatcher.py`, `test_investigation_engine.py`, `test_urgency_classifier.py`, `test_codeboard_filer.py`, plus extensive AutoPilot/Studio/RAG tests |
+| Frontend test coverage | Smoke + middleware + 2 e2e — minimal | Substantial — `useCodeBoard.test.ts` (402 LOC), `useReorderGroupMembers.test.ts` (356), `date-filter-flow.test.tsx` (363), `codeboard.test.ts` (212) — covers React Query hooks, integrations, types |
+| Modularity | Genuine microservice boundaries; each service is independently runnable | Monolith — but the `services/` directory is well-organized (29 service modules with clear single responsibilities — `terminal_service`, `autopilot_queue_service`, `rag_service`, `investigation_engine`, etc.) |
+| Single-file giants | None over ~1500 LOC | `autopilot_queue_service.py` is 3,286 LOC — the largest single file, and a real maintainability liability; `documentation_generator.py` 1,754; `studio_chat_agent.py` 1,579; `models/schemas.py` 2,189 |
+| Mock data in product surfaces | **High** — `docs/CURRENT_STATE.md:170-184` lists Dashboard widgets, Team management, Org pages as still using mock data; `docs/MASTER_PROJECT_PLAN.md` EP-02 ("API Integration") explicitly says "Most pages show mock data. API clients exist but pages don't use them" — 80 hours estimated. Hardcoded test data on `/qa` lines 30-120, `/git` lines 58-126 | **Low** — CodeBoard, AutoPilot, Studio chat are wired to real backends and exercised daily by Eli per CLAUDE.md/PROMPT_HISTORY |
+| Tech-debt signals | `docs/CURRENT_STATE.md` lists "BUG-007 tech_stack config not persisted" as known issue from Jan 2026, last update 2026-02-05 — **3+ months stale**; `apps/web/e2e/` only has 2 spec files for a v1.0-beta product | Recent commits (e.g. `dc40a51 feat(CB-2793): AutoPilot Resume/Recovery Reliability — structural refactor`, `68bce26 Update ProjectsManagerWebV2 - 2026-05-08`) — active daily work; CLAUDE.md Jonny Rule 31 enforces design-intent citations |
+| Documentation discipline | `docs/{ARCHITECTURE,FEATURES,IMPLEMENTATION_PLAN,MASTER_PROJECT_PLAN,CURRENT_STATE,CHANGELOG}.md` — well-organized but the system docs describe a future state not current code (e.g. ARCHITECTURE.md shows Temporal.io + NATS + MongoDB + Meilisearch — none implemented in code per `pyproject.toml`/`requirements.txt`) | `docs/plans/*` 11 plan documents grounded in implementation reality; `backend/docs/AUTOPILOT_RUNBOOK.md`, `MIGRATION_NOTES.md` cited from CLAUDE.md; project doc index in CLAUDE.md "Design-Intent Comments" §31 |
+| Security middleware | `SecurityHeadersMiddleware`, `CSRFMiddleware`, `RateLimitMiddleware`, `RequestLoggingMiddleware`, `RequestIdMiddleware` (`services/user-service/app/main.py:93-122`) — production-grade | `validate_origin` middleware + `slowapi` rate limit + CORS allow-list (`backend/app/main.py:404-466`) — narrower but functional; CSRF/CSP headers absent on backend |
+| Linting / typing | TypeScript 5 strict per `apps/web/package.json:74`; `pnpm lint` per `package.json:9` | TypeScript 5, ruff for backend (`CLAUDE.md` "Backend lint" QA pipeline row), Vitest + Playwright for frontend, pytest-asyncio backend |
+
+---
+
+## 5. Direction Recommendation
+
+### Decision matrix
+
+| Option | What it costs | What it preserves | Verdict |
+|---|---|---|---|
+| **(a) Continue PMv2 alone** | Build Builder + Dashboard widgets + Wizard from scratch in PMv2. Build JWT auth + Postgres migration per `docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md` E0. ~6-8 weeks to cloud-ready. | Studio (1579 LOC), AutoPilot (3286 LOC), CodeBoard (40+ components), RAG, SIE, Agent Registry, AgentTemplate registry, Backlog/CrewMap scaffolding — none of which exists in AIDP. Plus the `tenant_id`-everywhere data discipline already shipped on Studio tables. | **Recommended primary path.** PMv2 is the active daily-driver; AIDP last saw real work 2026-02-05 (`docs/CURRENT_STATE.md`). |
+| **(b) Merge PMv2 into AIDP** | Re-implement 86k LOC of PMv2 backend + 85k LOC of PMv2 frontend across AIDP's 16-microservice topology. The Studio/AutoPilot/RAG layer would have to be split across `agent-orchestrator`, `qa-service`, new services. Multi-month rewrite with ongoing parity risk. | AIDP's polished UX shell (sidebar groups, org pages, notifications, dashboard grid). | **Reject.** AIDP's microservice topology is over-engineered for current scale (10 tenants forecast at $100-150/mo per multi-tenant plan) and most of its surface is mock-data per its own `docs/CURRENT_STATE.md` and `docs/MASTER_PROJECT_PLAN.md` EP-02. Moving PMv2 features in would multiply the surface area without adding capability. |
+| **(c) Port AIDP features into PMv2** | Lift specific, isolatable AIDP assets into PMv2: &lt;br&gt;• Dashboard widget grid + 10 widget components (`apps/web/src/components/dashboard/`) → `frontend/components/dashboard/`&lt;br&gt;• Builder pages (`apps/web/src/app/(dashboard)/builder/`) → `frontend/app/builder/`&lt;br&gt;• 7-step Project Wizard (`apps/web/src/components/project-wizard/`) → `frontend/components/project-wizard/`&lt;br&gt;• Workspace tab store pattern → augment `frontend/components/workspace/`&lt;br&gt;• Shadcn + Radix primitives if PMv2 wants them&lt;br&gt;Each is a self-contained module copy + adapt API calls to PMv2's React Query hooks. ~1-2 weeks per major feature.| All of PMv2's accumulated logic AND gains AIDP's visual surfaces. | **Recommended companion path to (a).** Sequence: (1) ship E0 cloud-foundation per `docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md` Step 1; (2) port AIDP Builder + Dashboard + Wizard into PMv2 as separate epics. |
+| **(d) Port PMv2 features into AIDP** | The opposite of (b) — slightly less invasive because AIDP's `agent-orchestrator` has a Claude Code scaffold to extend. But AIDP still lacks `tenant_id` on data tables, RAG, AutoPilot persistence schema, Studio agent runtime, Investigation Engine. ~3-4 months. | AIDP's microservice + Kubernetes + JWT infra. | **Reject.** Same reasoning as (b); also surrenders the `tenant_id`-on-every-Studio-table discipline that's already paying down the SaaS migration debt in PMv2. |
+| **(e) Stop both, start fresh** | Months of greenfield work; throws away ~135k LOC of PMv2 production-tested code and the daily-driver workflow. | Nothing. | **Reject.** |
+
+### Concrete recommendation
+
+**Path: (a) primary + (c) for selective UX uplift.**
+
+1. **Run the E0 Multi-Tenant Foundation epic on PMv2** as already designed in `docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md` §6 Step 1 — Postgres swap, pgvector, JWT for Studio routes, Fly.io + Vercel deploy. ~2-3 weeks. The `tenant_id` columns and `TenantDep` are already in place (verified in `backend/api/backlog.py:95-148` and `frontend/prisma/schema.prisma:561-770`).
+2. **In parallel, port AIDP's Builder + Dashboard widget grid + Project Wizard into PMv2** as a "Visual Workspace Uplift" epic. Each is a self-contained UI module in AIDP's monorepo and can be copied into PMv2's flat `frontend/` with minor API-call rewrites (PMv2 uses React Query hooks, AIDP uses raw `fetch`).
+3. **Mine AIDP's auth scaffolding** when implementing PMv2's JWT layer — `services/user-service/app/api/auth.py`, `core/security.py`, `core/csrf.py`, `core/middleware.py`, `models/refresh_token.py`, `models/audit_log.py`, the OAuth provider integrations in `oauth.py`, and the full test suite (`tests/test_auth.py`, `test_security.py`, `test_oauth.py`, `test_integration_auth_flow.py` — 10 files, 6944 LOC of tests). This is high-quality work that should not be re-derived.
+4. **Archive AIDP** as a reference repository; do not maintain two parallel codebases.
+
+### Why PMv2 wins as the foundation
+
+- **Daily usage.** Eli is working in PMv2 today (recent commit `dc40a51` on the active branch; AIDP last meaningful update 2026-02-05 per `docs/CURRENT_STATE.md:3`).
+- **Feature density.** The Studio + AutoPilot + CodeBoard + RAG + SIE stack is ~10,000 LOC of working, tested code that AIDP does not have.
+- **Multi-tenant data discipline ahead of AIDP.** `tenant_id` is already on every new Studio/Backlog/CrewMap table; AIDP has `Organization` tables but `org_id` is NOT on `Project` or any data table (`services/project-service/app/models/project.py:47` only has `owner_id`).
+- **Smaller deployment surface.** PMv2's monolithic FastAPI + Next.js fits the spec'd Vercel + Fly.io + Supabase stack ($55/mo idle); AIDP's 16 microservices would each need their own Fly.io app or a Kubernetes cluster.
+- **Test discipline.** PMv2 has 5× the test LOC of AIDP and recent QA infrastructure (CLAUDE.md "QA Pipeline" section, qa-regression skill bindings).
+
+### Why AIDP's strengths are still recoverable
+
+- AIDP's UX shell (sidebar grouping, dashboard widgets, Builder, Wizard) is genuinely high-quality and ports cleanly as isolated modules.
+- AIDP's auth implementation is production-grade and 6944 LOC of tests are essentially free if mined as a reference.
+- AIDP's Shadcn + Radix component library can be installed into PMv2 alongside its existing hand-built `components/ui/` and used selectively.
+
+---
+
+## Key File Paths Referenced
+
+**AIDP**
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/docs/ARCHITECTURE.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/docs/MASTER_PROJECT_PLAN.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/docs/CURRENT_STATE.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/docs/FEATURES.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/README.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/CLAUDE.md`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/apps/web/package.json`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/apps/web/src/{app,components,stores,providers,lib}/`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/{user-service,project-service,qa-service,agent-orchestrator,git-service,mentor-service}/`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/user-service/app/{main.py,models/,api/,core/}`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/project-service/app/models/project.py`
+
+**PMv2**
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/CLAUDE.md`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-07-ai-project-workspace-master-plan.md`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-07-feature-studio-and-backlog-board.md`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-cloud-multitenant-architecture.md`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/docs/plans/2026-05-20-studio-master-synthesis.md`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/package.json`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/prisma/schema.prisma`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/{studio,backlog,workspace,codeboard}/`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/app/main.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/api/{deps.py,backlog.py,studio.py,crew_map.py,issues.py}`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/{studio_chat_agent.py,studio_orchestrator.py,autopilot_queue_service.py,terminal_service.py,rag_service.py,investigation_engine.py}`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/{studio.py,backlog.py,crew_map.py,autopilot.py,issue.py,schemas.py}`</result>
+<usage><total_tokens>147618</total_tokens><tool_uses>72</tool_uses><duration_ms>1490380</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-23 12:41:18
+
+Meeting the executive summary about the difference between the other platform and the project manager, and you are describing a situation in which the ad platform is basically mostly a mock up. And I know that. But on the other hand, the architecture and the planning is different and is... it might be better for multi tenant and service solution. Hey, Andy. Here's the guy. Build the AI dev platform from the beginning, from the first architecture and planning. It was supposed to be built as a service, a multi tenant solution. The project manager was built for myself, and then I decided to take it and think how I can make it a multi tenant so I can make it a service. But that was built for my own work, and this was built for... to serve a lot of people. And it's building a different way. It's not exactly the same with the same features and everything. So you need to take not just to look on the fact that this is a mock up and this is not, but on the whole picture.
+
+---
+
+## 2026-05-23 12:45:32
+
+What's the multi agent investigation? Appointed is still open.
+
+---
+
+## 2026-05-23 12:53:22
+
+<task-notification>
+<task-id>a3603e9c3eee3e9a0</task-id>
+<tool-use-id>toolu_01ShukNJvSZSKDdanodrmt4Y</tool-use-id>
+<output-file>/private/tmp/claude-1444214803/-Volumes-Seagate-Claude-ProjectsManagerWebV2Production/fa5b23de-9694-4fd5-a214-ffa336e3d163/tasks/a3603e9c3eee3e9a0.output</output-file>
+<status>completed</status>
+<summary>Agent "Code quality compare AIDP vs PMv2" completed</summary>
+<result>I've gathered enough evidence. Let me synthesize the comparison.
+
+---
+
+# Code Quality + Maintainability: AIDP vs PMv2
+
+## Executive Summary
+
+These two codebases are at **very different lifecycle stages**, which dominates every dimension. **PMv2 is a mature, scarred, battle-tested working tool**; **AIDP is an architecturally ambitious but partially-mocked prototype** with ~60% of its declared microservice surface unimplemented and ~50% of its frontend hook layer wired to literal `MOCK_*` constants.
+
+---
+
+## Side-by-Side Scorecard
+
+| Dimension | AIDP | PMv2 | Notes |
+|---|---|---|---|
+| **1. Modularity** | 3.5 / 5 | 3 / 5 | AIDP cleaner service boundaries on paper; PMv2 god-files but with documented extraction history |
+| **2. Test coverage** | 1.5 / 5 | 4.5 / 5 | AIDP 22 test files total; PMv2 79 backend + 45 frontend |
+| **3. Tech debt** | 2 / 5 | 3.5 / 5 | AIDP: 10 empty services, 7 MOCK_-filled hooks; PMv2: large files but cited &amp; tracked |
+| **4. Code style** | 4 / 5 | 4 / 5 | Both consistent; PMv2 has citation discipline |
+| **5. Type safety** | 4 / 5 | 4.5 / 5 | Both strict TS, both ~10 `any` occurrences |
+| **6. Audit-readiness** | 1.5 / 5 | 3 / 5 | AIDP has auth scaffolding but empty product; PMv2 is single-user, missing auth, but real |
+| **7. Reusability** | 3 / 5 | 3.5 / 5 | AIDP `user-service` + `git-service` transplant well; PMv2 components heavily PMv2-coupled |
+
+---
+
+## 1. Modularity
+
+**AIDP — 3.5/5**
+- *Strength:* Real microservices boundary. `services/agent-orchestrator/app/main.py:1-170` is a textbook 170-line FastAPI entrypoint: security headers via `SecurityHeadersMiddleware`, Prometheus instrumentation, lifespan, routers. Each agent type gets its own router (`builder.py`, `qa.py`, `security.py` etc.).
+- *Strength:* `pnpm-workspace.yaml` + `packages/shared/src/types/index.ts` (370 lines) + `packages/shared/src/constants/index.ts` (216 lines) actually enforces a shared-types boundary across `apps/{web,desktop,cli}`.
+- *Weakness:* `packages/ui-components/` and `packages/agent-protocol/`, `packages/db-adapters/`, `packages/git-integrations/`, `packages/sdk/` are **empty directories** — the monorepo packaging is largely aspirational.
+- *Weakness:* The `services/` directory advertises 16 microservices; 10 of them are **literally empty directories** (`secret-service/`, `notification-service/`, `analytics-service/`, `api-gateway/`, `realtime-service/`, `builder-service/`, `database-service/`, `template-service/`, `docs-service/`, `deploy-service/`). The architecture is a façade.
+
+**PMv2 — 3/5**
+- *Strength:* The router carve-up under `backend/api/` is granular and consistent (22 routers from `ai.py` through `studio.py`). `app/main.py:107-119` cleanly registers them.
+- *Strength:* Component extraction is explicitly tracked — see `frontend/components/codeboard/HierarchyTreeSection.tsx:6-26` which documents its extraction from `frontend/app/codeboard/feature/[id]/page.tsx` per CB-2684/CB-2685.
+- *Weakness:* God-files dominate the frontend: `frontend/components/codeboard/TestPlanGenerator.tsx` is **2,234 lines**, `ExtensiveQAPanel.tsx` 1,830, `HierarchyTreeSection.tsx` 1,484. The codeboard component dir alone has 11 files &gt;800 lines.
+- *Weakness:* Backend monolith: `backend/services/autopilot_queue_service.py` is **3,286 lines**, `backend/models/schemas.py` 2,189, `backend/api/execution.py` 1,805. These are functioning but resist isolated reasoning.
+
+---
+
+## 2. Test Coverage
+
+**AIDP — 1.5/5**
+
+Tests exist but coverage is heavily uneven:
+- Backend: only **6 services have tests at all** (`user-service` 10 files, `qa-service` 4 files), and only `user-service/tests/` has integration tests (`test_integration_auth_flow.py`, `test_integration_org_flow.py`). `agent-orchestrator/tests/` directory exists but contains zero test files. `git-service`, `mentor-service`, `project-service` have no tests at all.
+- Frontend: **8 test files total** (`apps/web/src/__tests__/middleware.test.ts`, `setup-smoke.test.ts`, `providers/__tests__/auth-provider.test.tsx`, `lib/api/__tests__/csrf.test.ts`, `lib/api/__tests__/projects.test.ts`, `app/(auth)/login/__tests__/page.test.tsx`, plus 2 Playwright specs).
+
+**PMv2 — 4.5/5**
+
+- Backend: **79 test files** in `backend/tests/`, deeply scoped — `test_autopilot_persistence.py` (1,303 lines), `test_security.py` (1,784 lines), `test_documentation_api.py` (1,661), `test_schema_data_integrity.py` (1,127). Tests track ticket IDs: `test_cb2750_recovery_scheduler.py`, `test_cb2756_subprocess_pid_wiring.py`, `test_cb2784_embed_all_redaction.py`.
+- Frontend: **45 test files**, including state-store coverage (`useStudioStore.test.ts`), component tests (`AutoPilotFloatingBar.test.tsx`), hook tests (`useAutoPilotEvents.test.ts`).
+- E2E: full Playwright matrix in `frontend/tests/regression/`, plus dedicated `frontend/playwright.regression.config.ts`.
+- `pytest.ini` defines markers (unit/integration/slow/api) — coverage is intentional.
+
+---
+
+## 3. Tech Debt
+
+**AIDP — 2/5**
+- Critical: `apps/web/src/hooks/use-ai.ts:22-58` declares `MOCK_AI_MODELS` and lines 60+ define `MOCK_CONVERSATIONS` with hardcoded fake responses. Seven hook files use this pattern: `use-ai.ts`, `use-bugs.ts`, `use-deployments.ts`, `use-documentation.ts`, `use-languages.ts`, `use-enterprise.ts`, `use-templates.ts`. These represent ~7,500 lines of mock-data hooks that the dashboard pages render.
+- Critical: `services/agent-orchestrator/app/agents/manager.py:54-55` keeps `_task_history: Dict[str, TaskRecord]` purely in memory — restart loses all state. `agents/builder/agent.py:209-248` has a `_mock_response()` returning hardcoded strings when no API key is set, hiding real failure modes.
+- Operational debt: **35,443 macOS `._*` shadow files** in `services/` tree, polluting greps and likely also commit history. AIDP's services tree has not been hygienically managed.
+- Version drift: `apps/web/package.json:64` pins `@types/react@^18.3.0` while line 47 uses `react@^19.0.0` — type mismatch.
+- 10 TODO/FIXME backend, 0 frontend (low because lots of code is just absent).
+
+**PMv2 — 3.5/5**
+- 38 backend + 37 frontend TODO/FIXMEs — higher absolute count but tracking ~2× the working code.
+- Large files exist, but every one I read includes provenance comments (e.g., `autopilot_queue_service.py:96-112` cites CB-2749 and links to refactor target). Comments cite ticket IDs (CB-XXXX) and doc paths.
+- Architectural debt: `backend/scripts/codeboard/` contains 86k lines of one-shot Python scripts (29 files in May 2026 alone). These are ticket-management artifacts, not application code, but they pollute the repo and should be in a separate ops repo.
+- The 3,286-line `autopilot_queue_service.py` is dense but **maintained** — it has a companion `backend/docs/AUTOPILOT_RUNBOOK.md` and `backend/MIGRATION_NOTES.md`, and inline comments document state transitions.
+
+---
+
+## 4. Code Style
+
+**AIDP — 4/5**
+- Consistent style: `services/*/app/main.py` follow a near-identical template (`SecurityHeadersMiddleware`, Prometheus, lifespan, CORS) — see `agent-orchestrator/app/main.py:32-50` vs `qa-service/app/main.py:20-38`. Very copy-paste-y but that's a wash for consistency.
+- ESLint: `apps/web/package.json:69` pins `eslint@^8.57.0` (now 2 majors behind), uses `next lint` (deprecated in Next 16).
+- Pydantic Field with `min_length` and explicit `description` everywhere — `services/agent-orchestrator/app/api/builder.py:22-98` shows excellent schema hygiene.
+
+**PMv2 — 4/5**
+- ESLint v9 + flat config (`frontend/eslint.config.mjs:1-19`) — modern.
+- Citation discipline (the "Jonny Rule 31" enforced in `CLAUDE.md`): every "intentional" / design-claim must cite a doc. E.g., `frontend/stores/useStudioStore.ts:6-22` cites `docs/plans/2026-05-07-ai-project-workspace-master-plan.md §E2.S2.T5`. This is rare and excellent.
+- Naming: backend `snake_case`, frontend `camelCase`/`PascalCase`, both consistent across the codebase I sampled.
+- Better console.log discipline: 12 occurrences in PMv2 frontend vs 39 in AIDP.
+
+---
+
+## 5. Type Safety
+
+**AIDP — 4/5**
+- `apps/web/tsconfig.json:10` — `"strict": true`. 10 `any` occurrences across the whole web/src tree.
+- Pydantic v2 everywhere on the backend: `services/agent-orchestrator/app/api/builder.py:22-98` uses `Field(..., min_length=1, description=...)` correctly.
+- *Gap:* `agents/builder/agent.py:135-201` uses untyped `Dict[str, Any]` for `task.input` and `task.output` — the entire agent-to-orchestrator contract is `Any`.
+
+**PMv2 — 4.5/5**
+- `frontend/tsconfig.json:7` — `"strict": true`. 9 `any` occurrences across the entire frontend.
+- Pydantic v2: `backend/models/schemas.py` (2,189 lines) defines every request/response model.
+- Backend keeps real exception types — `backend/services/autopilot_queue_service.py:53-55` imports specific `IllegalStateTransitionError` rather than catching `Exception`.
+
+---
+
+## 6. Audit-Readiness ("Ship Tomorrow?")
+
+**Neither codebase is shippable tomorrow.** Both fail this for different reasons.
+
+**AIDP — 1.5/5**
+- Has the *form* of a SaaS platform: `services/user-service/app/core/security.py:34-39` does real bcrypt with `bcrypt__rounds=12`; `services/user-service/app/core/oauth.py` (225 lines) is real; `services/agent-orchestrator/app/main.py:32-50` ships a proper `SecurityHeadersMiddleware`.
+- But the *product* doesn't exist: 10 of 16 services are empty dirs; the dashboard hooks return literal mock data; `agent_manager._task_history` is in-memory only (`agents/manager.py:54-55`) — restart = data loss; `BuilderAgent._mock_response` (`agents/builder/agent.py:209-248`) returns stub strings when no API key is present, masking failures.
+- An auditor would flag "feature claims that do not exist" as the #1 issue.
+
+**PMv2 — 3/5**
+- The product works end-to-end. AutoPilot, status cascade, doc generation, RAG, QA execution — all real, all tested.
+- Security hardening shows up in `backend/app/main.py:345-403` with explicit defenses (docs disabled in non-dev, CORS strict-origin checks, INTERNAL_API_TOKEN required when binding non-loopback, wildcard-credentials assertion at startup).
+- **Blocker for production:** zero user authentication. `backend/middleware/` has only `__init__.py`. There is no `bcrypt`, no JWT issuance, no session management. PMv2 is a single-user local tool. Any multi-tenant deploy is blocked on building the entire auth/user/org/team surface that AIDP's `user-service` already has.
+- **Blocker:** SQLite. `backend/data/codeboard.db` via `aiosqlite` doesn't scale beyond one process. `frontend/prisma/dev.db` is a second SQLite. AIDP's `project-service` uses Postgres (`alembic/` migrations present) and `qa-service` references MongoDB (`db/mongodb.py`).
+
+---
+
+## 7. Reusability (Cross-Transplant)
+
+**Lifts cleanly from AIDP into PMv2:**
+- `services/user-service/app/core/security.py` (628 lines) + `oauth.py` (225) + `csrf.py` (130) + `models/user.py`, `models/refresh_token.py`, `models/audit_log.py` — drop-in solution for PMv2's missing auth layer. This is the single most valuable piece of either codebase.
+- `services/git-service/app/services/git_operations.py` (547 lines) — GitPython-based ops, properly async-wrapped. PMv2's `backend/services/git_service.py` (394 lines) is simpler subprocess calls.
+- `packages/shared/src/types/index.ts` + `constants/index.ts` — clean shared-types pattern PMv2 lacks.
+
+**Lifts cleanly from PMv2 into AIDP:**
+- `backend/services/terminal_service.py` (995 lines) — real PTY-based Claude CLI orchestration. AIDP's `agents/manager.py` only does API calls; PMv2 actually spawns subprocesses, parses streaming output, handles `pty`/`fcntl`/`select`. This is the single most valuable piece going the other direction.
+- `backend/services/autopilot_queue_service.py` (3,286 lines, complex) + `backend/utils/autopilot_repository.py` (631) + `backend/utils/exhaustion_detector.py` (663) — entire crash-recoverable queue subsystem.
+- `backend/utils/db_queries.py` — status-cascade logic.
+- `frontend/hooks/useCodeBoard.ts` + the React Query patterns.
+
+**Does NOT transplant:**
+- PMv2's codeboard components are SO tightly coupled to PMv2 types (`@/types/codeboard`), hooks (`@/hooks/useCodeBoard`, `useQABoard`), and the specific `CB-XXXX` issue model that lifting `TestPlanGenerator.tsx` would mean lifting 30% of PMv2.
+- AIDP's mock hooks (`use-ai.ts`, `use-bugs.ts`, etc.) have nothing to lift.
+
+---
+
+## Recommendation
+
+**Use PMv2 as the foundation.** Lift the user-service + git-service from AIDP into it.
+
+Reasoning:
+1. **Working product beats elegant architecture.** PMv2's terminal_service + autopilot_queue + RAG + doc-gen + status-cascade is real, tested (79 backend tests), and currently in production use. AIDP's equivalent is `agents/manager.py` keeping records in a Python dict.
+2. **Test coverage is non-negotiable for any "ship to customers" timeline.** PMv2 has ~10× the test surface. Rebuilding that on AIDP would take months.
+3. **The actually-valuable parts of AIDP are isolated and portable.** `user-service` (auth, OAuth, CSRF, RBAC) is the one piece AIDP got right and PMv2 desperately needs — and it's the easiest piece to transplant because microservices were designed for that.
+4. **AIDP's microservices are a future liability if adopted as foundation.** 10 of 16 services are empty. Decomposing PMv2's working monolith into microservices is a known-cost refactor; finishing AIDP's microservices is an unbounded "build the product" project.
+
+**Concrete migration path:**
+1. Start from PMv2 main.
+2. Stand up AIDP's `user-service` as a sidecar on its own port; add JWT validation middleware to PMv2's `backend/app/main.py`.
+3. Replace PMv2's SQLite with Postgres (use AIDP's `services/project-service/app/db/database.py` as reference).
+4. Adopt AIDP's `pnpm-workspace.yaml` + `packages/shared/src/types/` pattern for cross-app type sharing if a desktop/CLI client becomes a real goal.
+5. Aggressively decompose PMv2's god-files (`autopilot_queue_service.py`, `TestPlanGenerator.tsx`, `ExtensiveQAPanel.tsx`) — but do this AFTER auth + Postgres, not before.
+
+---
+
+## Bias-corrected strengths recap
+
+**AIDP genuine strengths (do not dismiss):**
+- `services/user-service/app/core/security.py` — production-grade auth with bcrypt rounds=12, JWT JTI tracking, password strength validation, Redis blacklist support.
+- `apps/web/tsconfig.json` + `packages/shared/` pattern — the *right* way to share types across web/desktop/CLI clients.
+- Consistent `SecurityHeadersMiddleware` pattern across every service (`agent-orchestrator/app/main.py:32-50`, `qa-service/app/main.py:20-38`).
+- Pydantic Field hygiene in API schemas (`builder.py:22-98`) is exemplary.
+- Real Postgres + Alembic + MongoDB in `qa-service` — actual production data architecture.
+
+**PMv2 genuine strengths (do not dismiss):**
+- Test discipline at a level rarely seen — `backend/tests/test_cb2752_chaos_suite.py` exists.
+- Citation discipline ("Jonny Rule 31" in `CLAUDE.md`) — every design claim must cite a doc.
+- Defense-in-depth in `backend/app/main.py:382-403` — explicit assertions against misconfiguration at boot.
+- AutoPilot crash-recovery (`backend/services/autopilot_queue_service.py`, `utils/autopilot_repository.py`, `backend/docs/AUTOPILOT_RUNBOOK.md`) — real production-grade reliability engineering with state-machine, audit log, secret redaction.
+- Component extraction history is documented in-code (`HierarchyTreeSection.tsx:6-26`).
+
+Key files referenced (absolute paths):
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/user-service/app/core/security.py`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/agent-orchestrator/app/agents/manager.py`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/services/agent-orchestrator/app/main.py`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/apps/web/src/hooks/use-ai.ts`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/apps/web/src/hooks/use-bugs.ts`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/agents/builder/agent.py`
+- `/Volumes/Seagate/Claude/AIDevPlatformProduction/packages/shared/src/types/index.ts`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/app/main.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/autopilot_queue_service.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/services/terminal_service.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/models/schemas.py`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/codeboard/TestPlanGenerator.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/components/codeboard/HierarchyTreeSection.tsx`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/frontend/stores/useStudioStore.ts`
+- `/Volumes/Seagate/Claude/ProjectsManagerWebV2Production/backend/pytest.ini`</result>
+<usage><total_tokens>115540</total_tokens><tool_uses>107</tool_uses><duration_ms>2372727</duration_ms></usage>
+</task-notification>
+
+---
+
+## 2026-05-23 12:58:38
+
+a bit confused. I understand there's a big gap between the two platforms, but your recommendation is option a. How we're going to take the project manager? add all the studio features and make it a multi tenant solution. We already have an architecture for that. But is it feasible? Is it possible, first of all, to make it a multi tenant solution? Is it running the correct databases, code, and everything? Can we create the studio close to what I planned in the AI dev platform? Are we gonna leave it as is? we're not going to implement the feature of the... these planning features from the dev AI platform into the Cockboard. I'm I'm confused about the plan. I need step by step executive summary explanation for each scenario, what we're going to do, and how long it will take. I hope it's clear. If not, let me know. I'll rephrase the question.
+
+---
+
+## 2026-05-23 19:01:33
+
+בםמאןמוק
+
+---
+
+## 2026-05-23 19:01:40
+
+continue
+
+---
+
+## 2026-05-23 19:04:42
+
+what does it means?   ⎿  API Error: Server is temporarily limiting requests (not your usage limit) · Rate limited?
+
+---
+
+## 2026-05-23 19:07:00
+
+you were in the middle and the credits were consumed, i just asked you to continue from where you stopped
+
+---
+
+## 2026-05-23 19:09:30
+
+you didn't answer my questions
+a bit confused. I understand there's a big gap between the two platforms, but your recommendation is option a. How we're going to take the project manager? add all the studio features and make it a multi tenant solution. We already have an
+  architecture for that. But is it feasible? Is it possible, first of all, to make it a multi tenant solution? Is it running the correct databases, code, and everything? Can we create the studio close to what I planned in the AI dev platform? Are we
+   gonna leave it as is? we're not going to implement the feature of the... these planning features from the dev AI platform into the Cockboard. I'm I'm confused about the plan. I need step by step executive summary explanation for each scenario,
+  what we're going to do, and how long it will take. I hope it's clear. If not, let me know. I'll rephrase the question.
+
+---
+
+## 2026-05-23 19:23:16
+
+in case you can take the PMv2 and make it my AIDP vision add all the features Ive been palnning that would be the best way, either way i'll ask you to commet and save the git in where we are now sync to github so we can go back to where we are now in case something goes wrong and let's go on option B, Jonny, use all the agents and skills you have to build a plan to make the PMv2 much more robust and similer to the AIDEP including the multitenent arch, I would like to see arch changes review planning, general phases pallning full agile planning including userstories for every feature
+I want you aslo to duplicate the project as it is now (duplicate the files/folders database) shutdown the current one and we will work on the duplication, change the name to AIDevPlatrom make sure to add it to the list of projects in the project manager web and the TUI project manager and park it so we won't work on that, on the new duplicate version assign new ports (make sure to chose/change/save avialble ports from othe database) let me know when it is up and running and present the new planning
+
+---
+
